@@ -1,0 +1,14 @@
+services:
+  - type: web
+    name: maid-service-bot
+    env: node
+    plan: free
+    buildCommand: npm install
+    startCommand: node index.js
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: GOOGLE_CREDENTIALS_PATH
+        value: ./credentials.json
+      - key: SPREADSHEET_ID
+        value: YOUR_SHEET_ID_HERE

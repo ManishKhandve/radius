@@ -1,0 +1,24 @@
+{
+  "name": "maid-service-whatsapp-bot",
+  "version": "1.0.0",
+  "description": "WhatsApp chatbot for maid placement service using whatsapp-web.js",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js",
+    "dev": "node index.js"
+  },
+  "keywords": [
+    "whatsapp",
+    "chatbot",
+    "maid-service",
+    "whatsapp-web.js"
+  ],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "express": "^4.18.2",
+    "googleapis": "^131.0.0",
+    "qrcode": "^1.5.3",
+    "whatsapp-web.js": "^1.26.1-alpha.3"
+  }
+}
