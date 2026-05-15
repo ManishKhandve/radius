@@ -176,6 +176,18 @@ const pcmcAreas = [
   "Akurdi", "Bhosari", "Chinchwad", "Hinjewadi", "Kotewadi", "Nigdi", "Pimpri", "Wakad"
 ];
 
+// Coordinates for backend logic (not shown to customers)
+const pcmcAreaCoordinates = {
+  "Akurdi": { lat: 18.6486, lng: 73.7677 },
+  "Bhosari": { lat: 18.6386, lng: 73.8478 },
+  "Chinchwad": { lat: 18.6279, lng: 73.7930 },
+  "Hinjewadi": { lat: 18.5912, lng: 73.7389 },
+  "Kotewadi": { lat: 18.6100, lng: 73.8050 },
+  "Nigdi": { lat: 18.6600, lng: 73.7750 },
+  "Pimpri": { lat: 18.6279, lng: 73.8009 },
+  "Wakad": { lat: 18.5988, lng: 73.7626 }
+};
+
 const getAreaMessage = (city, lang) => {
   const areas = city === "Pune" ? puneAreas : pcmcAreas;
   let text = "";
@@ -804,6 +816,7 @@ module.exports = {
   puneAreas,
   puneAreaCoordinates,
   pcmcAreas,
+  pcmcAreaCoordinates,
   getAreaMessage,
   flatStatusMessage,
   furnishedSubMessage,
