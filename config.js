@@ -205,27 +205,35 @@ const flatDeepCleaningPriceMessage = (status, bhk, lang) => {
   let priceTextHi = bhk === "4" ? "निरीक्षण (Inspection) आवश्यक है" : price;
   let priceTextMr = bhk === "4" ? "पाहणी (Inspection) आवश्यक" : price;
 
-  let noteEn = bhk === "1" ? "\nNote: This price includes all scope of work. Let us know if you need any add-ons.\n" : "";
-  let noteHi = bhk === "1" ? "\nनोट: इस कीमत में सभी कार्य शामिल हैं। अगर कोई अतिरिक्त सेवा चाहिए तो बताएं।\n" : "";
-  let noteMr = bhk === "1" ? "\nनोंद: या किंमतीत सर्व कामांचा समावेश आहे. तुम्हाला अतिरिक्त सेवा हवी असल्यास आम्हाला सांगा.\n" : "";
+  let noteEn = bhk === "1" ? "\nNote: This price includes all scope of work." : "";
+  let noteHi = bhk === "1" ? "\nनोट: इस कीमत में सभी कार्य शामिल हैं।" : "";
+  let noteMr = bhk === "1" ? "\nनोंद: या किंमतीत सर्व कामांचा समावेश आहे." : "";
+
+  let addOnsEn = "";
+  let addOnsHi = "";
+  let addOnsMr = "";
+
+  if (status === "Furnished" || status === "Post Interior Cleaning") {
+    addOnsEn = `\n\n✨ *Recommended Add-ons:*\n• Kitchen external cleaning: ₹450\n• Sofa cleaning: ₹150 / seat\n\n👉 Type any add-ons you need, OR reply *1* to continue without add-ons.`;
+    addOnsHi = `\n\n✨ *अनुशंसित ऐड-ऑन:*\n• किचन की बाहरी सफाई: ₹450\n• सोफा सफाई: ₹150 / सीट\n\n👉 अपने आवश्यक ऐड-ऑन टाइप करें, या बिना ऐड-ऑन के आगे बढ़ने के लिए *1* रिप्लाई करें।`;
+    addOnsMr = `\n\n✨ *सुचविलेले ॲड-ऑन्स:*\n• किचनची बाह्य स्वच्छता: ₹450\n• सोफा स्वच्छता: ₹150 / सीट\n\n👉 तुम्हाला हवे असलेले ॲड-ऑन्स टाइप करा, किंवा ॲड-ऑन्सशिवाय पुढे जाण्यासाठी *1* रिप्लाय करा.`;
+  } else {
+    addOnsEn = `\n\nIf you want to proceed with booking\nReply *1* to continue`;
+    addOnsHi = `\n\nअगर आप बुकिंग के साथ आगे बढ़ना चाहते हैं\nतो *1* रिप्लाई करें`;
+    addOnsMr = `\n\nतुम्हाला बुकिंग करायची असल्यास\nपुढे जाण्यासाठी *1* रिप्लाय करा`;
+  }
 
   const en = `💰 Estimated Pricing:
 ✔ ${bhk === "4" ? "4 BHK/Villa" : bhk + " BHK"} → ${priceTextEn}
-${noteEn}
-If you want to proceed with booking
-Reply 1 to continue`;
+${noteEn}${addOnsEn}`;
 
   const hi = `💰 अनुमानित मूल्य:
 ✔ ${bhk === "4" ? "4 BHK/विला" : bhk + " BHK"} → ${priceTextHi}
-${noteHi}
-अगर आप बुकिंग के साथ आगे बढ़ना चाहते हैं
-तो 1 रिप्लाई करें`;
+${noteHi}${addOnsHi}`;
 
   const mr = `💰 अंदाजित किंमत:
 ✔ ${bhk === "4" ? "4 BHK/व्हिला" : bhk + " BHK"} → ${priceTextMr}
-${noteMr}
-तुम्हाला बुकिंग करायची असल्यास
-पुढे जाण्यासाठी 1 रिप्लाय करा`;
+${noteMr}${addOnsMr}`;
 
   return lang === 'hi' ? hi : lang === 'mr' ? mr : en;
 };

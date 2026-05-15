@@ -256,8 +256,13 @@ async function processState(session, body, senderId) {
       if (body === "1") {
         session.state = "CLEANING_LOCATION";
         return [config.cleaningLocationMessage[session.data.lang]];
+      } else if (body.length >= 2) {
+        // Assume they typed add-ons
+        session.data.cleaningDetails += ` + Add-ons: ${body}`;
+        session.state = "CLEANING_LOCATION";
+        return [config.cleaningLocationMessage[session.data.lang]];
       } else {
-        return [session.data.lang === "hi" ? "आगे बढ़ने के लिए 1 रिप्लाई करें" : session.data.lang === "mr" ? "पुढे जाण्यासाठी 1 रिप्लाय करा" : "Please reply 1 to continue."];
+        return [session.data.lang === "hi" ? "आगे बढ़ने के लिए 1 रिप्लाई करें या ऐड-ऑन टाइप करें" : session.data.lang === "mr" ? "पुढे जाण्यासाठी 1 रिप्लाय करा किंवा ॲड-ऑन्स टाइप करा" : "Please reply 1 to continue or type your add-ons."];
       }
     }
 
