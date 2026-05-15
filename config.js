@@ -149,6 +149,29 @@ const puneAreas = [
   "Mundhwa", "NIBM", "Undri", "Viman Nagar", "Vishrantwadi", "Wadgaon Sheri", "Wagholi"
 ];
 
+// Coordinates for backend logic (not shown to customers)
+const puneAreaCoordinates = {
+  "Aundh": { lat: 18.5590, lng: 73.8080 },
+  "Baner": { lat: 18.5590, lng: 73.7868 },
+  "Bavdhan": { lat: 18.5200, lng: 73.7700 },
+  "Dhanori": { lat: 18.5900, lng: 73.9100 },
+  "Hadapsar": { lat: 18.5018, lng: 73.9252 },
+  "Kalyani Nagar": { lat: 18.5461, lng: 73.9010 },
+  "Kharadi": { lat: 18.5514, lng: 73.9456 },
+  "Kondhwa": { lat: 18.4647, lng: 73.8826 },
+  "Koregaon": { lat: 18.5362, lng: 73.8938 },
+  "Kothrud": { lat: 18.5074, lng: 73.8076 },
+  "Lohegaon": { lat: 18.5986, lng: 73.9196 },
+  "Magarpatta": { lat: 18.5133, lng: 73.9302 },
+  "Mundhwa": { lat: 18.5280, lng: 73.9220 },
+  "NIBM": { lat: 18.4700, lng: 73.8960 },
+  "Undri": { lat: 18.4530, lng: 73.8960 },
+  "Viman Nagar": { lat: 18.5672, lng: 73.9143 },
+  "Vishrantwadi": { lat: 18.5908, lng: 73.8842 },
+  "Wadgaon Sheri": { lat: 18.5554, lng: 73.9254 },
+  "Wagholi": { lat: 18.5780, lng: 73.9800 }
+};
+
 const pcmcAreas = [
   "Akurdi", "Bhosari", "Chinchwad", "Hinjewadi", "Kotewadi", "Nigdi", "Pimpri", "Wakad"
 ];
@@ -779,6 +802,7 @@ module.exports = {
   villaPriceMessage,
   maidCityMessage,
   puneAreas,
+  puneAreaCoordinates,
   pcmcAreas,
   getAreaMessage,
   flatStatusMessage,
