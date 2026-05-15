@@ -430,7 +430,17 @@ async function processState(session, body, senderId) {
       if (isNaN(idx) || idx < 0 || idx >= areas.length) {
         return [config.getAreaMessage(session.data.maidCity, session.data.lang)];
       }
-      session.data.maidArea = areas[idx];
+      const selectedArea = areas[idx];
+      session.data.maidArea = selectedArea;
+
+      // Get area coordinates
+      const areaCoords = session.data.maidCity === "Pune" 
+        ? config.puneAreaCoordinates[selectedArea] 
+        : config.pcmcAreaCoordinates[selectedArea];
+
+      if (!areaCoords) {
+        return ["Sorry, we couldn't find coordinates for this area. Please contact support."];
+      }
 
       // Save lead (fire-and-forget)
       (async () => {
@@ -449,8 +459,50 @@ async function processState(session, body, senderId) {
           });
         } catch (e) { console.error("[flow] lead save err:", e.message); }
       })();
-      session.state = "MAID_CHOICE";
-      return [config.glideLinkMessage[session.data.lang], config.maidChoiceMessage[session.data.lang]];
+
+      // Fetch from matching engine
+      try {
+        const { getTopMaids } = require('./matching.js');
+        const topMaids = await getTopMaids(areaCoords.lat, areaCoords.lng);
+        
+        if (topMaids.length === 0) {
+          // If no maids found in 8km
+          const msg = session.data.lang === "hi" 
+            ? "क्षमा करें, आपके क्षेत्र में 8 किमी के दायरे में कोई मेड उपलब्ध नहीं है। कृपया हमारे सपोर्ट से संपर्क करें।" 
+            : session.data.lang === "mr"
+            ? "क्षमस्व, तुमच्या परिसरात 8 किमीच्या आत कोणतीही मोलकरीण उपलब्ध नाही. कृपया आमच्या सपोर्टशी संपर्क साधा."
+            : "Sorry, no maids are currently available in your area within 8km. Please contact our support.";
+          return [msg];
+        }
+
+        let resultMsg = session.data.lang === "hi" 
+          ? "🌟 यहाँ आपके लिए हमारी शीर्ष पसंद हैं:\n\n" 
+          : session.data.lang === "mr"
+          ? "🌟 येथे तुमच्यासाठी आमची सर्वोत्तम निवड आहे:\n\n"
+          : "🌟 Here are our top picks for you:\n\n";
+
+        const emojis = ["1️⃣", "2️⃣", "3️⃣", "4️⃣", "5️⃣"];
+        topMaids.forEach((maid, i) => {
+          resultMsg += `${emojis[i]} *ID:* M${maid.id}
+👤 *Name:* ${maid.name}
+✨ *Experience:* ${maid.experience || 'Not specified'}
+💰 *Expected Salary:* ₹${maid.salary_expectation || 'Negotiable'}
+📍 *Distance:* ${maid.distance.toFixed(1)} km (${maid.zone.name})\n\n`;
+        });
+
+        resultMsg += session.data.lang === "hi"
+          ? "👩 आपको कौन सी मेड पसंद आई? कृपया उनकी *ID* के साथ रिप्लाई करें (उदा: M123)।"
+          : session.data.lang === "mr"
+          ? "👩 तुम्हाला कोणती मोलकरीण आवडली? कृपया त्यांच्या *ID* सोबत रिप्लाय करा (उदा: M123)."
+          : "👩 Which maid did you like? Please reply with their *ID* (e.g., M123).";
+
+        session.state = "MAID_CHOICE";
+        return [resultMsg];
+
+      } catch (err) {
+        console.error("Matching Error:", err);
+        return ["Sorry, there was an error finding maids. Please make sure the system is properly configured with Supabase."];
+      }
     }
 
     case "MAID_CHOICE": {
