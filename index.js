@@ -3,6 +3,7 @@
 // ============================================================
 
 const { Client, LocalAuth } = require("whatsapp-web.js");
+require("dotenv").config();
 const express = require("express");
 const QRCode = require("qrcode");
 const flow = require("./flow");

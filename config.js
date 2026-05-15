@@ -4,13 +4,16 @@
 // ⚠️  Replace every value marked "REPLACE" before going live.
 // ============================================================
 
+// Add dotenv just in case this is loaded standalone somewhere
+require('dotenv').config();
+
 // ─── Business Details ────────────────────────────────────────
-const businessName     = "CLEANLY Services";                      
-const ownerWhatsApp    = "918767572043@c.us";                     
-const glideAppUrl      = "https://your-app.glideapp.io";          
-const workingHours     = "Mon–Sat: 10 AM – 7 PM";                
-const address          = "pune";                             
-const contactNumber    = "+91 8767572043";                       
+const businessName     = process.env.BUSINESS_NAME || "CLEANLY Services";                      
+const ownerWhatsApp    = process.env.OWNER_WHATSAPP || "918767572043@c.us";                     
+const glideAppUrl      = process.env.GLIDE_APP_URL || "https://your-app.glideapp.io";          
+const workingHours     = process.env.WORKING_HOURS || "Mon–Sat: 10 AM – 7 PM";                
+const address          = process.env.ADDRESS || "pune";                             
+const contactNumber    = process.env.CONTACT_NUMBER || "+91 8767572043";                       
 
 // ─── Session ─────────────────────────────────────────────────
 const sessionTimeoutMs = 15 * 60 * 1000; // 15 minutes
