@@ -408,6 +408,30 @@ async function processState(session, body, senderId) {
       const v = config.budgets[body];
       if (!v) return [config.budgetMessage[session.data.lang]];
       session.data.budget = v;
+      session.state = "MAID_CITY";
+      return [config.maidCityMessage[session.data.lang]];
+    }
+
+    case "MAID_CITY": {
+      if (body === "1") {
+        session.data.maidCity = "Pune";
+      } else if (body === "2") {
+        session.data.maidCity = "PCMC";
+      } else {
+        return [config.maidCityMessage[session.data.lang]];
+      }
+      session.state = "MAID_AREA";
+      return [config.getAreaMessage(session.data.maidCity, session.data.lang)];
+    }
+
+    case "MAID_AREA": {
+      const idx = parseInt(body) - 1;
+      const areas = session.data.maidCity === "Pune" ? config.puneAreas : config.pcmcAreas;
+      if (isNaN(idx) || idx < 0 || idx >= areas.length) {
+        return [config.getAreaMessage(session.data.maidCity, session.data.lang)];
+      }
+      session.data.maidArea = areas[idx];
+
       // Save lead (fire-and-forget)
       (async () => {
         try {
@@ -419,32 +443,33 @@ async function processState(session, body, senderId) {
             whatsappNumber: session.data.whatsappNumber,
             workType: session.data.workType,
             timing: session.data.timing,
-            budget: session.data.budget,
+            budget: session.data.budget + ` | Loc: ${session.data.maidArea}, ${session.data.maidCity}`,
             status: "New Lead",
             source: "WhatsApp Bot",
           });
         } catch (e) { console.error("[flow] lead save err:", e.message); }
       })();
       session.state = "MAID_CHOICE";
-      return [config.glideLinkMessage, config.maidChoiceMessage];
+      return [config.glideLinkMessage[session.data.lang], config.maidChoiceMessage[session.data.lang]];
     }
+
     case "MAID_CHOICE": {
-      if (body.length <= 1) return [config.maidChoiceMessage];
+      if (body.length <= 1) return [config.maidChoiceMessage[session.data.lang]];
       session.data.maidChoice = body;
       session.state = "COLLECT_FLAT";
-      return [config.collectFlatMessage];
+      return [config.collectFlatMessage[session.data.lang]];
     }
     case "COLLECT_FLAT": {
-      if (body.length <= 3) return [config.collectFlatMessage];
+      if (body.length <= 3) return [config.collectFlatMessage[session.data.lang]];
       session.data.flat = body;
       session.state = "COLLECT_DATE";
-      return [config.collectDateMessage];
+      return [config.collectDateMessage[session.data.lang]];
     }
     case "COLLECT_DATE": {
-      if (body.length <= 3) return [config.collectDateMessage];
+      if (body.length <= 3) return [config.collectDateMessage[session.data.lang]];
       session.data.startDate = body;
       session.state = "CONFIRM";
-      return [config.confirmMessage(session.data)];
+      return [config.confirmMessage(session.data, session.data.lang)];
     }
     case "CONFIRM": {
       if (body === "1") {

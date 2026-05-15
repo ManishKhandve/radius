@@ -131,6 +131,45 @@ const budgetMessage = {
 5️⃣ ₹20,000 – ₹30,000`
 };
 
+const maidCityMessage = {
+  en: `🏙️ Please select your city:
+1️⃣ Pune
+2️⃣ PCMC`,
+  hi: `🏙️ कृपया अपने शहर का चयन करें:
+1️⃣ पुणे
+2️⃣ पिंपरी-चिंचवड़ (PCMC)`,
+  mr: `🏙️ कृपया तुमचे शहर निवडा:
+1️⃣ पुणे
+2️⃣ पिंपरी-चिंचवड (PCMC)`
+};
+
+const puneAreas = [
+  "Aundh", "Baner", "Bavdhan", "Dhanori", "Hadapsar", "Kalyani Nagar",
+  "Kharadi", "Kondhwa", "Koregaon", "Kothrud", "Lohegaon", "Magarpatta",
+  "Mundhwa", "NIBM", "Undri", "Viman Nagar", "Vishrantwadi", "Wadgaon Sheri", "Wagholi"
+];
+
+const pcmcAreas = [
+  "Akurdi", "Bhosari", "Chinchwad", "Hinjewadi", "Kotewadi", "Nigdi", "Pimpri", "Wakad"
+];
+
+const getAreaMessage = (city, lang) => {
+  const areas = city === "Pune" ? puneAreas : pcmcAreas;
+  let text = "";
+  areas.forEach((area, index) => {
+    text += `${index + 1}. ${area}\n`;
+  });
+  text += `\n*👉 Reply with the number of your area.*`;
+  
+  if (lang === "hi") {
+    return `📍 कृपया अपना क्षेत्र चुनें:\n\n${text}`;
+  } else if (lang === "mr") {
+    return `📍 कृपया तुमचा परिसर निवडा:\n\n${text}`;
+  } else {
+    return `📍 Please select your area:\n\n${text}`;
+  }
+};
+
 const glideLinkMessage = `✅ Perfect! Based on your needs, here are our available verified maids:
 
 🔗 ${glideAppUrl}
@@ -612,6 +651,7 @@ const supportMessage = {
 // ─── Formatting Functions ──────────────────────────────────────
 
 function confirmMessage(data) {
+  const address = data.maidCity && data.maidArea ? `${data.flat}, ${data.maidArea}, ${data.maidCity}` : data.flat;
   return `📋 *Booking Summary*
 
 👤 Name       : ${data.contactName}
@@ -619,7 +659,7 @@ function confirmMessage(data) {
 ⏰ Timing     : ${data.timing}
 💰 Budget     : ${data.budget}
 👩 Maid Chosen: ${data.maidChoice}
-🏠 Address    : ${data.flat}
+🏠 Address    : ${address}
 📅 Start Date : ${data.startDate}
 
 Reply *1* to Confirm ✅
@@ -737,6 +777,10 @@ module.exports = {
   villaStatusMessage,
   villaSqftMessage,
   villaPriceMessage,
+  maidCityMessage,
+  puneAreas,
+  pcmcAreas,
+  getAreaMessage,
   flatStatusMessage,
   furnishedSubMessage,
   emptySubMessage,
