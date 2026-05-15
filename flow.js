@@ -156,6 +156,10 @@ async function processState(session, body, senderId) {
         session.data.cleaningFlatStatus = "Empty / Vacant";
         session.state = "CLEANING_FLAT_BHK";
         return [config.flatBhkMessage[session.data.lang]];
+      } else if (body === "3") {
+        session.data.cleaningFlatStatus = "Post Interior Cleaning";
+        session.state = "CLEANING_FLAT_BHK";
+        return [config.flatBhkMessage[session.data.lang]];
       } else {
         return [config.flatStatusMessage[session.data.lang]];
       }

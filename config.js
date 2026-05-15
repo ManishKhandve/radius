@@ -128,13 +128,16 @@ const cleaningServiceMessage = {
 const flatStatusMessage = {
   en: `🏠 Is the flat:
 1️⃣ Furnished
-2️⃣ Empty / Vacant`,
+2️⃣ Empty / Vacant
+3️⃣ Post Interior Cleaning`,
   hi: `🏠 क्या फ्लैट:
 1️⃣ फर्निश्ड है
-2️⃣ खाली है`,
+2️⃣ खाली है
+3️⃣ इंटीरियर के बाद की सफाई`,
   mr: `🏠 फ्लॅट कसा आहे:
 1️⃣ फर्निश्ड
-2️⃣ रिकामा`
+2️⃣ रिकामा
+3️⃣ इंटिरिअर नंतरची स्वच्छता`
 };
 
 const flatBhkMessage = {
@@ -161,11 +164,14 @@ const flatDeepCleaningPriceMessage = (status, bhk, lang) => {
     if (bhk === "1") price = "₹3199";
     else if (bhk === "2") price = "₹3,599";
     else if (bhk === "3") price = "₹4,799";
-  } else {
-    // Empty
+  } else if (status === "Empty / Vacant") {
     if (bhk === "1") price = "₹2999";
     else if (bhk === "2") price = "₹3,499";
     else if (bhk === "3") price = "₹4,499";
+  } else if (status === "Post Interior Cleaning") {
+    if (bhk === "1") price = "₹5999";
+    else if (bhk === "2") price = "₹6,999";
+    else if (bhk === "3") price = "₹7,999";
   }
 
   let priceTextEn = bhk === "4" ? "Inspection Required" : price;
