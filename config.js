@@ -383,6 +383,7 @@ Reply 2 to Talk to Support`;
 
 const miniServiceMessage = {
   en: `🧹 *MINI SERVICES & ADD-ONS*
+⚠️ *Note: Minimum order value is ₹2000*
 
 🍳 *Kitchen*
 • Full Kitchen Deep Clean: ₹2400
@@ -410,6 +411,7 @@ const miniServiceMessage = {
 (Example: 2 Bathrooms, 1 Single Fridge, 3 Fans)`,
 
   hi: `🧹 *मिनी सर्विसेस (Mini Services)*
+⚠️ *नोट: न्यूनतम ऑर्डर मूल्य ₹2000 है*
 
 🍳 *रसोई (Kitchen)*
 • फुल किचन डीप क्लीन: ₹2400
@@ -437,6 +439,7 @@ const miniServiceMessage = {
 (उदाहरण: 2 बाथरूम, 1 सिंगल फ्रिज, 3 पंखे)`,
 
   mr: `🧹 *मिनी सर्व्हिसेस (Mini Services)*
+⚠️ *नोंद: किमान ऑर्डर मूल्य ₹2000 आहे*
 
 🍳 *स्वयंपाकघर (Kitchen)*
 • फुल किचन डीप क्लिनिंग: ₹2400
