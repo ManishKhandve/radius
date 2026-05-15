@@ -18,24 +18,27 @@ const contactNumber    = process.env.CONTACT_NUMBER || "+91 8767572043";
 // ─── Session ─────────────────────────────────────────────────
 const sessionTimeoutMs = 15 * 60 * 1000; // 15 minutes
 
-// ─── Menu Options ────────────────────────────────────────────
 const workTypes = {
-  "1": "Cooking Only",
-  "2": "Cleaning Only",
-  "3": "Cooking + Cleaning",
-  "4": "Baby Care / Nanny",
+  "1": "Cooking",
+  "2": "Cleaning",
+  "3": "Babysitter",
+  "4": "Caretaker",
+  "5": "Custom"
 };
 
 const timings = {
-  "1": "Part Time (2–4 hrs/day)",
-  "2": "Full Time (Live-in)",
+  "1": "1 hr",
+  "2": "8 hr",
+  "3": "10 hr",
+  "4": "24 hr"
 };
 
 const budgets = {
-  "1": "Under ₹5,000",
-  "2": "₹5,000 – ₹8,000",
-  "3": "₹8,000 – ₹12,000",
-  "4": "Above ₹12,000",
+  "1": "Based on skill and experience",
+  "2": "₹4,000 – ₹6,000",
+  "3": "₹6,000 – ₹10,000",
+  "4": "₹10,000 – ₹20,000",
+  "5": "₹20,000 – ₹30,000"
 };
 
 const langs = {
@@ -68,24 +71,65 @@ const mainMenuMessage = {
 };
 
 // --- Maid Flow Messages ---
-const workTypeMessage = `What type of work do you need help with?
+const workTypeMessage = {
+  en: `What type of work do you need help with?
+1️⃣ Cooking
+2️⃣ Cleaning
+3️⃣ Babysitter
+4️⃣ Caretaker
+5️⃣ Custom (Type what you need)`,
+  hi: `आपको किस प्रकार के काम में मदद चाहिए?
+1️⃣ कुकिंग (Cooking)
+2️⃣ क्लीनिंग (Cleaning)
+3️⃣ बेबीसिटर (Babysitter)
+4️⃣ केयरटेकर (Caretaker)
+5️⃣ कस्टम (अपनी आवश्यकता टाइप करें)`,
+  mr: `तुम्हाला कोणत्या प्रकारच्या कामासाठी मदत हवी आहे?
+1️⃣ स्वयंपाक (Cooking)
+2️⃣ स्वच्छता (Cleaning)
+3️⃣ बेबीसिटर (Babysitter)
+4️⃣ केअरटेकर (Caretaker)
+5️⃣ कस्टम (तुमची आवश्यकता टाइप करा)`
+};
 
-1️⃣ Cooking Only
-2️⃣ Cleaning Only
-3️⃣ Cooking + Cleaning
-4️⃣ Baby Care / Nanny`;
+const timingMessage = {
+  en: `⏰ What timing works best for you?
+1️⃣ 1 hr
+2️⃣ 8 hr
+3️⃣ 10 hr
+4️⃣ 24 hr`,
+  hi: `⏰ आपके लिए कौन सा समय सबसे अच्छा रहेगा?
+1️⃣ 1 घंटा
+2️⃣ 8 घंटे
+3️⃣ 10 घंटे
+4️⃣ 24 घंटे`,
+  mr: `⏰ तुमच्यासाठी कोणती वेळ सर्वात योग्य राहील?
+1️⃣ 1 तास
+2️⃣ 8 तास
+3️⃣ 10 तास
+4️⃣ 24 तास`
+};
 
-const timingMessage = `⏰ What timing works best for you?
-
-1️⃣ Part Time (2–4 hrs/day)
-2️⃣ Full Time (Live-in)`;
-
-const budgetMessage = `💰 What is your monthly budget for the maid's salary?
-
-1️⃣ Under ₹5,000
-2️⃣ ₹5,000 – ₹8,000
-3️⃣ ₹8,000 – ₹12,000
-4️⃣ Above ₹12,000`;
+const budgetMessage = {
+  en: `💰 What is your monthly budget for the maid's salary?
+1️⃣ Based on skill and experience
+2️⃣ ₹4,000 – ₹6,000
+3️⃣ ₹6,000 – ₹10,000
+4️⃣ ₹10,000 – ₹20,000
+5️⃣ ₹20,000 – ₹30,000`,
+  hi: `💰 मेड के वेतन के लिए आपका मासिक बजट क्या है?
+1️⃣ कौशल और अनुभव के आधार पर
+2️⃣ ₹4,000 – ₹6,000
+3️⃣ ₹6,000 – ₹10,000
+4️⃣ ₹10,000 – ₹20,000
+5️⃣ ₹20,000 – ₹30,000`,
+  mr: `💰 मोलकरीणीच्या पगारासाठी तुमचे मासिक बजेट काय आहे?
+1️⃣ कौशल्य आणि अनुभवावर आधारित
+2️⃣ ₹4,000 – ₹6,000
+3️⃣ ₹6,000 – ₹10,000
+4️⃣ ₹10,000 – ₹20,000
+5️⃣ ₹20,000 – ₹30,000`
+};
 
 const glideLinkMessage = `✅ Perfect! Based on your needs, here are our available verified maids:
 

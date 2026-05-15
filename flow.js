@@ -120,7 +120,7 @@ async function processState(session, body, senderId) {
       } else if (body === "2") {
         session.data.serviceCategory = "maid";
         session.state = "WORK_TYPE";
-        return [config.workTypeMessage];
+        return [config.workTypeMessage[session.data.lang]];
       } else {
         return [config.mainMenuMessage[session.data.lang]];
       }
@@ -374,22 +374,39 @@ async function processState(session, body, senderId) {
     // MAID SERVICE FLOW (Original)
     // ==========================================
     case "WORK_TYPE": {
+      if (body === "5") {
+        session.state = "WORK_TYPE_CUSTOM";
+        const msg = session.data.lang === "hi" ? "कृपया टाइप करें कि आपको किस प्रकार के काम की आवश्यकता है:" : session.data.lang === "mr" ? "कृपया तुम्हाला कोणत्या प्रकारचे काम हवे आहे ते टाइप करा:" : "Please type the specific work you need help with:";
+        return [msg];
+      }
+      
       const v = config.workTypes[body];
-      if (!v) return [config.workTypeMessage];
+      if (!v) return [config.workTypeMessage[session.data.lang]];
       session.data.workType = v;
       session.state = "TIMING";
-      return [config.timingMessage];
+      return [config.timingMessage[session.data.lang]];
     }
+    
+    case "WORK_TYPE_CUSTOM": {
+      if (body.length < 2) {
+         const msg = session.data.lang === "hi" ? "कृपया टाइप करें कि आपको किस प्रकार के काम की आवश्यकता है:" : session.data.lang === "mr" ? "कृपया तुम्हाला कोणत्या प्रकारचे काम हवे आहे ते टाइप करा:" : "Please type the specific work you need help with:";
+         return [msg];
+      }
+      session.data.workType = "Custom: " + body;
+      session.state = "TIMING";
+      return [config.timingMessage[session.data.lang]];
+    }
+
     case "TIMING": {
       const v = config.timings[body];
-      if (!v) return [config.timingMessage];
+      if (!v) return [config.timingMessage[session.data.lang]];
       session.data.timing = v;
       session.state = "BUDGET";
-      return [config.budgetMessage];
+      return [config.budgetMessage[session.data.lang]];
     }
     case "BUDGET": {
       const v = config.budgets[body];
-      if (!v) return [config.budgetMessage];
+      if (!v) return [config.budgetMessage[session.data.lang]];
       session.data.budget = v;
       // Save lead (fire-and-forget)
       (async () => {
