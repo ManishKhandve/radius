@@ -140,6 +140,33 @@ const flatStatusMessage = {
 3️⃣ इंटिरिअर नंतरची स्वच्छता`
 };
 
+const furnishedSubMessage = {
+  en: `🏠 What is the current condition of the flat?
+1️⃣ Regular Occupied House
+2️⃣ Move Out Cleaning
+3️⃣ New Flat Possession`,
+  hi: `🏠 फ्लैट की वर्तमान स्थिति क्या है?
+1️⃣ नियमित रहने वाला घर
+2️⃣ घर खाली करते समय की सफाई
+3️⃣ नए फ्लैट का कब्ज़ा`,
+  mr: `🏠 फ्लॅटची सध्याची स्थिती काय आहे?
+1️⃣ नियमित राहते घर
+2️⃣ घर सोडतानाची स्वच्छता
+3️⃣ नवीन फ्लॅटचा ताबा`
+};
+
+const emptySubMessage = {
+  en: `🏠 What is the current condition of the flat?
+1️⃣ Move Out Cleaning
+2️⃣ New Flat Possession`,
+  hi: `🏠 फ्लैट की वर्तमान स्थिति क्या है?
+1️⃣ घर खाली करते समय की सफाई
+2️⃣ नए फ्लैट का कब्ज़ा`,
+  mr: `🏠 फ्लॅटची सध्याची स्थिती काय आहे?
+1️⃣ घर सोडतानाची स्वच्छता
+2️⃣ नवीन फ्लॅटचा ताबा`
+};
+
 const flatBhkMessage = {
   en: `🏠 How many BHK is your flat?
 1️⃣ 1 BHK
@@ -568,6 +595,8 @@ module.exports = {
   collectDateMessage,
   cleaningServiceMessage,
   flatStatusMessage,
+  furnishedSubMessage,
+  emptySubMessage,
   flatBhkMessage,
   flatDeepCleaningPriceMessage,
   bathroomTypeMessage,

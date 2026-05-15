@@ -150,12 +150,12 @@ async function processState(session, body, senderId) {
     case "CLEANING_FLAT_STATUS": {
       if (body === "1") {
         session.data.cleaningFlatStatus = "Furnished";
-        session.state = "CLEANING_FLAT_BHK";
-        return [config.flatBhkMessage[session.data.lang]];
+        session.state = "CLEANING_FURNISHED_SUB";
+        return [config.furnishedSubMessage[session.data.lang]];
       } else if (body === "2") {
         session.data.cleaningFlatStatus = "Empty / Vacant";
-        session.state = "CLEANING_FLAT_BHK";
-        return [config.flatBhkMessage[session.data.lang]];
+        session.state = "CLEANING_EMPTY_SUB";
+        return [config.emptySubMessage[session.data.lang]];
       } else if (body === "3") {
         session.data.cleaningFlatStatus = "Post Interior Cleaning";
         session.state = "CLEANING_FLAT_BHK";
@@ -165,9 +165,34 @@ async function processState(session, body, senderId) {
       }
     }
 
+    case "CLEANING_FURNISHED_SUB": {
+      if (body === "1") session.data.cleaningSubCondition = "Regular Occupied House";
+      else if (body === "2") session.data.cleaningSubCondition = "Move Out Cleaning";
+      else if (body === "3") session.data.cleaningSubCondition = "New Flat Possession";
+      else return [config.furnishedSubMessage[session.data.lang]];
+
+      session.state = "CLEANING_FLAT_BHK";
+      return [config.flatBhkMessage[session.data.lang]];
+    }
+
+    case "CLEANING_EMPTY_SUB": {
+      if (body === "1") session.data.cleaningSubCondition = "Move Out Cleaning";
+      else if (body === "2") session.data.cleaningSubCondition = "New Flat Possession";
+      else return [config.emptySubMessage[session.data.lang]];
+
+      session.state = "CLEANING_FLAT_BHK";
+      return [config.flatBhkMessage[session.data.lang]];
+    }
+
     case "CLEANING_FLAT_BHK": {
       if (["1", "2", "3", "4"].includes(body)) {
-        session.data.cleaningDetails = `${session.data.cleaningFlatStatus} - ${body} BHK`;
+        let details = `${session.data.cleaningFlatStatus}`;
+        if (session.data.cleaningSubCondition) {
+           details += ` (${session.data.cleaningSubCondition})`;
+        }
+        details += ` - ${body} BHK`;
+        
+        session.data.cleaningDetails = details;
         session.state = "CLEANING_CONTINUE";
         return [config.flatDeepCleaningPriceMessage(session.data.cleaningFlatStatus, body, session.data.lang)];
       } else {
