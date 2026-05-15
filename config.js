@@ -27,10 +27,10 @@ const workTypes = {
 };
 
 const timings = {
-  "1": "1 hr",
-  "2": "8 hr",
-  "3": "10 hr",
-  "4": "24 hr"
+  "1": "Part Time (1-3 hrs)",
+  "2": "Full Time (8 hrs)",
+  "3": "Full Time (10 hrs)",
+  "4": "Full Time (24 hrs)"
 };
 
 const budgets = {
@@ -94,20 +94,20 @@ const workTypeMessage = {
 
 const timingMessage = {
   en: `⏰ What timing works best for you?
-1️⃣ 1 hr
-2️⃣ 8 hr
-3️⃣ 10 hr
-4️⃣ 24 hr`,
+1️⃣ Part Time (1-3 hrs)
+2️⃣ Full Time (8 hrs)
+3️⃣ Full Time (10 hrs)
+4️⃣ Full Time (24 hrs)`,
   hi: `⏰ आपके लिए कौन सा समय सबसे अच्छा रहेगा?
-1️⃣ 1 घंटा
-2️⃣ 8 घंटे
-3️⃣ 10 घंटे
-4️⃣ 24 घंटे`,
+1️⃣ पार्ट टाइम (1-3 घंटे)
+2️⃣ फुल टाइम (8 घंटे)
+3️⃣ फुल टाइम (10 घंटे)
+4️⃣ फुल टाइम (24 घंटे)`,
   mr: `⏰ तुमच्यासाठी कोणती वेळ सर्वात योग्य राहील?
-1️⃣ 1 तास
-2️⃣ 8 तास
-3️⃣ 10 तास
-4️⃣ 24 तास`
+1️⃣ पार्ट टाईम (1-3 तास)
+2️⃣ फुल टाईम (8 तास)
+3️⃣ फुल टाईम (10 तास)
+4️⃣ फुल टाईम (24 तास)`
 };
 
 const budgetMessage = {
