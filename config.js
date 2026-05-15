@@ -683,6 +683,103 @@ const supportMessage = {
 };
 
 
+// --- Maid Plan Selection Messages ---
+const maidPlanMessage = {
+  en: `📦 *Choose Your Plan:*
+
+1️⃣ *Part-Time Standard — ₹6,000*
+• One-time placement fee
+• Maid interviews at your home
+• Identity & document verification
+• Experience and skill screening
+• Service agreement assistance
+• 1 free replacement within 1 month
+
+2️⃣ *Part-Time Verified — ₹12,000*
+• One-time placement fee
+• All services in Standard Plan
+• Police verification initiated (records & basic checks)
+• Experience and skill screening
+• 2 free replacements within 6 months
+
+3️⃣ *Full-Time Verified — 1 Month Salary*
+• One-time fee (1 month salary)
+• All services in Standard Plan
+• Police verification initiated (records & basic checks)
+• Experience and skill screening
+• 2 free replacements within 6 months
+
+💡 *Registration Fee:* ₹500 (adjusted in your final service fee)
+
+🔗 For more info: cleanly-maid-service.netlify.app
+
+👉 Reply with *1*, *2*, or *3* to select your plan.`,
+  hi: `📦 *अपना प्लान चुनें:*
+
+1️⃣ *पार्ट-टाइम स्टैंडर्ड — ₹6,000*
+• एक बार की प्लेसमेंट फीस
+• आपके घर पर मेड इंटरव्यू
+• पहचान और दस्तावेज़ सत्यापन
+• अनुभव और कौशल जांच
+• सेवा समझौता सहायता
+• 1 महीने में 1 मुफ्त रिप्लेसमेंट
+
+2️⃣ *पार्ट-टाइम वेरिफाइड — ₹12,000*
+• एक बार की प्लेसमेंट फीस
+• स्टैंडर्ड प्लान की सभी सेवाएं
+• पुलिस वेरिफिकेशन शुरू (रिकॉर्ड और बेसिक जांच)
+• अनुभव और कौशल जांच
+• 6 महीने में 2 मुफ्त रिप्लेसमेंट
+
+3️⃣ *फुल-टाइम वेरिफाइड — 1 महीने का वेतन*
+• एक बार की फीस (1 महीने का वेतन)
+• स्टैंडर्ड प्लान की सभी सेवाएं
+• पुलिस वेरिफिकेशन शुरू (रिकॉर्ड और बेसिक जांच)
+• अनुभव और कौशल जांच
+• 6 महीने में 2 मुफ्त रिप्लेसमेंट
+
+💡 *रजिस्ट्रेशन फीस:* ₹500 (आपकी अंतिम सेवा शुल्क में समायोजित)
+
+🔗 अधिक जानकारी: cleanly-maid-service.netlify.app
+
+👉 अपना प्लान चुनने के लिए *1*, *2*, या *3* रिप्लाई करें।`,
+  mr: `📦 *तुमचा प्लॅन निवडा:*
+
+1️⃣ *पार्ट-टाइम स्टँडर्ड — ₹6,000*
+• एक वेळची प्लेसमेंट फी
+• तुमच्या घरी मोलकरीण इंटरव्ह्यू
+• ओळख आणि कागदपत्र सत्यापन
+• अनुभव आणि कौशल्य तपासणी
+• सेवा करार सहाय्य
+• 1 महिन्यात 1 मोफत रिप्लेसमेंट
+
+2️⃣ *पार्ट-टाइम व्हेरिफाइड — ₹12,000*
+• एक वेळची प्लेसमेंट फी
+• स्टँडर्ड प्लॅनमधील सर्व सेवा
+• पोलिस पडताळणी सुरू (रेकॉर्ड आणि बेसिक तपासणी)
+• अनुभव आणि कौशल्य तपासणी
+• 6 महिन्यांत 2 मोफत रिप्लेसमेंट
+
+3️⃣ *फुल-टाइम व्हेरिफाइड — 1 महिन्याचा पगार*
+• एक वेळची फी (1 महिन्याचा पगार)
+• स्टँडर्ड प्लॅनमधील सर्व सेवा
+• पोलिस पडताळणी सुरू (रेकॉर्ड आणि बेसिक तपासणी)
+• अनुभव आणि कौशल्य तपासणी
+• 6 महिन्यांत 2 मोफत रिप्लेसमेंट
+
+💡 *नोंदणी शुल्क:* ₹500 (तुमच्या अंतिम सेवा शुल्कात समायोजित)
+
+🔗 अधिक माहिती: cleanly-maid-service.netlify.app
+
+👉 तुमचा प्लॅन निवडण्यासाठी *1*, *2*, किंवा *3* रिप्लाय करा.`
+};
+
+const maidPlans = {
+  "1": "Part-Time Standard (₹6,000)",
+  "2": "Part-Time Verified (₹12,000)",
+  "3": "Full-Time Verified (1 Month Salary)"
+};
+
 // ─── Formatting Functions ──────────────────────────────────────
 
 function confirmMessage(data) {
@@ -696,6 +793,7 @@ function confirmMessage(data) {
 👩 Maid Chosen: ${data.maidChoice}
 🏠 Address    : ${address}
 📅 Start Date : ${data.startDate}
+📦 Plan       : ${data.selectedPlan || 'N/A'}
 
 Reply *1* to Confirm ✅
 Reply *2* to Cancel ❌`;
@@ -818,6 +916,8 @@ module.exports = {
   pcmcAreas,
   pcmcAreaCoordinates,
   getAreaMessage,
+  maidPlanMessage,
+  maidPlans,
   flatStatusMessage,
   furnishedSubMessage,
   emptySubMessage,

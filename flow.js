@@ -521,9 +521,18 @@ async function processState(session, body, senderId) {
     case "COLLECT_DATE": {
       if (body.length <= 3) return [config.collectDateMessage[session.data.lang]];
       session.data.startDate = body;
-      session.state = "CONFIRM";
-      return [config.confirmMessage(session.data, session.data.lang)];
+      session.state = "MAID_PLAN";
+      return [config.maidPlanMessage[session.data.lang]];
     }
+
+    case "MAID_PLAN": {
+      const plan = config.maidPlans[body];
+      if (!plan) return [config.maidPlanMessage[session.data.lang]];
+      session.data.selectedPlan = plan;
+      session.state = "CONFIRM";
+      return [config.confirmMessage(session.data)];
+    }
+
     case "CONFIRM": {
       if (body === "1") {
         const d = session.data;
