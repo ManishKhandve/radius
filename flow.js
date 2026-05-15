@@ -507,19 +507,19 @@ async function processState(session, body, senderId) {
     }
 
     case "MAID_CHOICE": {
-      if (body.length <= 1) return [config.maidChoiceMessage[session.data.lang]];
+      if (body.length <= 1) return [config.maidChoiceMessage];
       session.data.maidChoice = body;
       session.state = "COLLECT_FLAT";
-      return [config.collectFlatMessage[session.data.lang]];
+      return [config.collectFlatMessage];
     }
     case "COLLECT_FLAT": {
-      if (body.length <= 3) return [config.collectFlatMessage[session.data.lang]];
+      if (body.length <= 3) return [config.collectFlatMessage];
       session.data.flat = body;
       session.state = "COLLECT_DATE";
-      return [config.collectDateMessage[session.data.lang]];
+      return [config.collectDateMessage];
     }
     case "COLLECT_DATE": {
-      if (body.length <= 3) return [config.collectDateMessage[session.data.lang]];
+      if (body.length <= 3) return [config.collectDateMessage];
       session.data.startDate = body;
       session.state = "MAID_PLAN";
       return [config.maidPlanMessage[session.data.lang]];
