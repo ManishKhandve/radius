@@ -614,18 +614,54 @@ function adminBookingAlert(data) {
 }
 
 function adminCleaningAlert(data) {
-  return `🔔 *NEW LEA/BOOKING — Cleaning Service*
+  return `🔔 *NEW LEAD/BOOKING — Cleaning Service*
 
 👤 Customer : ${data.contactName}
 📞 WhatsApp : ${data.whatsappNumber}
 🧹 Service  : ${data.cleaningServiceType || 'N/A'}
 ℹ️ Details  : ${data.cleaningDetails || 'N/A'}
+💰 Est Price: ${data.cleaningPrice || 'N/A'}
 🏠 Location : ${data.cleaningLocation || 'N/A'}
 📅 Date     : ${data.cleaningDate || 'N/A'}
 
-➡️ Please check and share available slots with the customer.`;
+➡️ Please confirm slots with the customer.`;
 }
 
+const cleaningConfirmMessage = (data, lang) => {
+  const priceDisplay = data.cleaningPrice ? `\n💰 Est. Price : ${data.cleaningPrice}` : "";
+
+  const en = `📋 *Cleaning Booking Summary*
+👤 Name       : ${data.contactName}
+🧹 Service    : ${data.cleaningServiceType}
+ℹ️ Details    : ${data.cleaningDetails}
+🏠 Location   : ${data.cleaningLocation}
+📅 Date       : ${data.cleaningDate}${priceDisplay}
+
+Reply *1* to Confirm ✅
+Reply *2* to Cancel ❌`;
+
+  const hi = `📋 *क्लीनिंग बुकिंग सारांश*
+👤 नाम       : ${data.contactName}
+🧹 सेवा       : ${data.cleaningServiceType}
+ℹ️ विवरण      : ${data.cleaningDetails}
+🏠 स्थान      : ${data.cleaningLocation}
+📅 तारीख     : ${data.cleaningDate}${priceDisplay}
+
+पुष्टि करने के लिए *1* रिप्लाई करें ✅
+रद्द करने के लिए *2* रिप्लाई करें ❌`;
+
+  const mr = `📋 *क्लिनिंग बुकिंग सारांश*
+👤 नाव       : ${data.contactName}
+🧹 सेवा       : ${data.cleaningServiceType}
+ℹ️ तपशील     : ${data.cleaningDetails}
+🏠 ठिकाण      : ${data.cleaningLocation}
+📅 तारीख     : ${data.cleaningDate}${priceDisplay}
+
+पुष्टी करण्यासाठी *1* रिप्लाय करा ✅
+रद्द करण्यासाठी *2* रिप्लाय करा ❌`;
+
+  return lang === 'hi' ? hi : lang === 'mr' ? mr : en;
+};
 
 const cancelMessage = "❌ Booking cancelled. No worries!\n\nReply *hi* anytime to start again. 😊";
 
@@ -674,6 +710,7 @@ module.exports = {
   cleaningThanksMessage,
   supportMessage,
   confirmMessage,
+  cleaningConfirmMessage,
   bookingConfirmation,
   adminBookingAlert,
   adminCleaningAlert,

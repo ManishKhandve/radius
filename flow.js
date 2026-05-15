@@ -175,6 +175,7 @@ async function processState(session, body, senderId) {
       
       const price = sqft * session.data.villaRate;
       session.data.cleaningDetails = `${session.data.villaCondition} - ${sqft} Sq.Ft`;
+      session.data.cleaningPrice = `₹${price}`;
       session.state = "CLEANING_CONTINUE";
       return [config.villaPriceMessage(sqft, price, session.data.lang)];
     }
@@ -225,6 +226,19 @@ async function processState(session, body, senderId) {
         details += ` - ${body} BHK`;
         
         session.data.cleaningDetails = details;
+
+        let p = "";
+        let st = session.data.cleaningFlatStatus;
+        if (st === "Furnished") {
+          if (body === "1") p = "₹3199"; else if (body === "2") p = "₹3599"; else if (body === "3") p = "₹4799";
+        } else if (st === "Empty / Vacant") {
+          if (body === "1") p = "₹2999"; else if (body === "2") p = "₹3499"; else if (body === "3") p = "₹4499";
+        } else if (st === "Post Interior Cleaning") {
+          if (body === "1") p = "₹5999"; else if (body === "2") p = "₹6999"; else if (body === "3") p = "₹7999";
+        }
+        if (body === "4") p = "Inspection Required";
+        session.data.cleaningPrice = p;
+
         session.state = "CLEANING_CONTINUE";
         return [config.flatDeepCleaningPriceMessage(session.data.cleaningFlatStatus, body, session.data.lang)];
       } else {
@@ -254,6 +268,7 @@ async function processState(session, body, senderId) {
       
       if (count > 0) {
         session.data.cleaningDetails = `${count} Bathrooms Subscription`;
+        session.data.cleaningPrice = `₹${price}/month`;
         session.state = "CLEANING_BATHROOM_ACTION";
         return [config.bathroomSubMessage(count, price, session.data.lang)];
       } else {
@@ -263,7 +278,10 @@ async function processState(session, body, senderId) {
 
     case "CLEANING_BATHROOM_ONETIME_COUNT": {
       if (["1", "2", "3", "4"].includes(body)) {
+        let p = "";
+        if (body === "1") p = "₹550"; else if (body === "2") p = "₹1100"; else if (body === "3") p = "₹1650"; else if (body === "4") p = "₹2200";
         session.data.cleaningDetails = `${body} Bathroom(s) One-Time`;
+        session.data.cleaningPrice = p;
         session.state = "CLEANING_BATHROOM_ACTION";
         return [config.bathroomOneTimePriceMessage(body, session.data.lang)];
       } else {
@@ -291,6 +309,7 @@ async function processState(session, body, senderId) {
       } else if (body.length >= 2) {
         // Assume they typed add-ons
         session.data.cleaningDetails += ` + Add-ons: ${body}`;
+        if (session.data.cleaningPrice) session.data.cleaningPrice += ` + Add-ons`;
         session.state = "CLEANING_LOCATION";
         return [config.cleaningLocationMessage[session.data.lang]];
       } else {
@@ -301,6 +320,7 @@ async function processState(session, body, senderId) {
     case "CLEANING_MINI_SERVICE": {
       if (body.length >= 2) {
         session.data.cleaningDetails = "Mini Services: " + body;
+        session.data.cleaningPrice = "As per menu + MOQ ₹2000";
         session.state = "CLEANING_LOCATION";
         return [config.cleaningLocationMessage[session.data.lang]];
       } else {
@@ -318,10 +338,12 @@ async function processState(session, body, senderId) {
     case "CLEANING_DATE": {
       if (body === "1") {
         session.data.cleaningDate = "Today";
-        return finishCleaning(session, senderId);
+        session.state = "CLEANING_CONFIRM";
+        return [config.cleaningConfirmMessage(session.data, session.data.lang)];
       } else if (body === "2") {
         session.data.cleaningDate = "Tomorrow";
-        return finishCleaning(session, senderId);
+        session.state = "CLEANING_CONFIRM";
+        return [config.cleaningConfirmMessage(session.data, session.data.lang)];
       } else if (body === "3") {
         session.state = "CLEANING_CUSTOM_DATE";
         return [config.cleaningCustomDateMessage[session.data.lang]];
@@ -333,7 +355,19 @@ async function processState(session, body, senderId) {
     case "CLEANING_CUSTOM_DATE": {
       if (body.length <= 2) return [config.cleaningCustomDateMessage[session.data.lang]];
       session.data.cleaningDate = body;
-      return finishCleaning(session, senderId);
+      session.state = "CLEANING_CONFIRM";
+      return [config.cleaningConfirmMessage(session.data, session.data.lang)];
+    }
+
+    case "CLEANING_CONFIRM": {
+      if (body === "1") {
+        return finishCleaning(session, senderId);
+      } else if (body === "2") {
+        clearSession(senderId);
+        return [config.cancelMessage];
+      } else {
+        return [config.cleaningConfirmMessage(session.data, session.data.lang)];
+      }
     }
 
     // ==========================================
