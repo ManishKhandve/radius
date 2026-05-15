@@ -485,6 +485,7 @@ async function processState(session, body, senderId) {
         topMaids.forEach((maid, i) => {
           resultMsg += `${emojis[i]} *ID:* M${maid.id}
 👤 *Name:* ${maid.name}
+🧹 *Work:* ${maid.service_type || 'Not specified'}
 ✨ *Experience:* ${maid.experience || 'Not specified'}
 💰 *Expected Salary:* ₹${maid.salary_expectation || 'Negotiable'}
 📍 *Distance:* ${maid.distance.toFixed(1)} km (${maid.zone.name})\n\n`;
