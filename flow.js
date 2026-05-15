@@ -142,9 +142,41 @@ async function processState(session, body, senderId) {
         session.data.cleaningServiceType = "Mini Service Package";
         session.state = "CLEANING_MINI_SERVICE";
         return [config.miniServiceMessage[session.data.lang]];
+      } else if (body === "4") {
+        session.data.cleaningServiceType = "Villa / Bungalow / Row House";
+        session.state = "CLEANING_VILLA_STATUS";
+        return [config.villaStatusMessage[session.data.lang]];
       } else {
         return [config.cleaningServiceMessage[session.data.lang]];
       }
+    }
+
+    case "CLEANING_VILLA_STATUS": {
+      if (body === "1") {
+        session.data.villaRate = 6;
+        session.data.villaCondition = "Regular Occupied House";
+        session.state = "CLEANING_VILLA_SQFT";
+        return [config.villaSqftMessage[session.data.lang]];
+      } else if (body === "2") {
+        session.data.villaRate = 9;
+        session.data.villaCondition = "Post Interior / Renovation";
+        session.state = "CLEANING_VILLA_SQFT";
+        return [config.villaSqftMessage[session.data.lang]];
+      } else {
+        return [config.villaStatusMessage[session.data.lang]];
+      }
+    }
+
+    case "CLEANING_VILLA_SQFT": {
+      const sqft = parseInt(body.replace(/\D/g, ""));
+      if (!sqft || sqft < 100) {
+        return [config.villaSqftMessage[session.data.lang]];
+      }
+      
+      const price = sqft * session.data.villaRate;
+      session.data.cleaningDetails = `${session.data.villaCondition} - ${sqft} Sq.Ft`;
+      session.state = "CLEANING_CONTINUE";
+      return [config.villaPriceMessage(sqft, price, session.data.lang)];
     }
 
     case "CLEANING_FLAT_STATUS": {

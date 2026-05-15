@@ -114,15 +114,18 @@ const cleaningServiceMessage = {
   en: `🏠 Which service are you looking for?
 1️⃣ Flat Deep Cleaning
 2️⃣ Bathroom Cleaning
-3️⃣ Mini Service Package`,
+3️⃣ Mini Service Package
+4️⃣ Villa / Bungalow / Row House`,
   hi: `🏠 आप कौन सी सेवा ढूंढ रहे हैं?
 1️⃣ फ्लैट डीप क्लीनिंग
 2️⃣ बाथरूम क्लीनिंग
-3️⃣ मिनी सर्विस पैकेज`,
+3️⃣ मिनी सर्विस पैकेज
+4️⃣ विला / बंगला / रो हाउस`,
   mr: `🏠 तुम्ही कोणती सेवा शोधत आहात?
 1️⃣ फ्लॅट डीप क्लिनिंग
 2️⃣ बाथरूम क्लिनिंग
-3️⃣ मिनी सर्व्हिस पॅकेज`
+3️⃣ मिनी सर्व्हिस पॅकेज
+4️⃣ व्हिला / बंगला / रो हाऊस`
 };
 
 const flatStatusMessage = {
@@ -183,6 +186,52 @@ const flatBhkMessage = {
 2️⃣ 2 BHK
 3️⃣ 3 BHK
 4️⃣ 4 BHK / व्हिला`
+};
+
+const villaStatusMessage = {
+  en: `🏠 What is the current condition of the house?
+1️⃣ Regular Occupied House
+2️⃣ Post Interior / Renovation`,
+  hi: `🏠 घर की वर्तमान स्थिति क्या है?
+1️⃣ नियमित रहने वाला घर
+2️⃣ इंटीरियर के बाद / नवीनीकरण (Renovation)`,
+  mr: `🏠 घराची सध्याची स्थिती काय आहे?
+1️⃣ नियमित राहते घर
+2️⃣ इंटिरिअर नंतर / नूतनीकरण (Renovation)`
+};
+
+const villaSqftMessage = {
+  en: `📐 Please enter the total built-up area of your house in Square Feet.
+(Example: 1500)`,
+  hi: `📐 कृपया अपने घर का कुल बिल्ट-अप क्षेत्र स्क्वायर फीट में दर्ज करें।
+(उदाहरण: 1500)`,
+  mr: `📐 कृपया तुमच्या घराचे एकूण क्षेत्रफळ स्क्वेअर फूट मध्ये प्रविष्ट करा.
+(उदाहरण: 1500)`
+};
+
+const villaPriceMessage = (sqft, price, lang) => {
+  const en = `💰 Estimated Pricing:
+✔ Size: ${sqft} Sq.Ft
+✔ Estimated Cost: ₹${price}
+
+If you want to proceed with booking
+Reply *1* to continue`;
+
+  const hi = `💰 अनुमानित मूल्य:
+✔ आकार: ${sqft} वर्ग फुट (Sq.Ft)
+✔ अनुमानित लागत: ₹${price}
+
+अगर आप बुकिंग के साथ आगे बढ़ना चाहते हैं
+तो *1* रिप्लाई करें`;
+
+  const mr = `💰 अंदाजित किंमत:
+✔ आकार: ${sqft} चौरस फूट (Sq.Ft)
+✔ अंदाजित किंमत: ₹${price}
+
+तुम्हाला बुकिंग करायची असल्यास
+पुढे जाण्यासाठी *1* रिप्लाय करा`;
+
+  return lang === 'hi' ? hi : lang === 'mr' ? mr : en;
 };
 
 const flatDeepCleaningPriceMessage = (status, bhk, lang) => {
@@ -605,6 +654,9 @@ module.exports = {
   collectFlatMessage,
   collectDateMessage,
   cleaningServiceMessage,
+  villaStatusMessage,
+  villaSqftMessage,
+  villaPriceMessage,
   flatStatusMessage,
   furnishedSubMessage,
   emptySubMessage,
