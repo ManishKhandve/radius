@@ -492,10 +492,10 @@ async function processState(session, body, senderId) {
         });
 
         resultMsg += session.data.lang === "hi"
-          ? "👩 आपको कौन सी मेड पसंद आई? कृपया उनकी *ID* के साथ रिप्लाई करें (उदा: M123)।"
+          ? "👩 आपको कौन सी मेड पसंद आई? कृपया उनकी *ID* के साथ रिप्लाई करें (उदा: M123)।\n\n0️⃣ अगर आपको इनमें से कोई पसंद नहीं है, तो सपोर्ट से बात करने के लिए 0 दबाएं।"
           : session.data.lang === "mr"
-          ? "👩 तुम्हाला कोणती मोलकरीण आवडली? कृपया त्यांच्या *ID* सोबत रिप्लाय करा (उदा: M123)."
-          : "👩 Which maid did you like? Please reply with their *ID* (e.g., M123).";
+          ? "👩 तुम्हाला कोणती मोलकरीण आवडली? कृपया त्यांच्या *ID* सोबत रिप्लाय करा (उदा: M123).\n\n0️⃣ जर तुम्हाला यापैकी कोणी आवडली नसेल, तर सपोर्टशी बोलण्यासाठी 0 दाबा."
+          : "👩 Which maid did you like? Please reply with their *ID* (e.g., M123).\n\n0️⃣ If you didn't like these, reply with 0 to contact support.";
 
         session.state = "MAID_CHOICE";
         return [resultMsg];
