@@ -144,26 +144,10 @@ async function processState(session, body, senderId) {
         return [config.miniServiceMessage[session.data.lang]];
       } else if (body === "4") {
         session.data.cleaningServiceType = "Villa / Bungalow / Row House";
-        session.state = "CLEANING_VILLA_STATUS";
-        return [config.villaStatusMessage[session.data.lang]];
+        session.state = "CLEANING_VILLA_SQFT";
+        return [config.villaSqftMessage[session.data.lang]];
       } else {
         return [config.cleaningServiceMessage[session.data.lang]];
-      }
-    }
-
-    case "CLEANING_VILLA_STATUS": {
-      if (body === "1") {
-        session.data.villaRate = 6;
-        session.data.villaCondition = "Regular Occupied House";
-        session.state = "CLEANING_VILLA_SQFT";
-        return [config.villaSqftMessage[session.data.lang]];
-      } else if (body === "2") {
-        session.data.villaRate = 9;
-        session.data.villaCondition = "Post Interior / Renovation";
-        session.state = "CLEANING_VILLA_SQFT";
-        return [config.villaSqftMessage[session.data.lang]];
-      } else {
-        return [config.villaStatusMessage[session.data.lang]];
       }
     }
 
@@ -173,11 +157,28 @@ async function processState(session, body, senderId) {
         return [config.villaSqftMessage[session.data.lang]];
       }
       
-      const price = sqft * session.data.villaRate;
-      session.data.cleaningDetails = `${session.data.villaCondition} - ${sqft} Sq.Ft`;
+      // Store sqft and move to status selection
+      session.data.villaSqft = sqft;
+      session.state = "CLEANING_VILLA_STATUS";
+      return [config.villaStatusMessage[session.data.lang]];
+    }
+
+    case "CLEANING_VILLA_STATUS": {
+      if (body === "1") {
+        session.data.villaRate = 6;
+        session.data.villaCondition = "Regular Occupied House";
+      } else if (body === "2") {
+        session.data.villaRate = 9;
+        session.data.villaCondition = "Post Interior / Renovation";
+      } else {
+        return [config.villaStatusMessage[session.data.lang]];
+      }
+      
+      const price = session.data.villaSqft * session.data.villaRate;
+      session.data.cleaningDetails = `${session.data.villaCondition} - ${session.data.villaSqft} Sq.Ft`;
       session.data.cleaningPrice = `₹${price}`;
       session.state = "CLEANING_CONTINUE";
-      return [config.villaPriceMessage(sqft, price, session.data.lang)];
+      return [config.villaPriceMessage(session.data.villaSqft, price, session.data.villaRate, session.data.villaCondition, session.data.lang)];
     }
 
     case "CLEANING_FLAT_STATUS": {
@@ -298,7 +299,7 @@ async function processState(session, body, senderId) {
         clearSession(senderId);
         return [msg];
       } else {
-        return [session.data.lang === "hi" ? "कृपया 1 या 2 रिप्लाई करें" : session.data.lang === "mr" ? "कृपया 1 किंवा 2 रिप्लाय करा" : "Please reply 1 or 2."];
+        return [session.data.lang === "hi" ? "1 ya 2 reply karo" : session.data.lang === "mr" ? "1 kiva 2 reply kara" : "Please reply 1 or 2."];
       }
     }
 
@@ -306,33 +307,113 @@ async function processState(session, body, senderId) {
       if (body === "1") {
         session.state = "CLEANING_LOCATION";
         return [config.cleaningLocationMessage[session.data.lang]];
-      } else if (body.length >= 2) {
-        // Assume they typed add-ons
-        session.data.cleaningDetails += ` + Add-ons: ${body}`;
-        if (session.data.cleaningPrice) session.data.cleaningPrice += ` + Add-ons`;
-        session.state = "CLEANING_LOCATION";
-        return [config.cleaningLocationMessage[session.data.lang]];
       } else {
-        return [session.data.lang === "hi" ? "आगे बढ़ने के लिए 1 रिप्लाई करें या ऐड-ऑन टाइप करें" : session.data.lang === "mr" ? "पुढे जाण्यासाठी 1 रिप्लाय करा किंवा ॲड-ऑन्स टाइप करा" : "Please reply 1 to continue or type your add-ons."];
+        // Invalid input
+        return [session.data.lang === "hi" ? "1 reply karo" : session.data.lang === "mr" ? "1 reply kara" : "Please reply 1 to continue."];
       }
     }
 
     case "CLEANING_MINI_SERVICE": {
-      if (body.length >= 2) {
-        session.data.cleaningDetails = "Mini Services: " + body;
-        session.data.cleaningPrice = "As per menu + MOQ ₹2000";
+      // Parse input like "6-2, 3-1, 7-3" (service-quantity pairs)
+      if (body.length < 1) {
+        return [config.miniServiceMessage[session.data.lang]];
+      }
+      
+      try {
+        const items = body.split(',').map(item => item.trim());
+        let totalPrice = 0;
+        let serviceDetails = [];
+        
+        for (const item of items) {
+          const [serviceNum, qty] = item.split('-').map(s => s.trim());
+          const quantity = parseInt(qty) || 1;
+          
+          const service = config.miniServiceItems[serviceNum];
+          if (!service) {
+            const msg = session.data.lang === "hi" 
+              ? `⚠️ Invalid service number: ${serviceNum}. Dobara try karo.`
+              : session.data.lang === "mr"
+              ? `⚠️ Invalid service number: ${serviceNum}. Punha try kara.`
+              : `⚠️ Invalid service number: ${serviceNum}. Please try again.`;
+            return [msg];
+          }
+          
+          const itemTotal = service.price * quantity;
+          totalPrice += itemTotal;
+          serviceDetails.push(`${service.name} x${quantity} = ₹${itemTotal}`);
+        }
+        
+        // Check minimum order value
+        if (totalPrice < 2000) {
+          const msg = session.data.lang === "hi" 
+            ? `⚠️ Minimum order ₹2000 hai. Aapka total: ₹${totalPrice}. Aur services add karo.`
+            : session.data.lang === "mr"
+            ? `⚠️ Minimum order ₹2000 aahe. Tumcha total: ₹${totalPrice}. Aani services add kara.`
+            : `⚠️ Minimum order value is ₹2000. Your total: ₹${totalPrice}. Please add more services.`;
+          return [msg];
+        }
+        
+        session.data.cleaningDetails = "Mini Services: " + serviceDetails.join(', ');
+        session.data.cleaningPrice = `₹${totalPrice}`;
         session.state = "CLEANING_LOCATION";
         return [config.cleaningLocationMessage[session.data.lang]];
-      } else {
-        return [config.miniServiceMessage[session.data.lang]];
+        
+      } catch (err) {
+        const msg = session.data.lang === "hi" 
+          ? "⚠️ Format galat hai. Example: 6-2, 3-1, 7-3"
+          : session.data.lang === "mr"
+          ? "⚠️ Format chukicha aahe. Example: 6-2, 3-1, 7-3"
+          : "⚠️ Invalid format. Example: 6-2, 3-1, 7-3";
+        return [msg];
       }
     }
 
     case "CLEANING_LOCATION": {
-      if (body.length <= 2) return [config.cleaningLocationMessage[session.data.lang]];
-      session.data.cleaningLocation = body;
-      session.state = "CLEANING_DATE";
-      return [config.cleaningDateMessage[session.data.lang]];
+      if (body === "1") {
+        session.data.cleaningCity = "Pune";
+      } else if (body === "2") {
+        session.data.cleaningCity = "PCMC";
+      } else {
+        return [config.cleaningLocationMessage[session.data.lang]];
+      }
+      session.state = "CLEANING_AREA";
+      return [config.getCleaningAreaMessage(session.data.cleaningCity, session.data.lang)];
+    }
+
+    case "CLEANING_AREA": {
+      const idx = parseInt(body) - 1;
+      const areas = session.data.cleaningCity === "Pune" ? config.puneAreas : config.pcmcAreas;
+      if (isNaN(idx) || idx < 0 || idx >= areas.length) {
+        return [config.getCleaningAreaMessage(session.data.cleaningCity, session.data.lang)];
+      }
+      const selectedArea = areas[idx];
+      session.data.cleaningArea = selectedArea;
+      session.data.cleaningLocation = `${selectedArea}, ${session.data.cleaningCity}`;
+      session.state = "COLLECT_FLAT";
+      return [config.collectFlatMessage];
+    }
+
+    case "COLLECT_FLAT": {
+      if (body.length <= 3) {
+        const msg = session.data.lang === "hi" 
+          ? "🏠 Apna flat number aur area/society name batao.\n(Example: Flat 4B, Cidco N-6)" 
+          : session.data.lang === "mr"
+          ? "🏠 Tumcha flat number ani area/society name sanga.\n(Example: Flat 4B, Cidco N-6)"
+          : "🏠 Please share your flat number and area/society name.\n(Example: Flat 4B, Cidco N-6)";
+        return [msg];
+      }
+      
+      // Check if we're in cleaning flow or maid flow
+      if (session.data.serviceCategory === "cleaning") {
+        session.data.flat = body;
+        session.state = "CLEANING_DATE";
+        return [config.cleaningDateMessage[session.data.lang]];
+      } else {
+        // Maid flow
+        session.data.flat = body;
+        session.state = "COLLECT_DATE";
+        return [config.collectDateMessage];
+      }
     }
 
     case "CLEANING_DATE": {
@@ -374,14 +455,16 @@ async function processState(session, body, senderId) {
     // MAID SERVICE FLOW (Original)
     // ==========================================
     case "WORK_TYPE": {
+      const v = config.workTypes[body];
+      if (!v) return [config.workTypeMessage[session.data.lang]];
+      
       if (body === "5") {
+        // Custom work type - still needs text input as it's genuinely custom
         session.state = "WORK_TYPE_CUSTOM";
-        const msg = session.data.lang === "hi" ? "कृपया टाइप करें कि आपको किस प्रकार के काम की आवश्यकता है:" : session.data.lang === "mr" ? "कृपया तुम्हाला कोणत्या प्रकारचे काम हवे आहे ते टाइप करा:" : "Please type the specific work you need help with:";
+        const msg = session.data.lang === "hi" ? "Kis type ka kaam chahiye? Type karo:" : session.data.lang === "mr" ? "Konta type cha kaam pahije? Type kara:" : "Please type the specific work you need help with:";
         return [msg];
       }
       
-      const v = config.workTypes[body];
-      if (!v) return [config.workTypeMessage[session.data.lang]];
       session.data.workType = v;
       session.state = "TIMING";
       return [config.timingMessage[session.data.lang]];
@@ -389,7 +472,7 @@ async function processState(session, body, senderId) {
     
     case "WORK_TYPE_CUSTOM": {
       if (body.length < 2) {
-         const msg = session.data.lang === "hi" ? "कृपया टाइप करें कि आपको किस प्रकार के काम की आवश्यकता है:" : session.data.lang === "mr" ? "कृपया तुम्हाला कोणत्या प्रकारचे काम हवे आहे ते टाइप करा:" : "Please type the specific work you need help with:";
+         const msg = session.data.lang === "hi" ? "Kis type ka kaam chahiye? Type karo:" : session.data.lang === "mr" ? "Konta type cha kaam pahije? Type kara:" : "Please type the specific work you need help with:";
          return [msg];
       }
       session.data.workType = "Custom: " + body;
@@ -453,9 +536,12 @@ async function processState(session, body, senderId) {
             whatsappNumber: session.data.whatsappNumber,
             workType: session.data.workType,
             timing: session.data.timing,
-            budget: session.data.budget + ` | Loc: ${session.data.maidArea}, ${session.data.maidCity}`,
+            budget: session.data.budget,
             status: "New Lead",
             source: "WhatsApp Bot",
+            city: session.data.maidCity,
+            area: session.data.maidArea,
+            language: session.data.lang,
           });
         } catch (e) { console.error("[flow] lead save err:", e.message); }
       })();
@@ -468,17 +554,17 @@ async function processState(session, body, senderId) {
         if (topMaids.length === 0) {
           // If no maids found in 8km
           const msg = session.data.lang === "hi" 
-            ? "क्षमा करें, आपके क्षेत्र में 8 किमी के दायरे में कोई मेड उपलब्ध नहीं है। कृपया हमारे सपोर्ट से संपर्क करें।" 
+            ? "Sorry, aapke area mein 8 km ke andar koi maid available nahi hai. Support ke liye call karo." 
             : session.data.lang === "mr"
-            ? "क्षमस्व, तुमच्या परिसरात 8 किमीच्या आत कोणतीही मोलकरीण उपलब्ध नाही. कृपया आमच्या सपोर्टशी संपर्क साधा."
+            ? "Sorry, tumchya area madhe 8 km madhe koni maid available nahi aahe. Support sathi call kara."
             : "Sorry, no maids are currently available in your area within 8km. Please contact our support.";
           return [msg];
         }
 
         let resultMsg = session.data.lang === "hi" 
-          ? "🌟 यहाँ आपके लिए हमारी शीर्ष पसंद हैं:\n\n" 
+          ? "🌟 Aapke liye best maids:\n\n" 
           : session.data.lang === "mr"
-          ? "🌟 येथे तुमच्यासाठी आमची सर्वोत्तम निवड आहे:\n\n"
+          ? "🌟 Tumchyasathi best maids:\n\n"
           : "🌟 Here are our top picks for you:\n\n";
 
         const emojis = ["1️⃣", "2️⃣", "3️⃣", "4️⃣", "5️⃣"];
@@ -492,11 +578,15 @@ async function processState(session, body, senderId) {
         });
 
         resultMsg += session.data.lang === "hi"
-          ? "👩 आपको कौन सी मेड पसंद आई? कृपया उनकी *ID* के साथ रिप्लाई करें (उदा: M123)।\n\n0️⃣ अगर आपको इनमें से कोई पसंद नहीं है, तो सपोर्ट से बात करने के लिए 0 दबाएं।"
+          ? "👩 Kaun si maid pasand aayi? Number reply karo.\n\n💡 Aap maximum 2 maids select kar sakte ho (example: 1,2 ya sirf 1).\n\n0️⃣ Agar koi pasand nahi aayi toh support ke liye 0 dabao."
           : session.data.lang === "mr"
-          ? "👩 तुम्हाला कोणती मोलकरीण आवडली? कृपया त्यांच्या *ID* सोबत रिप्लाय करा (उदा: M123).\n\n0️⃣ जर तुम्हाला यापैकी कोणी आवडली नसेल, तर सपोर्टशी बोलण्यासाठी 0 दाबा."
-          : "👩 Which maid did you like? Please reply with their *ID* (e.g., M123).\n\n0️⃣ If you didn't like these, reply with 0 to contact support.";
+          ? "👩 Koni maid avadli? Number reply kara.\n\n💡 Tumhi maximum 2 maids select karu shakta (example: 1,2 kiva fakt 1).\n\n0️⃣ Jar koni avadli nahi tar support sathi 0 daba."
+          : "👩 Which maid(s) did you like? Please reply with their *number*.\n\n💡 You can select up to 2 maids (e.g., 1,2 or just 1).\n\n0️⃣ If you didn't like these, reply with 0 to contact support.";
 
+        // Store the maid list for validation
+        session.data.availableMaids = topMaids;
+        session.data.selectedMaids = [];
+        
         session.state = "MAID_CHOICE";
         return [resultMsg];
 
@@ -507,16 +597,76 @@ async function processState(session, body, senderId) {
     }
 
     case "MAID_CHOICE": {
-      if (body.length <= 1) return [config.maidChoiceMessage];
-      session.data.maidChoice = body;
+      if (body.length === 0) {
+        const msg = session.data.lang === "hi" 
+          ? "Maid ka number reply karo (example: 1 ya 1,2)" 
+          : session.data.lang === "mr"
+          ? "Maid cha number reply kara (example: 1 kiva 1,2)"
+          : "Please reply with maid number (e.g., 1 or 1,2)";
+        return [msg];
+      }
+      
+      // Parse the input - can be "1" or "1,2" or "1 2"
+      const maidNumbers = body
+        .replace(/\s+/g, ',')  // Replace spaces with commas
+        .split(',')
+        .map(num => num.trim())
+        .filter(num => num.length > 0)
+        .map(num => parseInt(num));
+      
+      // Validate: maximum 2 maids
+      if (maidNumbers.length > 2) {
+        const msg = session.data.lang === "hi" 
+          ? "⚠️ Aap maximum 2 maids hi select kar sakte ho. Dobara try karo." 
+          : session.data.lang === "mr"
+          ? "⚠️ Tumhi maximum 2 maids select karu shakta. Punha try kara."
+          : "⚠️ You can select maximum 2 maids only. Please try again.";
+        return [msg];
+      }
+      
+      // Validate: check if numbers are valid (1, 2, or 3)
+      const totalMaids = session.data.availableMaids ? session.data.availableMaids.length : 0;
+      const invalidNumbers = maidNumbers.filter(num => isNaN(num) || num < 1 || num > totalMaids);
+      
+      if (invalidNumbers.length > 0 || maidNumbers.length === 0) {
+        const msg = session.data.lang === "hi" 
+          ? `⚠️ Invalid number. 1 se ${totalMaids} tak ka number select karo.` 
+          : session.data.lang === "mr"
+          ? `⚠️ Invalid number. 1 te ${totalMaids} madhla number select kara.`
+          : `⚠️ Invalid number. Please select between 1 and ${totalMaids}.`;
+        return [msg];
+      }
+      
+      // Get selected maids by index
+      const selectedMaids = maidNumbers.map(num => session.data.availableMaids[num - 1]);
+      
+      // Store selected maids with IDs
+      const maidIds = selectedMaids.map(m => `M${m.id}`);
+      const maidNames = selectedMaids.map(m => m.name);
+      
+      session.data.selectedMaids = maidIds;
+      session.data.maidChoice = maidNames.join(', ');
+      session.data.maidChoiceIds = maidIds.join(', ');
+      
+      // Show confirmation of selected maids
+      let confirmMsg = session.data.lang === "hi" 
+        ? `✅ Aapne select kiya:\n\n` 
+        : session.data.lang === "mr"
+        ? `✅ Tumhi select kela:\n\n`
+        : `✅ You selected:\n\n`;
+      
+      selectedMaids.forEach((maid, idx) => {
+        confirmMsg += `👤 ${maid.name} (M${maid.id}) - ${maid.distance.toFixed(1)} km\n`;
+      });
+      
+      confirmMsg += session.data.lang === "hi"
+        ? `\n📝 Ab apna flat number aur area/society name share karo.\n(Example: Flat 4B, Cidco N-6)`
+        : session.data.lang === "mr"
+        ? `\n📝 Aata tumcha flat number ani area/society name share kara.\n(Example: Flat 4B, Cidco N-6)`
+        : `\n📝 Now please share your flat number and area/society name.\n(Example: Flat 4B, Cidco N-6)`;
+      
       session.state = "COLLECT_FLAT";
-      return [config.collectFlatMessage];
-    }
-    case "COLLECT_FLAT": {
-      if (body.length <= 3) return [config.collectFlatMessage];
-      session.data.flat = body;
-      session.state = "COLLECT_DATE";
-      return [config.collectDateMessage];
+      return [confirmMsg];
     }
     case "COLLECT_DATE": {
       if (body.length <= 3) return [config.collectDateMessage];
@@ -542,11 +692,21 @@ async function processState(session, body, senderId) {
         (async () => {
           try {
             await sheets.appendBooking({
-              bookingId: bid, customerName: d.contactName,
-              customerWhatsApp: d.whatsappNumber, maidName: d.maidChoice,
-              maidId: "", workType: d.workType, timing: d.timing,
-              startDate: d.startDate, monthlySalary: d.budget, flat: d.flat,
+              bookingId: bid, 
+              customerName: d.contactName,
+              customerWhatsApp: d.whatsappNumber, 
+              maidName: d.maidChoice,
+              maidId: d.maidChoiceIds || d.selectedMaids.join(', ') || "",
+              workType: d.workType, 
+              timing: d.timing,
+              startDate: d.startDate, 
+              monthlySalary: d.budget, 
+              flat: d.flat,
               status: "Confirmed",
+              selectedPlan: d.selectedPlan,
+              city: d.maidCity,
+              area: d.maidArea,
+              language: d.lang,
             });
             await sheets.updateCustomerStatus(d.whatsappNumber, "Booking Confirmed");
           } catch (e) { console.error("[flow] booking write err:", e.message); }
@@ -593,6 +753,8 @@ function finishCleaning(session, senderId) {
         details: d.cleaningDetails || "N/A",
         location: d.cleaningLocation,
         preferredDate: d.cleaningDate,
+        estimatedPrice: d.cleaningPrice,
+        language: d.lang,
       });
     } catch (e) { console.error("[flow] cleaning booking write err:", e.message); }
   })();

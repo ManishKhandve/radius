@@ -108,14 +108,15 @@ async function generateBookingId() {
  *
  * @param {object} data
  *   { customerId, name, whatsappNumber, flat, workType, timing,
- *     budget, enquiryDate, status, assignedMaidId, source, notes }
+ *     budget, enquiryDate, status, assignedMaidId, source, notes,
+ *     city, area, language }
  */
 async function appendCustomer(data) {
   try {
     const sheets = await getClient();
     await sheets.spreadsheets.values.append({
       spreadsheetId: sheetId(),
-      range: `${SHEET_CUSTOMERS}!A:L`,
+      range: `${SHEET_CUSTOMERS}!A:O`,
       valueInputOption: "USER_ENTERED",
       insertDataOption: "INSERT_ROWS",
       requestBody: {
@@ -133,6 +134,9 @@ async function appendCustomer(data) {
             data.assignedMaidId   || "",
             data.source           || "WhatsApp Bot",
             data.notes            || "",
+            data.city             || "",
+            data.area             || "",
+            data.language         || "en",
           ],
         ],
       },
@@ -150,14 +154,14 @@ async function appendCustomer(data) {
  * @param {object} data
  *   { bookingId, customerName, customerWhatsApp, maidName, maidId,
  *     workType, timing, startDate, monthlySalary, flat, bookingDate,
- *     status, commissionPaid }
+ *     status, commissionPaid, selectedPlan, city, area, language }
  */
 async function appendBooking(data) {
   try {
     const sheets = await getClient();
     await sheets.spreadsheets.values.append({
       spreadsheetId: sheetId(),
-      range: `${SHEET_BOOKINGS}!A:Q`,
+      range: `${SHEET_BOOKINGS}!A:U`,
       valueInputOption: "USER_ENTERED",
       insertDataOption: "INSERT_ROWS",
       requestBody: {
@@ -180,6 +184,10 @@ async function appendBooking(data) {
             "", // Follow-up Day 2
             "", // Follow-up Day 3
             "", // Monthly Check-in
+            data.selectedPlan       || "",
+            data.city               || "",
+            data.area               || "",
+            data.language           || "en",
           ],
         ],
       },
@@ -194,14 +202,15 @@ async function appendBooking(data) {
  * Appends a new row to the CLEANING_BOOKINGS sheet.
  *
  * @param {object} data
- *   { bookingId, customerName, whatsappNumber, serviceType, details, location, preferredDate, bookingDate, status, source }
+ *   { bookingId, customerName, whatsappNumber, serviceType, details, 
+ *     location, preferredDate, bookingDate, status, source, estimatedPrice, language }
  */
 async function appendCleaningBooking(data) {
   try {
     const sheets = await getClient();
     await sheets.spreadsheets.values.append({
       spreadsheetId: sheetId(),
-      range: `${SHEET_CLEANING_BOOKINGS}!A:K`,
+      range: `${SHEET_CLEANING_BOOKINGS}!A:M`,
       valueInputOption: "USER_ENTERED",
       insertDataOption: "INSERT_ROWS",
       requestBody: {
@@ -218,6 +227,8 @@ async function appendCleaningBooking(data) {
             data.status             || "New Request",
             data.source             || "WhatsApp Bot",
             "", // Notes
+            data.estimatedPrice     || "",
+            data.language           || "en",
           ],
         ],
       },
