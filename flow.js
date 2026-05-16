@@ -32,20 +32,19 @@ function activeSessionCount() {
   return sessions.size;
 }
 
-const RESTART_KW = ["hi", "hello", "hey", "menu", "start", "help"];
+const RESTART_KW = ["hi", "hello"];
 function isRestart(text) {
   return RESTART_KW.includes(text.trim().toLowerCase());
 }
 
-// Check if message looks like it came from a Facebook/Instagram ad
+// Only trigger from Facebook/Instagram ad links
 function isAdMessage(text) {
   const lower = text.toLowerCase();
   return (
-    lower.includes("facebook") || 
-    lower.includes("instagram") || 
-    lower.includes("fb.me") || 
-    lower.includes("ig.me") || 
-    lower.includes("http")
+    lower.includes("facebook.com") ||
+    lower.includes("fb.me") ||
+    lower.includes("instagram.com") ||
+    lower.includes("ig.me")
   );
 }
 
@@ -61,7 +60,7 @@ async function handleMessage(msg) {
   // If no active session, ONLY create one if it's an ad message or a restart keyword
   if (!session) {
     if (!isRestart(body) && !isAdMessage(body)) {
-      return; // Ignore random personal messages
+      return []; // Ignore random personal messages — return empty so no reply is sent
     }
     
     session = createSession(senderId);
@@ -299,7 +298,7 @@ async function processState(session, body, senderId) {
         clearSession(senderId);
         return [msg];
       } else {
-        return [session.data.lang === "hi" ? "1 ya 2 reply karo" : session.data.lang === "mr" ? "1 kiva 2 reply kara" : "Please reply 1 or 2."];
+        return [session.data.lang === "hi" ? "1 या 2 रिप्लाई करें।" : session.data.lang === "mr" ? "1 किंवा 2 रिप्लाय करा." : "Please reply 1 or 2."];
       }
     }
 
@@ -309,7 +308,7 @@ async function processState(session, body, senderId) {
         return [config.cleaningLocationMessage[session.data.lang]];
       } else {
         // Invalid input
-        return [session.data.lang === "hi" ? "1 reply karo" : session.data.lang === "mr" ? "1 reply kara" : "Please reply 1 to continue."];
+        return [session.data.lang === "hi" ? "आगे बढ़ने के लिए 1 रिप्लाई करें।" : session.data.lang === "mr" ? "पुढे जाण्यासाठी 1 रिप्लाय करा." : "Please reply 1 to continue."];
       }
     }
 
@@ -330,10 +329,10 @@ async function processState(session, body, senderId) {
           
           const service = config.miniServiceItems[serviceNum];
           if (!service) {
-            const msg = session.data.lang === "hi" 
-              ? `⚠️ Invalid service number: ${serviceNum}. Dobara try karo.`
+            const msg = session.data.lang === "hi"
+              ? `⚠️ गलत सर्विस नंबर: ${serviceNum}. फिर से कोशिश करें.`
               : session.data.lang === "mr"
-              ? `⚠️ Invalid service number: ${serviceNum}. Punha try kara.`
+              ? `⚠️ चुकीचा सर्विस नंबर: ${serviceNum}. पुन्हा प्रयत्न करा.`
               : `⚠️ Invalid service number: ${serviceNum}. Please try again.`;
             return [msg];
           }
@@ -345,10 +344,10 @@ async function processState(session, body, senderId) {
         
         // Check minimum order value
         if (totalPrice < 2000) {
-          const msg = session.data.lang === "hi" 
-            ? `⚠️ Minimum order ₹2000 hai. Aapka total: ₹${totalPrice}. Aur services add karo.`
+          const msg = session.data.lang === "hi"
+            ? `⚠️ न्यूनतम ऑर्डर ₹2000 है। आपका कुल: ₹${totalPrice}। और सर्विसेज़ जोड़ें।`
             : session.data.lang === "mr"
-            ? `⚠️ Minimum order ₹2000 aahe. Tumcha total: ₹${totalPrice}. Aani services add kara.`
+            ? `⚠️ किमान ऑर्डर ₹2000 आहे. तुमचा एकूण: ₹${totalPrice}. आणखी सर्विसेस जोडा.`
             : `⚠️ Minimum order value is ₹2000. Your total: ₹${totalPrice}. Please add more services.`;
           return [msg];
         }
@@ -359,10 +358,10 @@ async function processState(session, body, senderId) {
         return [config.cleaningLocationMessage[session.data.lang]];
         
       } catch (err) {
-        const msg = session.data.lang === "hi" 
-          ? "⚠️ Format galat hai. Example: 6-2, 3-1, 7-3"
+        const msg = session.data.lang === "hi"
+          ? "⚠️ फॉर्मेट गलत है। उदाहरण: 6-2, 3-1, 7-3"
           : session.data.lang === "mr"
-          ? "⚠️ Format chukicha aahe. Example: 6-2, 3-1, 7-3"
+          ? "⚠️ फॉर्मेट चुकीचे आहे. उदाहरण: 6-2, 3-1, 7-3"
           : "⚠️ Invalid format. Example: 6-2, 3-1, 7-3";
         return [msg];
       }
@@ -395,10 +394,10 @@ async function processState(session, body, senderId) {
 
     case "COLLECT_FLAT": {
       if (body.length <= 3) {
-        const msg = session.data.lang === "hi" 
-          ? "🏠 Apna flat number aur area/society name batao.\n(Example: Flat 4B, Cidco N-6)" 
+        const msg = session.data.lang === "hi"
+          ? "🏠 अपना फ्लैट नंबर और एरिया/सोसायटी का नाम बताएं।\n(उदाहरण: Flat 4B, Cidco N-6)"
           : session.data.lang === "mr"
-          ? "🏠 Tumcha flat number ani area/society name sanga.\n(Example: Flat 4B, Cidco N-6)"
+          ? "🏠 तुमचा फ्लॅट नंबर आणि एरिया/सोसायटी चे नाव सांगा.\n(उदाहरण: Flat 4B, Cidco N-6)"
           : "🏠 Please share your flat number and area/society name.\n(Example: Flat 4B, Cidco N-6)";
         return [msg];
       }
@@ -461,7 +460,7 @@ async function processState(session, body, senderId) {
       if (body === "5") {
         // Custom work type - still needs text input as it's genuinely custom
         session.state = "WORK_TYPE_CUSTOM";
-        const msg = session.data.lang === "hi" ? "Kis type ka kaam chahiye? Type karo:" : session.data.lang === "mr" ? "Konta type cha kaam pahije? Type kara:" : "Please type the specific work you need help with:";
+        const msg = session.data.lang === "hi" ? "काम का प्रकार बताएं:" : session.data.lang === "mr" ? "कामाचा प्रकार सांगा:" : "Please type the specific work you need help with:";
         return [msg];
       }
       
@@ -472,7 +471,7 @@ async function processState(session, body, senderId) {
     
     case "WORK_TYPE_CUSTOM": {
       if (body.length < 2) {
-         const msg = session.data.lang === "hi" ? "Kis type ka kaam chahiye? Type karo:" : session.data.lang === "mr" ? "Konta type cha kaam pahije? Type kara:" : "Please type the specific work you need help with:";
+         const msg = session.data.lang === "hi" ? "काम का प्रकार बताएं:" : session.data.lang === "mr" ? "कामाचा प्रकार सांगा:" : "Please type the specific work you need help with:";
          return [msg];
       }
       session.data.workType = "Custom: " + body;
@@ -553,18 +552,18 @@ async function processState(session, body, senderId) {
         
         if (topMaids.length === 0) {
           // If no maids found in 8km
-          const msg = session.data.lang === "hi" 
-            ? "Sorry, aapke area mein 8 km ke andar koi maid available nahi hai. Support ke liye call karo." 
+          const msg = session.data.lang === "hi"
+            ? "माफ करें, आपके एरिया में 8 km के अंदर कोई मेड उपलब्ध नहीं है। सपोर्ट के लिए कॉल करें।"
             : session.data.lang === "mr"
-            ? "Sorry, tumchya area madhe 8 km madhe koni maid available nahi aahe. Support sathi call kara."
+            ? "माफ करा, तुमच्या एरियात 8 km च्या आत कोणतीही मेड उपलब्ध नाही. सपोर्टसाठी फोन करा."
             : "Sorry, no maids are currently available in your area within 8km. Please contact our support.";
           return [msg];
         }
 
-        let resultMsg = session.data.lang === "hi" 
-          ? "🌟 Aapke liye best maids:\n\n" 
+        let resultMsg = session.data.lang === "hi"
+          ? "🌟 आपके लिए बेस्ट मेड:\n\n"
           : session.data.lang === "mr"
-          ? "🌟 Tumchyasathi best maids:\n\n"
+          ? "🌟 तुमच्यासाठी बेस्ट मेड:\n\n"
           : "🌟 Here are our top picks for you:\n\n";
 
         const emojis = ["1️⃣", "2️⃣", "3️⃣", "4️⃣", "5️⃣"];
@@ -578,9 +577,9 @@ async function processState(session, body, senderId) {
         });
 
         resultMsg += session.data.lang === "hi"
-          ? "👩 Kaun si maid pasand aayi? Number reply karo.\n\n💡 Aap maximum 2 maids select kar sakte ho (example: 1,2 ya sirf 1).\n\n0️⃣ Agar koi pasand nahi aayi toh support ke liye 0 dabao."
+          ? "👩 कौन सी मेड पसंद आई? नंबर रिप्लाई करें।\n\n💡 आप अधिकतम 2 मेड चुन सकते हैं (उदाहरण: 1,2 या सिर्फ 1)।\n\n0️⃣ अगर कोई पसंद नहीं आई तो सपोर्ट के लिए 0 दबाएं।"
           : session.data.lang === "mr"
-          ? "👩 Koni maid avadli? Number reply kara.\n\n💡 Tumhi maximum 2 maids select karu shakta (example: 1,2 kiva fakt 1).\n\n0️⃣ Jar koni avadli nahi tar support sathi 0 daba."
+          ? "👩 कोणती मेड आवडली? नंबर रिप्लाय करा.\n\n💡 तुम्ही जास्तीत जास्त 2 मेड निवडू शकता (उदाहरण: 1,2 किंवा फक्त 1).\n\n0️⃣ जर कोणी आवडली नाही तर सपोर्टसाठी 0 दाबा."
           : "👩 Which maid(s) did you like? Please reply with their *number*.\n\n💡 You can select up to 2 maids (e.g., 1,2 or just 1).\n\n0️⃣ If you didn't like these, reply with 0 to contact support.";
 
         // Store the maid list for validation
@@ -598,10 +597,10 @@ async function processState(session, body, senderId) {
 
     case "MAID_CHOICE": {
       if (body.length === 0) {
-        const msg = session.data.lang === "hi" 
-          ? "Maid ka number reply karo (example: 1 ya 1,2)" 
+        const msg = session.data.lang === "hi"
+          ? "मेड का नंबर रिप्लाई करें (उदाहरण: 1 या 1,2)"
           : session.data.lang === "mr"
-          ? "Maid cha number reply kara (example: 1 kiva 1,2)"
+          ? "मेडचा नंबर रिप्लाय करा (उदाहरण: 1 किंवा 1,2)"
           : "Please reply with maid number (e.g., 1 or 1,2)";
         return [msg];
       }
@@ -616,10 +615,10 @@ async function processState(session, body, senderId) {
       
       // Validate: maximum 2 maids
       if (maidNumbers.length > 2) {
-        const msg = session.data.lang === "hi" 
-          ? "⚠️ Aap maximum 2 maids hi select kar sakte ho. Dobara try karo." 
+        const msg = session.data.lang === "hi"
+          ? "⚠️ आप अधिकतम 2 मेड ही चुन सकते हैं। फिर से कोशिश करें।"
           : session.data.lang === "mr"
-          ? "⚠️ Tumhi maximum 2 maids select karu shakta. Punha try kara."
+          ? "⚠️ तुम्ही जास्तीत जास्त 2 मेड निवडू शकता. पुन्हा प्रयत्न करा."
           : "⚠️ You can select maximum 2 maids only. Please try again.";
         return [msg];
       }
@@ -629,10 +628,10 @@ async function processState(session, body, senderId) {
       const invalidNumbers = maidNumbers.filter(num => isNaN(num) || num < 1 || num > totalMaids);
       
       if (invalidNumbers.length > 0 || maidNumbers.length === 0) {
-        const msg = session.data.lang === "hi" 
-          ? `⚠️ Invalid number. 1 se ${totalMaids} tak ka number select karo.` 
+        const msg = session.data.lang === "hi"
+          ? `⚠️ गलत नंबर। 1 से ${totalMaids} के बीच नंबर चुनें।`
           : session.data.lang === "mr"
-          ? `⚠️ Invalid number. 1 te ${totalMaids} madhla number select kara.`
+          ? `⚠️ चुकीचा नंबर. 1 ते ${totalMaids} मधला नंबर निवडा.`
           : `⚠️ Invalid number. Please select between 1 and ${totalMaids}.`;
         return [msg];
       }
@@ -649,10 +648,10 @@ async function processState(session, body, senderId) {
       session.data.maidChoiceIds = maidIds.join(', ');
       
       // Show confirmation of selected maids
-      let confirmMsg = session.data.lang === "hi" 
-        ? `✅ Aapne select kiya:\n\n` 
+      let confirmMsg = session.data.lang === "hi"
+        ? `✅ आपने चुना:\n\n`
         : session.data.lang === "mr"
-        ? `✅ Tumhi select kela:\n\n`
+        ? `✅ तुम्ही निवडले:\n\n`
         : `✅ You selected:\n\n`;
       
       selectedMaids.forEach((maid, idx) => {
@@ -660,9 +659,9 @@ async function processState(session, body, senderId) {
       });
       
       confirmMsg += session.data.lang === "hi"
-        ? `\n📝 Ab apna flat number aur area/society name share karo.\n(Example: Flat 4B, Cidco N-6)`
+        ? `\n📝 अब अपना फ्लैट नंबर और एरिया/सोसायटी का नाम बताएं।\n(उदाहरण: Flat 4B, Cidco N-6)`
         : session.data.lang === "mr"
-        ? `\n📝 Aata tumcha flat number ani area/society name share kara.\n(Example: Flat 4B, Cidco N-6)`
+        ? `\n📝 आता तुमचा फ्लॅट नंबर आणि एरिया/सोसायटी चे नाव सांगा.\n(उदाहरण: Flat 4B, Cidco N-6)`
         : `\n📝 Now please share your flat number and area/society name.\n(Example: Flat 4B, Cidco N-6)`;
       
       session.state = "COLLECT_FLAT";

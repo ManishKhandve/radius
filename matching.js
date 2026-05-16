@@ -29,6 +29,14 @@ function deg2rad(deg) {
 }
 
 /**
+ * Returns true if coordinates fall within Maharashtra, India.
+ * Approximate bounding box: lat 15.6–22.1 N, lng 72.6–80.9 E
+ */
+function isInMaharashtra(lat, lng) {
+  return lat >= 15.6 && lat <= 22.1 && lng >= 72.6 && lng <= 80.9;
+}
+
+/**
  * Categorize distance into Zones
  */
 function getZone(distance) {
@@ -51,11 +59,10 @@ async function getTopMaids(customerLat, customerLng) {
     throw new Error("Customer location coordinates are missing.");
   }
 
-  // Update table name if needed, assuming 'maids'
+  // Fetch all maids — no status filter so partially-filled rows are included
   const { data: maids, error } = await supabase
     .from('maids')
-    .select('*')
-    .eq('status', 'Available');
+    .select('*');
 
   if (error) {
     console.error("Supabase Error:", error);
@@ -69,32 +76,25 @@ async function getTopMaids(customerLat, customerLng) {
   const maidsWithDistance = [];
 
   for (const maid of maids) {
-    // If maid missing coordinates, skip
+    // Skip maids with missing coordinates
     if (!maid.latitude || !maid.longitude) continue;
+
+    // Skip maids with coordinates outside Maharashtra
+    if (!isInMaharashtra(maid.latitude, maid.longitude)) continue;
 
     const distance = getDistanceFromLatLonInKm(customerLat, customerLng, maid.latitude, maid.longitude);
     const zone = getZone(distance);
-
-    // Exclude if beyond 8km
-    if (zone.level <= 4) {
-      maidsWithDistance.push({
-        ...maid,
-        distance: distance,
-        zone: zone
-      });
-    }
+    maidsWithDistance.push({ ...maid, distance, zone });
   }
 
-  // Sort: Primary by zone (P1 -> P4), Secondary by exact distance
+  // Sort: primary zone (P1→P4), secondary exact distance
   maidsWithDistance.sort((a, b) => {
-    if (a.zone.level !== b.zone.level) {
-      return a.zone.level - b.zone.level;
-    }
+    if (a.zone.level !== b.zone.level) return a.zone.level - b.zone.level;
     return a.distance - b.distance;
   });
 
-  // Return top 3
-  return maidsWithDistance.slice(0, 3);
+  // Return top 3 within 8km
+  return maidsWithDistance.filter(m => m.zone.level <= 4).slice(0, 3);
 }
 
 module.exports = {

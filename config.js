@@ -60,14 +60,14 @@ const mainMenuMessage = {
 - Which service are you looking for?
 1. HOME deep cleaning service
 2. MONTHLY maid service`,
-  hi: `Main Menu
-Aapko kaun si service chahiye?
-1. HOME deep cleaning service
-2. MONTHLY maid service`,
-  mr: `Main Menu
-Tumhala koni service pahije?
-1. HOME deep cleaning service
-2. MONTHLY maid service`
+  hi: `मुख्य मेनू
+आपको कौन सी सेवा चाहिए?
+1. घर की डीप क्लीनिंग
+2. मंथली मेड सर्विस`,
+  mr: `मुख्य मेनू
+तुम्हाला कोणती सेवा हवी आहे?
+1. घराची डीप क्लीनिंग
+2. मंथली मेड सर्विस`
 };
 
 // --- Maid Flow Messages ---
@@ -78,18 +78,18 @@ const workTypeMessage = {
 3️⃣ Babysitter
 4️⃣ Caretaker
 5️⃣ Custom (Type what you need)`,
-  hi: `Kis type ka kaam chahiye?
-1️⃣ Cooking
-2️⃣ Cleaning
-3️⃣ Babysitter
-4️⃣ Caretaker
-5️⃣ Custom (apni zarurat type karo)`,
-  mr: `Konta type cha kaam pahije?
-1️⃣ Cooking
-2️⃣ Cleaning
-3️⃣ Babysitter
-4️⃣ Caretaker
-5️⃣ Custom (tumchi zarurat type kara)`
+  hi: `कौन से काम की जरूरत है?
+1️⃣ खाना बनाना
+2️⃣ सफाई
+3️⃣ बच्चों की देखभाल
+4️⃣ बुजुर्गों की देखभाल
+5️⃣ कस्टम (अपनी जरूरत लिखें)`,
+  mr: `कोणत्या कामाची गरज आहे?
+1️⃣ स्वयंपाक
+2️⃣ साफसफाई
+3️⃣ मुलांची काळजी
+4️⃣ वृद्धांची काळजी
+5️⃣ कस्टम (तुमची गरज लिहा)`
 };
 
 const timingMessage = {
@@ -98,16 +98,16 @@ const timingMessage = {
 2️⃣ Full Time (8 hrs)
 3️⃣ Full Time (10 hrs)
 4️⃣ Full Time (24 hrs)`,
-  hi: `⏰ Timing kaisi chahiye?
-1️⃣ Part Time (1-3 hours)
-2️⃣ Full Time (8 hours)
-3️⃣ Full Time (10 hours)
-4️⃣ Full Time (24 hours)`,
-  mr: `⏰ Timing kashi pahije?
-1️⃣ Part Time (1-3 hours)
-2️⃣ Full Time (8 hours)
-3️⃣ Full Time (10 hours)
-4️⃣ Full Time (24 hours)`
+  hi: `⏰ कितने घंटे काम चाहिए?
+1️⃣ पार्ट टाइम (1-3 घंटे)
+2️⃣ फुल टाइम (8 घंटे)
+3️⃣ फुल टाइम (10 घंटे)
+4️⃣ फुल टाइम (24 घंटे)`,
+  mr: `⏰ किती वेळ काम हवे आहे?
+1️⃣ पार्ट टाइम (1-3 तास)
+2️⃣ फुल टाइम (8 तास)
+3️⃣ फुल टाइम (10 तास)
+4️⃣ फुल टाइम (24 तास)`
 };
 
 const budgetMessage = {
@@ -117,28 +117,28 @@ const budgetMessage = {
 3️⃣ ₹6,000 – ₹10,000
 4️⃣ ₹10,000 – ₹20,000
 5️⃣ ₹20,000 – ₹30,000 (10+ education + experience)`,
-  hi: `💰 Monthly budget kitna hai?
-1️⃣ Skill aur experience ke hisab se
+  hi: `💰 मेड की सैलरी का मंथली बजट क्या है?
+1️⃣ स्किल और अनुभव के हिसाब से
 2️⃣ ₹4,000 – ₹6,000
 3️⃣ ₹6,000 – ₹10,000
 4️⃣ ₹10,000 – ₹20,000
-5️⃣ ₹20,000 – ₹30,000 (10+ education + experience)`,
-  mr: `💰 Monthly budget kiti aahe?
-1️⃣ Skill ani experience pramane
+5️⃣ ₹20,000 – ₹30,000 (10+ पढ़ाई + अनुभव)`,
+  mr: `💰 मेडच्या पगाराचे मंथली बजट किती आहे?
+1️⃣ स्किल आणि अनुभवानुसार
 2️⃣ ₹4,000 – ₹6,000
 3️⃣ ₹6,000 – ₹10,000
 4️⃣ ₹10,000 – ₹20,000
-5️⃣ ₹20,000 – ₹30,000 (10+ education + experience)`
+5️⃣ ₹20,000 – ₹30,000 (10+ शिक्षण + अनुभव)`
 };
 
 const maidCityMessage = {
   en: `🏙️ Please select your city:
 1️⃣ Pune
 2️⃣ PCMC`,
-  hi: `🏙️ Apna city select karo:
+  hi: `🏙️ अपना शहर चुनें:
 1️⃣ Pune
 2️⃣ PCMC`,
-  mr: `🏙️ Tumcha city select kara:
+  mr: `🏙️ तुमचे शहर निवडा:
 1️⃣ Pune
 2️⃣ PCMC`
 };
@@ -196,11 +196,11 @@ const getAreaMessage = (city, lang) => {
   });
   
   if (lang === "hi") {
-    text += `\n*👉 Apne area ka number reply karo.*`;
-    return `📍 Apna area select karo:\n\n${text}`;
+    text += `\n*👉 अपने एरिया का नंबर रिप्लाई करें।*`;
+    return `📍 अपना एरिया चुनें:\n\n${text}`;
   } else if (lang === "mr") {
-    text += `\n*👉 Tumchya area cha number reply kara.*`;
-    return `📍 Tumcha area select kara:\n\n${text}`;
+    text += `\n*👉 तुमच्या एरियाचा नंबर रिप्लाय करा.*`;
+    return `📍 तुमचा एरिया निवडा:\n\n${text}`;
   } else {
     text += `\n*👉 Reply with the number of your area.*`;
     return `📍 Please select your area:\n\n${text}`;
@@ -236,16 +236,16 @@ const cleaningServiceMessage = {
 2️⃣ Bathroom Cleaning
 3️⃣ Mini Service Package
 4️⃣ Villa / Bungalow / Row House`,
-  hi: `🏠 Kaun si service chahiye?
-1️⃣ Flat Deep Cleaning
-2️⃣ Bathroom Cleaning
-3️⃣ Mini Service Package
-4️⃣ Villa / Bungalow / Row House`,
-  mr: `🏠 Koni service pahije?
-1️⃣ Flat Deep Cleaning
-2️⃣ Bathroom Cleaning
-3️⃣ Mini Service Package
-4️⃣ Villa / Bungalow / Row House`
+  hi: `🏠 कौन सी सर्विस चाहिए?
+1️⃣ फ्लैट डीप क्लीनिंग
+2️⃣ बाथरूम क्लीनिंग
+3️⃣ मिनी सर्विस पैकेज
+4️⃣ विला / बंगला / रो हाउस`,
+  mr: `🏠 कोणती सर्विस हवी आहे?
+1️⃣ फ्लॅट डीप क्लीनिंग
+2️⃣ बाथरूम क्लीनिंग
+3️⃣ मिनी सर्विस पॅकेज
+4️⃣ व्हिला / बंगला / रो हाउस`
 };
 
 const flatStatusMessage = {
@@ -253,14 +253,14 @@ const flatStatusMessage = {
 1️⃣ Furnished
 2️⃣ Empty / Vacant
 3️⃣ Post Interior Cleaning`,
-  hi: `🏠 Flat kaisa hai?
-1️⃣ Furnished
-2️⃣ Empty / Vacant
-3️⃣ Post Interior Cleaning`,
-  mr: `🏠 Flat kasa aahe?
-1️⃣ Furnished
-2️⃣ Empty / Vacant
-3️⃣ Post Interior Cleaning`
+  hi: `🏠 फ्लैट कैसा है?
+1️⃣ फर्निश्ड
+2️⃣ खाली / वेकेंट
+3️⃣ पोस्ट इंटीरियर क्लीनिंग`,
+  mr: `🏠 फ्लॅट कसा आहे?
+1️⃣ फर्निश्ड
+2️⃣ रिकामा / व्हेकंट
+3️⃣ पोस्ट इंटीरियर क्लीनिंग`
 };
 
 const furnishedSubMessage = {
@@ -268,26 +268,26 @@ const furnishedSubMessage = {
 1️⃣ Regular Occupied House
 2️⃣ Move Out Cleaning
 3️⃣ New Flat Possession`,
-  hi: `🏠 Flat ki condition kaisi hai?
-1️⃣ Regular Occupied House
-2️⃣ Move Out Cleaning
-3️⃣ New Flat Possession`,
-  mr: `🏠 Flat chi condition kashi aahe?
-1️⃣ Regular Occupied House
-2️⃣ Move Out Cleaning
-3️⃣ New Flat Possession`
+  hi: `🏠 फ्लैट की कंडिशन क्या है?
+1️⃣ रेगुलर ऑक्युपाइड हाउस
+2️⃣ मूव आउट क्लीनिंग
+3️⃣ नया फ्लैट पजेशन`,
+  mr: `🏠 फ्लॅटची कंडिशन काय आहे?
+1️⃣ रेगुलर ऑक्युपाइड हाउस
+2️⃣ मूव्ह आउट क्लीनिंग
+3️⃣ नवीन फ्लॅट पझेशन`
 };
 
 const emptySubMessage = {
   en: `🏠 What is the current condition of the flat?
 1️⃣ Move Out Cleaning
 2️⃣ New Flat Possession`,
-  hi: `🏠 Flat ki condition kaisi hai?
-1️⃣ Move Out Cleaning
-2️⃣ New Flat Possession`,
-  mr: `🏠 Flat chi condition kashi aahe?
-1️⃣ Move Out Cleaning
-2️⃣ New Flat Possession`
+  hi: `🏠 फ्लैट की कंडिशन क्या है?
+1️⃣ मूव आउट क्लीनिंग
+2️⃣ नया फ्लैट पजेशन`,
+  mr: `🏠 फ्लॅटची कंडिशन काय आहे?
+1️⃣ मूव्ह आउट क्लीनिंग
+2️⃣ नवीन फ्लॅट पझेशन`
 };
 
 const flatBhkMessage = {
@@ -296,37 +296,37 @@ const flatBhkMessage = {
 2️⃣ 2 BHK
 3️⃣ 3 BHK
 4️⃣ 4 BHK / Villa`,
-  hi: `🏠 Flat kitne BHK ka hai?
+  hi: `🏠 फ्लैट कितने BHK का है?
 1️⃣ 1 BHK
 2️⃣ 2 BHK
 3️⃣ 3 BHK
-4️⃣ 4 BHK / Villa`,
-  mr: `🏠 Flat kiti BHK cha aahe?
+4️⃣ 4 BHK / विला`,
+  mr: `🏠 फ्लॅट किती BHK चा आहे?
 1️⃣ 1 BHK
 2️⃣ 2 BHK
 3️⃣ 3 BHK
-4️⃣ 4 BHK / Villa`
+4️⃣ 4 BHK / व्हिला`
 };
 
 const villaStatusMessage = {
   en: `🏠 What is the current condition of the house?
 1️⃣ Regular Occupied House (₹6/sq.ft)
 2️⃣ Post Interior / Renovation (₹9/sq.ft)`,
-  hi: `🏠 Ghar ki condition kaisi hai?
-1️⃣ Regular Occupied House (₹6/sq.ft)
-2️⃣ Post Interior / Renovation (₹9/sq.ft)`,
-  mr: `🏠 Gharachi condition kashi aahe?
-1️⃣ Regular Occupied House (₹6/sq.ft)
-2️⃣ Post Interior / Renovation (₹9/sq.ft)`
+  hi: `🏠 घर की कंडिशन कैसी है?
+1️⃣ रेगुलर ऑक्युपाइड हाउस (₹6/sq.ft)
+2️⃣ पोस्ट इंटीरियर / रिनोवेशन (₹9/sq.ft)`,
+  mr: `🏠 घराची कंडिशन काय आहे?
+1️⃣ रेगुलर ऑक्युपाइड हाउस (₹6/sq.ft)
+2️⃣ पोस्ट इंटीरियर / रिनोव्हेशन (₹9/sq.ft)`
 };
 
 const villaSqftMessage = {
   en: `📐 Please enter the total built-up area of your house in Square Feet.
 (Example: 1500)`,
-  hi: `📐 Ghar ka total area Square Feet mein batao.
-(Example: 1500)`,
-  mr: `📐 Gharacha total area Square Feet madhe sanga.
-(Example: 1500)`
+  hi: `📐 घर का कुल एरिया Square Feet में बताएं।
+(उदाहरण: 1500)`,
+  mr: `📐 घराचे एकूण क्षेत्रफळ Square Feet मध्ये सांगा.
+(उदाहरण: 1500)`
 };
 
 const villaPriceMessage = (sqft, price, rate, condition, lang) => {
@@ -338,21 +338,21 @@ const villaPriceMessage = (sqft, price, rate, condition, lang) => {
 
 👉 Reply *1* to proceed with booking`;
 
-  const hi = `💰 Price:
-✔ Size: ${sqft} Sq.Ft
-✔ Condition: ${condition}
-✔ Rate: ₹${rate}/sq.ft
-✔ Total Cost: ₹${price}
+  const hi = `💰 अनुमानित किंमत:
+✔ साइज: ${sqft} Sq.Ft
+✔ कंडिशन: ${condition}
+✔ रेट: ₹${rate}/sq.ft
+✔ कुल खर्च: ₹${price}
 
-👉 Booking ke liye *1* reply karo`;
+👉 बुकिंग के लिए *1* रिप्लाई करें`;
 
-  const mr = `💰 Price:
-✔ Size: ${sqft} Sq.Ft
-✔ Condition: ${condition}
-✔ Rate: ₹${rate}/sq.ft
-✔ Total Cost: ₹${price}
+  const mr = `💰 अंदाजित किंमत:
+✔ साइज: ${sqft} Sq.Ft
+✔ कंडिशन: ${condition}
+✔ रेट: ₹${rate}/sq.ft
+✔ एकूण खर्च: ₹${price}
 
-👉 Booking sathi *1* reply kara`;
+👉 बुकिंगसाठी *1* रिप्लाय करा`;
 
   return lang === 'hi' ? hi : lang === 'mr' ? mr : en;
 };
@@ -374,12 +374,12 @@ const flatDeepCleaningPriceMessage = (status, bhk, lang) => {
   }
 
   let priceTextEn = bhk === "4" ? "Inspection Required" : price;
-  let priceTextHi = bhk === "4" ? "Inspection chahiye" : price;
-  let priceTextMr = bhk === "4" ? "Inspection pahije" : price;
+  let priceTextHi = bhk === "4" ? "इंस्पेक्शन जरूरी" : price;
+  let priceTextMr = bhk === "4" ? "इन्स्पेक्शन आवश्यक" : price;
 
   let noteEn = bhk === "1" ? "\nNote: This price includes all scope of work." : "";
-  let noteHi = bhk === "1" ? "\nNote: Is price mein sab kaam included hai." : "";
-  let noteMr = bhk === "1" ? "\nNote: Ya price madhe sagla kaam included aahe." : "";
+  let noteHi = bhk === "1" ? "\nनोट: इस कीमत में सारा काम शामिल है।" : "";
+  let noteMr = bhk === "1" ? "\nनोट: या किमतीत सगळे काम समाविष्ट आहे." : "";
 
   let addOnsEn = "";
   let addOnsHi = "";
@@ -387,19 +387,19 @@ const flatDeepCleaningPriceMessage = (status, bhk, lang) => {
 
   if (status === "Furnished" || status === "Post Interior Cleaning") {
     addOnsEn = `\n\n✨ *Recommended Add-ons:*\n• Kitchen external cleaning: ₹450\n• Sofa cleaning: ₹150 / seat\n\n👉 Reply *1* to proceed without add-ons.`;
-    addOnsHi = `\n\n✨ *Recommended Add-ons:*\n• Kitchen external cleaning: ₹450\n• Sofa cleaning: ₹150 / seat\n\n👉 Bina add-ons ke aage badhne ke liye *1* reply karo.`;
-    addOnsMr = `\n\n✨ *Recommended Add-ons:*\n• Kitchen external cleaning: ₹450\n• Sofa cleaning: ₹150 / seat\n\n👉 Add-ons shivay pudhe jaanyasathi *1* reply kara.`;
+    addOnsHi = `\n\n✨ *सुझाए गए ऐड-ऑन:*\n• किचन एक्सटर्नल क्लीनिंग: ₹450\n• सोफा क्लीनिंग: ₹150 / सीट\n\n👉 ऐड-ऑन के बिना आगे बढ़ने के लिए *1* रिप्लाई करें।`;
+    addOnsMr = `\n\n✨ *सुचवलेले ऐड-ऑन:*\n• किचन एक्सटर्नल क्लीनिंग: ₹450\n• सोफा क्लीनिंग: ₹150 / सीट\n\n👉 ऐड-ऑनशिवाय पुढे जाण्यासाठी *1* रिप्लाय करा.`;
   } else {
     addOnsEn = `\n\n👉 Reply *1* to proceed with booking`;
-    addOnsHi = `\n\n👉 Booking ke liye *1* reply karo`;
-    addOnsMr = `\n\n👉 Booking sathi *1* reply kara`;
+    addOnsHi = `\n\n👉 बुकिंग के लिए *1* रिप्लाई करें`;
+    addOnsMr = `\n\n👉 बुकिंगसाठी *1* रिप्लाय करा`;
   }
 
   const en = `💰 Estimated Pricing:
 ✔ ${bhk === "4" ? "4 BHK/Villa" : bhk + " BHK"} → ${priceTextEn}
 ${noteEn}${addOnsEn}`;
 
-  const hi = `💰 अनुमानित मूल्य:
+  const hi = `💰 अनुमानित किंमत:
 ✔ ${bhk === "4" ? "4 BHK/विला" : bhk + " BHK"} → ${priceTextHi}
 ${noteHi}${addOnsHi}`;
 
@@ -414,12 +414,12 @@ const bathroomTypeMessage = {
   en: `Please choose an option:
 1️⃣ View Subscription Plans
 2️⃣ One-Time Deep Cleaning(Rs550/bathroom)`,
-  hi: `Option choose karo:
-1️⃣ Subscription Plans dekho
-2️⃣ One-Time Deep Cleaning (Rs550/bathroom)`,
-  mr: `Option choose kara:
-1️⃣ Subscription Plans bagha
-2️⃣ One-Time Deep Cleaning (Rs550/bathroom)`
+  hi: `एक ऑप्शन चुनें:
+1️⃣ सब्सक्रिप्शन प्लान देखें
+2️⃣ एक बार की डीप क्लीनिंग (₹550/बाथरूम)`,
+  mr: `एक पर्याय निवडा:
+1️⃣ सब्सक्रिप्शन प्लान बघा
+2️⃣ एक वेळची डीप क्लीनिंग (₹550/बाथरूम)`
 };
 
 const bathroomSubscriptionCountMessage = {
@@ -427,14 +427,14 @@ const bathroomSubscriptionCountMessage = {
 1️⃣ 2 Bathrooms
 2️⃣ 3 Bathrooms
 3️⃣ 4 Bathrooms`,
-  hi: `Kitne bathrooms include karne hain?
-1️⃣ 2 Bathrooms
-2️⃣ 3 Bathrooms
-3️⃣ 4 Bathrooms`,
-  mr: `Kiti bathrooms include karayche aahet?
-1️⃣ 2 Bathrooms
-2️⃣ 3 Bathrooms
-3️⃣ 4 Bathrooms`
+  hi: `कितने बाथरूम शामिल करने हैं?
+1️⃣ 2 बाथरूम
+2️⃣ 3 बाथरूम
+3️⃣ 4 बाथरूम`,
+  mr: `किती बाथरूम समाविष्ट करायचे आहेत?
+1️⃣ 2 बाथरूम
+2️⃣ 3 बाथरूम
+3️⃣ 4 बाथरूम`
 };
 
 const bathroomSubMessage = (count, price, lang) => {
@@ -452,33 +452,33 @@ Reply:
 1️⃣ Continue Booking
 2️⃣ Talk to Support`;
 
-  const hi = `✨ 3-Month Bathroom Subscription Plan (${count} Bathrooms)
-💵 ₹${price}/month
-✅ 3 Visits (1 visit per month for 3 months)
-✅ Deep cleaning for bathrooms
-✅ Hard-water stain removal treatment
-✅ Floor & wall tile deep scrubbing
-✅ Fixture & fittings cleaning
-✅ Mirror & glass cleaning
-📌 Sirf ${count} bathrooms ke liye valid
+  const hi = `✨ 3 महीने का बाथरूम सब्सक्रिप्शन प्लान (${count} बाथरूम)
+💵 ₹${price}/महीना
+✅ 3 विजिट (हर महीने 1 विजिट, 3 महीने)
+✅ बाथरूम की डीप क्लीनिंग
+✅ हार्ड वाटर स्टेन हटाना
+✅ फ्लोर और टाइल्स की गहरी सफाई
+✅ फिटिंग्स और फिक्स्चर की सफाई
+✅ मिरर और शीशे की सफाई
+📌 सिर्फ ${count} बाथरूम के लिए वैलिड
 
-Reply karo:
-1️⃣ Booking continue karo
-2️⃣ Support se baat karo`;
+रिप्लाई करें:
+1️⃣ बुकिंग जारी रखें
+2️⃣ सपोर्ट से बात करें`;
 
-  const mr = `✨ 3-Month Bathroom Subscription Plan (${count} Bathrooms)
-💵 ₹${price}/month
-✅ 3 Visits (1 visit per month for 3 months)
-✅ Deep cleaning for bathrooms
-✅ Hard-water stain removal treatment
-✅ Floor & wall tile deep scrubbing
-✅ Fixture & fittings cleaning
-✅ Mirror & glass cleaning
-📌 Fakt ${count} bathrooms sathi valid
+  const mr = `✨ 3 महिन्यांचा बाथरूम सब्सक्रिप्शन प्लान (${count} बाथरूम)
+💵 ₹${price}/महिना
+✅ 3 व्हिजिट (दर महिन्याला 1 व्हिजिट, 3 महिने)
+✅ बाथरूमची डीप क्लीनिंग
+✅ हार्ड वॉटर स्टेन काढणे
+✅ फ्लोर आणि टाइल्सची खोल साफसफाई
+✅ फिटिंग्ज आणि फिक्स्चरची साफसफाई
+✅ मिरर आणि काचेची साफसफाई
+📌 फक्त ${count} बाथरूमसाठी वैध
 
-Reply kara:
-1️⃣ Booking continue kara
-2️⃣ Support shi bola`;
+रिप्लाय करा:
+1️⃣ बुकिंग सुरू ठेवा
+2️⃣ सपोर्टशी बोला`;
 
   return lang === 'hi' ? hi : lang === 'mr' ? mr : en;
 };
@@ -490,18 +490,18 @@ Please select:
 2️⃣ 2 Bathrooms
 3️⃣ 3 Bathrooms
 4️⃣ 4+ Bathrooms`,
-  hi: `🧼 One-Time Bathroom Deep Cleaning
-Select karo:
-1️⃣ 1 Bathroom
-2️⃣ 2 Bathrooms
-3️⃣ 3 Bathrooms
-4️⃣ 4+ Bathrooms`,
-  mr: `🧼 One-Time Bathroom Deep Cleaning
-Select kara:
-1️⃣ 1 Bathroom
-2️⃣ 2 Bathrooms
-3️⃣ 3 Bathrooms
-4️⃣ 4+ Bathrooms`
+  hi: `🧼 एक बार की बाथरूम डीप क्लीनिंग
+चुनें:
+1️⃣ 1 बाथरूम
+2️⃣ 2 बाथरूम
+3️⃣ 3 बाथरूम
+4️⃣ 4+ बाथरूम`,
+  mr: `🧼 एक वेळची बाथरूम डीप क्लीनिंग
+निवडा:
+1️⃣ 1 बाथरूम
+2️⃣ 2 बाथरूम
+3️⃣ 3 बाथरूम
+4️⃣ 4+ बाथरूम`
 };
 
 const bathroomOneTimePriceMessage = (count, lang) => {
@@ -524,31 +524,31 @@ const bathroomOneTimePriceMessage = (count, lang) => {
 Reply 1 to Continue Booking
 Reply 2 to Talk to Support`;
 
-  const hi = `✨ Deep Cleaning mein included:
-✅ Machine Scrubbing
-✅ Hard Water Stain Removal
-✅ Tile Deep Cleaning
-✅ WC cleaning
-✅ Wash Basin Cleaning
-✅ Mirror Cleaning
+  const hi = `✨ डीप क्लीनिंग में शामिल है:
+✅ मशीन स्क्रबिंग
+✅ हार्ड वाटर स्टेन हटाना
+✅ टाइल डीप क्लीनिंग
+✅ WC क्लीनिंग
+✅ वॉश बेसिन क्लीनिंग
+✅ मिरर क्लीनिंग
 
-💵 Cost: ${price}
+💵 अनुमानित खर्च: ${price}
 
-Booking continue karne ke liye 1 reply karo
-Support ke liye 2 reply karo`;
+बुकिंग जारी रखने के लिए 1 रिप्लाई करें
+सपोर्ट के लिए 2 रिप्लाई करें`;
 
-  const mr = `✨ Deep Cleaning madhe included:
-✅ Machine Scrubbing
-✅ Hard Water Stain Removal
-✅ Tile Deep Cleaning
-✅ WC cleaning
-✅ Wash Basin Cleaning
-✅ Mirror Cleaning
+  const mr = `✨ डीप क्लीनिंगमध्ये समाविष्ट आहे:
+✅ मशीन स्क्रबिंग
+✅ हार्ड वॉटर स्टेन काढणे
+✅ टाइल डीप क्लीनिंग
+✅ WC क्लीनिंग
+✅ वॉश बेसिन क्लीनिंग
+✅ मिरर क्लीनिंग
 
-💵 Cost: ${price}
+💵 अंदाजित खर्च: ${price}
 
-Booking continue karnyasathi 1 reply kara
-Support sathi 2 reply kara`;
+बुकिंग सुरू ठेवण्यासाठी 1 रिप्लाय करा
+सपोर्टसाठी 2 रिप्लाय करा`;
 
   return lang === 'hi' ? hi : lang === 'mr' ? mr : en;
 };
@@ -604,77 +604,77 @@ Example: 6-2, 3-1, 7-3
 
 Or reply *0* to talk to support.`,
 
-  hi: `🧹 *Mini Services*
-⚠️ *Note: Minimum order ₹2000*
+  hi: `🧹 *मिनी सर्विसेज़ और ऐड-ऑन*
+⚠️ *नोट: न्यूनतम ऑर्डर ₹2000*
 
-🍳 *Kitchen*
-1️⃣ Full Kitchen Deep Clean - ₹2400
-2️⃣ Kitchen Clean (Utensils removed) - ₹1500
-3️⃣ Single Door Fridge - ₹300
-4️⃣ Double Door Fridge - ₹400
-5️⃣ Chimney Deep Clean - ₹400
+🍳 *किचन*
+1️⃣ फुल किचन डीप क्लीन - ₹2400
+2️⃣ किचन क्लीन (बर्तन हटाकर) - ₹1500
+3️⃣ सिंगल डोर फ्रिज - ₹300
+4️⃣ डबल डोर फ्रिज - ₹400
+5️⃣ चिमनी डीप क्लीन - ₹400
 
-🛁 *Bathroom & Rooms*
-6️⃣ Bathroom Deep Clean - ₹550/bath
-7️⃣ Ceiling Fan Clean - ₹50/fan
-8️⃣ Wall Wet Wiping - ₹500/room
-9️⃣ Window Cleaning - ₹300/window
+🛁 *बाथरूम और कमरे*
+6️⃣ बाथरूम डीप क्लीन - ₹550/बाथरूम
+7️⃣ सीलिंग फैन क्लीन - ₹50/फैन
+8️⃣ वॉल वेट वाइपिंग - ₹500/कमरा
+9️⃣ विंडो क्लीनिंग - ₹300/विंडो
 
-🛋️ *Furniture & Balcony*
-🔟 Sofa & Chairs - ₹150/seat
-1️⃣1️⃣ Balcony (< 25 sq.ft) - ₹400
-1️⃣2️⃣ Balcony (> 25 sq.ft) - ₹650
-1️⃣3️⃣ Carpet (< 30 sq.ft) - ₹500
-1️⃣4️⃣ Carpet (30-100 sq.ft) - ₹750
-1️⃣5️⃣ Single Bed Mattress - ₹400
-1️⃣6️⃣ Double Bed Mattress - ₹700
+🛋️ *फर्निचर और बालकनी*
+🔟 सोफा और चेयर - ₹150/सीट
+1️⃣1️⃣ बालकनी (< 25 sq.ft) - ₹400
+1️⃣2️⃣ बालकनी (> 25 sq.ft) - ₹650
+1️⃣3️⃣ कारपेट (< 30 sq.ft) - ₹500
+1️⃣4️⃣ कारपेट (30-100 sq.ft) - ₹750
+1️⃣5️⃣ सिंगल बेड मैट्रेस - ₹400
+1️⃣6️⃣ डबल बेड मैट्रेस - ₹700
 
-👉 Service number aur quantity reply karo.
-Example: 6-2, 3-1, 7-3
-(matlab: 2 Bathrooms, 1 Single Fridge, 3 Fans)
+👉 सर्विस नंबर और क्वांटिटी रिप्लाई करें।
+उदाहरण: 6-2, 3-1, 7-3
+(मतलब: 2 बाथरूम, 1 सिंगल फ्रिज, 3 फैन)
 
-Ya *0* reply karo support ke liye.`,
+या सपोर्ट के लिए *0* रिप्लाई करें।`,
 
-  mr: `🧹 *Mini Services*
-⚠️ *Note: Minimum order ₹2000*
+  mr: `🧹 *मिनी सर्विसेस आणि ऐड-ऑन*
+⚠️ *नोट: किमान ऑर्डर ₹2000*
 
-🍳 *Kitchen*
-1️⃣ Full Kitchen Deep Clean - ₹2400
-2️⃣ Kitchen Clean (Utensils removed) - ₹1500
-3️⃣ Single Door Fridge - ₹300
-4️⃣ Double Door Fridge - ₹400
-5️⃣ Chimney Deep Clean - ₹400
+🍳 *किचन*
+1️⃣ फुल किचन डीप क्लीन - ₹2400
+2️⃣ किचन क्लीन (भांडी काढून) - ₹1500
+3️⃣ सिंगल डोर फ्रिज - ₹300
+4️⃣ डबल डोर फ्रिज - ₹400
+5️⃣ चिमणी डीप क्लीन - ₹400
 
-🛁 *Bathroom & Rooms*
-6️⃣ Bathroom Deep Clean - ₹550/bath
-7️⃣ Ceiling Fan Clean - ₹50/fan
-8️⃣ Wall Wet Wiping - ₹500/room
-9️⃣ Window Cleaning - ₹300/window
+🛁 *बाथरूम आणि खोल्या*
+6️⃣ बाथरूम डीप क्लीन - ₹550/बाथरूम
+7️⃣ सीलिंग फॅन क्लीन - ₹50/फॅन
+8️⃣ भिंत ओली पुसणे - ₹500/खोली
+9️⃣ खिडकी साफसफाई - ₹300/खिडकी
 
-🛋️ *Furniture & Balcony*
-🔟 Sofa & Chairs - ₹150/seat
-1️⃣1️⃣ Balcony (< 25 sq.ft) - ₹400
-1️⃣2️⃣ Balcony (> 25 sq.ft) - ₹650
-1️⃣3️⃣ Carpet (< 30 sq.ft) - ₹500
-1️⃣4️⃣ Carpet (30-100 sq.ft) - ₹750
-1️⃣5️⃣ Single Bed Mattress - ₹400
-1️⃣6️⃣ Double Bed Mattress - ₹700
+🛋️ *फर्निचर आणि बाल्कनी*
+🔟 सोफा आणि खुर्च्या - ₹150/सीट
+1️⃣1️⃣ बाल्कनी (< 25 sq.ft) - ₹400
+1️⃣2️⃣ बाल्कनी (> 25 sq.ft) - ₹650
+1️⃣3️⃣ कार्पेट (< 30 sq.ft) - ₹500
+1️⃣4️⃣ कार्पेट (30-100 sq.ft) - ₹750
+1️⃣5️⃣ सिंगल बेड मॅट्रेस - ₹400
+1️⃣6️⃣ डबल बेड मॅट्रेस - ₹700
 
-👉 Service number ani quantity reply kara.
-Example: 6-2, 3-1, 7-3
-(mhanje: 2 Bathrooms, 1 Single Fridge, 3 Fans)
+👉 सर्विस नंबर आणि प्रमाण रिप्लाय करा.
+उदाहरण: 6-2, 3-1, 7-3
+(म्हणजे: 2 बाथरूम, 1 सिंगल फ्रिज, 3 फॅन)
 
-Kiva *0* reply kara support sathi.`
+किंवा सपोर्टसाठी *0* रिप्लाय करा.`
 };
 
 const cleaningLocationMessage = {
   en: `📍 Select your city:
 1️⃣ Pune
 2️⃣ PCMC`,
-  hi: `📍 Apna city select karo:
+  hi: `📍 अपना शहर चुनें:
 1️⃣ Pune
 2️⃣ PCMC`,
-  mr: `📍 Tumcha city select kara:
+  mr: `📍 तुमचे शहर निवडा:
 1️⃣ Pune
 2️⃣ PCMC`
 };
@@ -687,11 +687,11 @@ const getCleaningAreaMessage = (city, lang) => {
   });
   
   if (lang === "hi") {
-    text += `\n*👉 Apne area ka number reply karo.*`;
-    return `📍 Apna area select karo:\n\n${text}`;
+    text += `\n*👉 अपने एरिया का नंबर रिप्लाई करें।*`;
+    return `📍 अपना एरिया चुनें:\n\n${text}`;
   } else if (lang === "mr") {
-    text += `\n*👉 Tumchya area cha number reply kara.*`;
-    return `📍 Tumcha area select kara:\n\n${text}`;
+    text += `\n*👉 तुमच्या एरियाचा नंबर रिप्लाय करा.*`;
+    return `📍 तुमचा एरिया निवडा:\n\n${text}`;
   } else {
     text += `\n*👉 Reply with the number of your area.*`;
     return `📍 Please select your area:\n\n${text}`;
@@ -703,38 +703,38 @@ const cleaningDateMessage = {
 1️⃣ Today
 2️⃣ Tomorrow
 3️⃣ Select Date`,
-  hi: `📅 Service kab chahiye?
-1️⃣ Aaj
-2️⃣ Kal
-3️⃣ Date select karo`,
-  mr: `📅 Service kevha pahije?
-1️⃣ Aaj
-2️⃣ Udya
-3️⃣ Date select kara`
+  hi: `📅 सर्विस कब चाहिए?
+1️⃣ आज
+2️⃣ कल
+3️⃣ तारीख चुनें`,
+  mr: `📅 सर्विस केव्हा हवी आहे?
+1️⃣ आज
+2️⃣ उद्या
+3️⃣ तारीख निवडा`
 };
 
 const cleaningCustomDateMessage = {
   en: `Please type the date you need the service. (e.g., 25th May)`,
-  hi: `Service ki date type karo. (example: 25th May)`,
-  mr: `Service chi date type kara. (example: 25th May)`
+  hi: `सर्विस की तारीख टाइप करें। (उदाहरण: 25 मई)`,
+  mr: `सर्विसची तारीख टाइप करा. (उदाहरण: 25 मे)`
 };
 
 const cleaningThanksMessage = {
   en: `✅ Thank you!
 Our team will check and share Available slots
 You will receive a call shortly. 📞`,
-  hi: `✅ Thank you!
-Hamari team available slots check karke batayegi
-Aapko jaldi call aayega. 📞`,
-  mr: `✅ Thank you!
-Amchi team available slots check karun sangel
-Tumhala lavkar call yeil. 📞`
+  hi: `✅ धन्यवाद!
+हमारी टीम उपलब्ध स्लॉट चेक करके बताएगी।
+आपको जल्द कॉल आएगा। 📞`,
+  mr: `✅ धन्यवाद!
+आमची टीम उपलब्ध स्लॉट चेक करून सांगेल.
+तुम्हाला लवकरच फोन येईल. 📞`
 };
 
 const supportMessage = {
   en: `📞 You can talk to our support team at ${contactNumber}.`,
-  hi: `📞 Support ke liye call karo: ${contactNumber}`,
-  mr: `📞 Support sathi call kara: ${contactNumber}`
+  hi: `📞 सपोर्ट के लिए कॉल करें: ${contactNumber}`,
+  mr: `📞 सपोर्टसाठी फोन करा: ${contactNumber}`
 };
 
 
@@ -771,68 +771,68 @@ const maidPlanMessage = {
 🔗 For more info: cleanly-maid-service.netlify.app
 
 👉 Reply with *1*, *2*, or *3* to select your plan.`,
-  hi: `📦 *Apna Plan Choose Karo:*
+  hi: `📦 *अपना प्लान चुनें:*
 
-1️⃣ *Part-Time Standard — ₹6,000*
-• One-time placement fee
-• Ghar pe maid interview
-• Identity & document verification
-• Experience aur skill check
-• Service agreement help
-• 1 month mein 1 free replacement
+1️⃣ *पार्ट-टाइम स्टैंडर्ड — ₹6,000*
+• एक बार की प्लेसमेंट फीस
+• घर पर मेड का इंटरव्यू
+• आईडी और डॉक्युमेंट वेरिफिकेशन
+• अनुभव और स्किल की जांच
+• सर्विस एग्रीमेंट में मदद
+• 1 महीने में 1 फ्री रिप्लेसमेंट
 
-2️⃣ *Part-Time Verified — ₹12,000*
-• One-time placement fee
-• Standard Plan ki sab services
-• Police verification (records & basic checks)
-• Experience aur skill check
-• 6 months mein 2 free replacements
+2️⃣ *पार्ट-टाइम वेरिफाइड — ₹12,000*
+• एक बार की प्लेसमेंट फीस
+• स्टैंडर्ड प्लान की सभी सेवाएं
+• पुलिस वेरिफिकेशन (रिकॉर्ड और बेसिक चेक)
+• अनुभव और स्किल की जांच
+• 6 महीने में 2 फ्री रिप्लेसमेंट
 
-3️⃣ *Full-Time Verified — 1 Month Salary*
-• One-time fee (1 month salary)
-• Standard Plan ki sab services
-• Police verification (records & basic checks)
-• Experience aur skill check
-• 6 months mein 2 free replacements
+3️⃣ *फुल-टाइम वेरिफाइड — 1 महीने की सैलरी*
+• एक बार की फीस (1 महीने की सैलरी)
+• स्टैंडर्ड प्लान की सभी सेवाएं
+• पुलिस वेरिफिकेशन (रिकॉर्ड और बेसिक चेक)
+• अनुभव और स्किल की जांच
+• 6 महीने में 2 फ्री रिप्लेसमेंट
 
-💡 *Registration Fee:* ₹1,000 (final service fee mein adjust hoga)
+💡 *रजिस्ट्रेशन फीस:* ₹1,000 (फाइनल सर्विस फीस में एडजस्ट होगी)
 
-📌 *Note:* CLEANLY ek Platinum Company ka brand hai
+📌 *नोट:* CLEANLY, Platinum Company का एक ब्रांड है
 
-🔗 More info: cleanly-maid-service.netlify.app
+🔗 ज्यादा जानकारी: cleanly-maid-service.netlify.app
 
-👉 Plan select karne ke liye *1*, *2*, ya *3* reply karo.`,
-  mr: `📦 *Tumcha Plan Choose Kara:*
+👉 प्लान चुनने के लिए *1*, *2*, या *3* रिप्लाई करें।`,
+  mr: `📦 *तुमचा प्लान निवडा:*
 
-1️⃣ *Part-Time Standard — ₹6,000*
-• One-time placement fee
-• Ghari maid interview
-• Identity & document verification
-• Experience ani skill check
-• Service agreement help
-• 1 month madhe 1 free replacement
+1️⃣ *पार्ट-टाइम स्टँडर्ड — ₹6,000*
+• एक वेळची प्लेसमेंट फी
+• घरी मेडचा इंटरव्ह्यू
+• आयडी आणि डॉक्युमेंट व्हेरिफिकेशन
+• अनुभव आणि स्किल तपासणी
+• सर्विस करार मदत
+• 1 महिन्यात 1 फ्री रिप्लेसमेंट
 
-2️⃣ *Part-Time Verified — ₹12,000*
-• One-time placement fee
-• Standard Plan chya sagalya services
-• Police verification (records & basic checks)
-• Experience ani skill check
-• 6 months madhe 2 free replacements
+2️⃣ *पार्ट-टाइम व्हेरिफाइड — ₹12,000*
+• एक वेळची प्लेसमेंट फी
+• स्टँडर्ड प्लानच्या सर्व सेवा
+• पोलिस व्हेरिफिकेशन (रेकॉर्ड आणि बेसिक चेक)
+• अनुभव आणि स्किल तपासणी
+• 6 महिन्यांत 2 फ्री रिप्लेसमेंट
 
-3️⃣ *Full-Time Verified — 1 Month Salary*
-• One-time fee (1 month salary)
-• Standard Plan chya sagalya services
-• Police verification (records & basic checks)
-• Experience ani skill check
-• 6 months madhe 2 free replacements
+3️⃣ *फुल-टाइम व्हेरिफाइड — 1 महिन्याचा पगार*
+• एक वेळची फी (1 महिन्याचा पगार)
+• स्टँडर्ड प्लानच्या सर्व सेवा
+• पोलिस व्हेरिफिकेशन (रेकॉर्ड आणि बेसिक चेक)
+• अनुभव आणि स्किल तपासणी
+• 6 महिन्यांत 2 फ्री रिप्लेसमेंट
 
-💡 *Registration Fee:* ₹1,000 (final service fee madhe adjust hoel)
+💡 *रजिस्ट्रेशन फी:* ₹1,000 (फायनल सर्विस फीमध्ये अ‍ॅडजस्ट होईल)
 
-📌 *Note:* CLEANLY ha Platinum Company cha brand aahe
+📌 *नोट:* CLEANLY हा Platinum Company चा एक ब्रँड आहे
 
-🔗 More info: cleanly-maid-service.netlify.app
+🔗 अधिक माहिती: cleanly-maid-service.netlify.app
 
-👉 Plan select karnyasathi *1*, *2*, kiva *3* reply kara.`
+👉 प्लान निवडण्यासाठी *1*, *2*, किंवा *3* रिप्लाय करा.`
 };
 
 const maidPlans = {
