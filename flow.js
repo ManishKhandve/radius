@@ -32,9 +32,8 @@ function activeSessionCount() {
   return sessions.size;
 }
 
-const RESTART_KW = ["hi", "hello"];
 function isRestart(text) {
-  return RESTART_KW.includes(text.trim().toLowerCase());
+  return false; // No keyword triggers — only FB/IG links start the bot
 }
 
 // Only trigger from Facebook/Instagram ad links
