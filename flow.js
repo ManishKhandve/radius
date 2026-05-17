@@ -559,10 +559,10 @@ async function processState(session, body, senderId, msg) {
         if (topMaids.length === 0) {
           // If no maids found in 8km
           const msg = session.data.lang === "hi"
-            ? "माफ करें, आपके एरिया में 8 km के अंदर कोई मेड उपलब्ध नहीं है। सपोर्ट के लिए कॉल करें।"
+            ? `हम अभी आपके एरिया में मेड ढूंढ रहे हैं! 🔍\n\nहमें कॉल करें और हम आपके लिए सही मेड खोजने में मदद करेंगे:\n📞 ${config.contactNumber}`
             : session.data.lang === "mr"
-            ? "माफ करा, तुमच्या एरियात 8 km च्या आत कोणतीही मेड उपलब्ध नाही. सपोर्टसाठी फोन करा."
-            : "Sorry, no maids are currently available in your area within 8km. Please contact our support.";
+            ? `आम्ही तुमच्या एरियात मेड शोधत आहोत! 🔍\n\nआम्हाला फोन करा आणि आम्ही तुमच्यासाठी योग्य मेड शोधण्यात मदत करू:\n📞 ${config.contactNumber}`
+            : `We're on it! 🔍\n\nWe'll personally help you find the right maid for your area.\nPlease give us a call and we'll locate one for you:\n📞 ${config.contactNumber}`;
           return [msg];
         }
 
