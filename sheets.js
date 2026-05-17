@@ -161,7 +161,7 @@ async function appendBooking(data) {
     const sheets = await getClient();
     await sheets.spreadsheets.values.append({
       spreadsheetId: sheetId(),
-      range: `${SHEET_BOOKINGS}!A:U`,
+      range: `${SHEET_BOOKINGS}!A:W`,
       valueInputOption: "USER_ENTERED",
       insertDataOption: "INSERT_ROWS",
       requestBody: {
@@ -178,7 +178,7 @@ async function appendBooking(data) {
             data.monthlySalary      || "",
             data.flat               || "",
             data.bookingDate        || new Date().toLocaleDateString("en-IN"),
-            data.status             || "Confirmed",
+            data.status             || "Payment Pending",
             data.commissionPaid     || "No",
             "", // Follow-up Day 1
             "", // Follow-up Day 2
@@ -188,6 +188,8 @@ async function appendBooking(data) {
             data.city               || "",
             data.area               || "",
             data.language           || "en",
+            data.paymentStatus      || "Pending",  // Column V
+            data.receiptNote        || "",          // Column W
           ],
         ],
       },
@@ -195,6 +197,49 @@ async function appendBooking(data) {
     console.log(`[sheets] Booking appended: ${data.bookingId}`);
   } catch (err) {
     console.error("[sheets] appendBooking error:", err.message);
+  }
+}
+
+/**
+ * Finds a booking by ID (Column A) and updates payment status (V) and receipt note (W).
+ */
+async function updateBookingPayment(bookingId, receiptNote) {
+  try {
+    const sheets = await getClient();
+
+    const res = await sheets.spreadsheets.values.get({
+      spreadsheetId: sheetId(),
+      range: `${SHEET_BOOKINGS}!A:A`,
+    });
+
+    const rows = res.data.values || [];
+    let targetRow = -1;
+    for (let i = 1; i < rows.length; i++) {
+      if (rows[i] && rows[i][0] === bookingId) {
+        targetRow = i + 1;
+        break;
+      }
+    }
+
+    if (targetRow === -1) {
+      console.warn(`[sheets] Booking not found for payment update: ${bookingId}`);
+      return;
+    }
+
+    await sheets.spreadsheets.values.batchUpdate({
+      spreadsheetId: sheetId(),
+      requestBody: {
+        valueInputOption: "USER_ENTERED",
+        data: [
+          { range: `${SHEET_BOOKINGS}!V${targetRow}`, values: [["Receipt Received"]] },
+          { range: `${SHEET_BOOKINGS}!W${targetRow}`, values: [[receiptNote]] },
+        ],
+      },
+    });
+
+    console.log(`[sheets] Payment updated for booking: ${bookingId}`);
+  } catch (err) {
+    console.error("[sheets] updateBookingPayment error:", err.message);
   }
 }
 
@@ -296,6 +341,7 @@ module.exports = {
   appendBooking,
   appendCleaningBooking,
   updateCustomerStatus,
+  updateBookingPayment,
   generateCustomerId,
   generateBookingId,
 };

@@ -126,7 +126,7 @@ async function bootstrap() {
   client.on("message", async (msg) => {
     try {
       if (msg.from.endsWith("@g.us")) return;
-      if (msg.type !== "chat") return;
+      if (msg.type !== "chat" && msg.type !== "image") return;
 
       const replies = await flow.handleMessage(msg);
 

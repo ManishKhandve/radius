@@ -52,6 +52,12 @@ async function handleMessage(msg) {
   const senderId = msg.from;
   const body = (msg.body || "").trim();
 
+  // Images are only accepted in PAYMENT_RECEIPT state
+  if (msg.type === "image") {
+    const existing = sessions.get(senderId);
+    if (!existing || existing.state !== "PAYMENT_RECEIPT") return [];
+  }
+
   // If they want to restart, clear their current session
   if (isRestart(body)) clearSession(senderId);
 
@@ -62,7 +68,7 @@ async function handleMessage(msg) {
     if (!isRestart(body) && !isAdMessage(body)) {
       return []; // Ignore random personal messages — return empty so no reply is sent
     }
-    
+
     session = createSession(senderId);
     try {
       const c = await msg.getContact();
@@ -81,7 +87,7 @@ async function handleMessage(msg) {
     return [msg];
   }
 
-  let responses = await processState(session, body, senderId);
+  let responses = await processState(session, body, senderId, msg);
   
   // Append the Call Option if the session is still active (meaning they haven't finished or cancelled)
   if (getSession(senderId) !== null) {
@@ -101,7 +107,7 @@ async function handleMessage(msg) {
   return responses;
 }
 
-async function processState(session, body, senderId) {
+async function processState(session, body, senderId, msg) {
   switch (session.state) {
     case "LANGUAGE": {
       const lang = config.langs[body];
@@ -688,46 +694,83 @@ async function processState(session, body, senderId) {
         let bid = "B000";
         try { bid = await sheets.generateBookingId(); } catch (e) { console.error(e.message); }
         d.bookingId = bid;
+
+        // Save booking as Payment Pending — will update after receipt received
         (async () => {
           try {
             await sheets.appendBooking({
-              bookingId: bid, 
+              bookingId: bid,
               customerName: d.contactName,
-              customerWhatsApp: d.whatsappNumber, 
+              customerWhatsApp: d.whatsappNumber,
               maidName: d.maidChoice,
-              maidId: d.maidChoiceIds || d.selectedMaids.join(', ') || "",
-              workType: d.workType, 
+              maidId: d.maidChoiceIds || (d.selectedMaids || []).join(', '),
+              workType: d.workType,
               timing: d.timing,
-              startDate: d.startDate, 
-              monthlySalary: d.budget, 
+              startDate: d.startDate,
+              monthlySalary: d.budget,
               flat: d.flat,
-              status: "Confirmed",
+              status: "Payment Pending",
               selectedPlan: d.selectedPlan,
               city: d.maidCity,
               area: d.maidArea,
               language: d.lang,
+              paymentStatus: "Pending",
             });
-            await sheets.updateCustomerStatus(d.whatsappNumber, "Booking Confirmed");
           } catch (e) { console.error("[flow] booking write err:", e.message); }
         })();
-        const custMsg = config.bookingConfirmation({
-          customerName: d.contactName, maidName: d.maidChoice,
-          workType: d.workType, timing: d.timing,
-          startDate: d.startDate, flat: d.flat,
-        });
-        const ownerMsg = config.adminBookingAlert({
-          customerName: d.contactName, phone: d.whatsappNumber,
-          flat: d.flat, maidChoice: d.maidChoice,
-          workType: d.workType, timing: d.timing, startDate: d.startDate,
-        });
-        clearSession(senderId);
-        return [custMsg, { _adminAlert: ownerMsg }];
+
+        session.state = "PAYMENT_RECEIPT";
+        return [config.paymentMessage[d.lang]];
       }
       if (body === "2") {
         clearSession(senderId);
         return [config.cancelMessage];
       }
       return [config.confirmMessage(session.data)];
+    }
+
+    case "PAYMENT_RECEIPT": {
+      const lang = session.data.lang || "en";
+      const isImage = msg && msg.type === "image";
+      const isText  = msg && msg.type === "chat";
+
+      if (!isImage && !isText) {
+        // Wrong message type — nudge them
+        const nudge = lang === "hi"
+          ? "📸 कृपया पेमेंट का स्क्रीनशॉट भेजें।"
+          : lang === "mr"
+          ? "📸 कृपया पेमेंटचा स्क्रीनशॉट पाठवा."
+          : "📸 Please send a screenshot of your payment receipt.";
+        return [nudge];
+      }
+
+      // For text: accept transaction ID or any note
+      // For image: use caption if they added one
+      const caption = (msg.body || "").trim();
+      const receiptNote = isImage
+        ? (caption ? `Photo received — caption: ${caption}` : "Receipt photo received via WhatsApp")
+        : `Transaction note: ${caption}`;
+
+      const d = session.data;
+
+      // Update payment columns in Sheets
+      (async () => {
+        try {
+          await sheets.updateBookingPayment(d.bookingId, receiptNote);
+          await sheets.updateCustomerStatus(d.whatsappNumber, "Payment Received");
+        } catch (e) { console.error("[flow] payment update err:", e.message); }
+      })();
+
+      const adminAlert = config.adminPaymentAlert({
+        customerName: d.contactName,
+        phone: d.whatsappNumber,
+        bookingId: d.bookingId,
+        maidChoice: d.maidChoice,
+        receiptNote,
+      });
+
+      clearSession(senderId);
+      return [config.receiptReceivedMessage[lang], { _adminAlert: adminAlert }];
     }
     default: {
       clearSession(senderId);

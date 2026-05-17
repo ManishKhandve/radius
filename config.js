@@ -945,6 +945,82 @@ const cancelMessage = "❌ Booking cancelled. No worries!\n\nReply *hi* anytime 
 
 const errorMessage = "⚠️ Something went wrong. Type *hi* to start again.";
 
+// ─── UPI Payment ─────────────────────────────────────────────
+const upiId = process.env.UPI_ID || "cleanly@upi";
+
+const paymentMessage = {
+  en: `💳 *Registration Fee Payment*
+
+To confirm your booking, please pay ₹1,000 registration fee:
+
+*UPI ID:* \`${upiId}\`
+*Amount:* ₹1,000
+
+🔗 *Or tap to pay directly:*
+upi://pay?pa=${upiId}&pn=CLEANLY+Services&am=1000&cu=INR&tn=Registration+Fee
+
+📸 After payment, *send a screenshot* of your transaction receipt here.`,
+
+  hi: `💳 *रजिस्ट्रेशन फीस पेमेंट*
+
+बुकिंग कन्फर्म करने के लिए ₹1,000 रजिस्ट्रेशन फीस जमा करें:
+
+*UPI ID:* \`${upiId}\`
+*राशि:* ₹1,000
+
+🔗 *या सीधे पेमेंट करें:*
+upi://pay?pa=${upiId}&pn=CLEANLY+Services&am=1000&cu=INR&tn=Registration+Fee
+
+📸 पेमेंट के बाद यहाँ *स्क्रीनशॉट भेजें।*`,
+
+  mr: `💳 *नोंदणी शुल्क पेमेंट*
+
+बुकिंग कन्फर्म करण्यासाठी ₹1,000 नोंदणी शुल्क भरा:
+
+*UPI ID:* \`${upiId}\`
+*रक्कम:* ₹1,000
+
+🔗 *किंवा थेट पेमेंट करा:*
+upi://pay?pa=${upiId}&pn=CLEANLY+Services&am=1000&cu=INR&tn=Registration+Fee
+
+📸 पेमेंटनंतर येथे *स्क्रीनशॉट पाठवा.*`
+};
+
+const receiptReceivedMessage = {
+  en: `✅ *Receipt Received!*
+
+Thank you! Our admin will verify your payment and confirm your booking within 2–4 hours.
+
+📞 For urgent queries: ${contactNumber}
+— ${businessName}`,
+
+  hi: `✅ *रसीद मिल गई!*
+
+धन्यवाद! हमारी टीम आपका पेमेंट वेरिफाई करके 2–4 घंटों में बुकिंग कन्फर्म करेगी।
+
+📞 जरूरी सवालों के लिए: ${contactNumber}
+— ${businessName}`,
+
+  mr: `✅ *पावती मिळाली!*
+
+धन्यवाद! आमची टीम तुमचे पेमेंट व्हेरिफाय करून 2–4 तासांत बुकिंग कन्फर्म करेल.
+
+📞 तातडीच्या प्रश्नांसाठी: ${contactNumber}
+— ${businessName}`
+};
+
+function adminPaymentAlert(data) {
+  return `💰 *PAYMENT RECEIPT — Verify Now*
+
+👤 Customer  : ${data.customerName}
+📞 WhatsApp  : ${data.phone}
+🔖 Booking ID: ${data.bookingId}
+👩 Maid      : ${data.maidChoice}
+📝 Receipt   : ${data.receiptNote}
+
+➡️ Verify payment and confirm booking with customer.`;
+}
+
 // ─── Exports ─────────────────────────────────────────────────
 module.exports = {
   businessName,
@@ -1004,4 +1080,8 @@ module.exports = {
   adminCleaningAlert,
   cancelMessage,
   errorMessage,
+  upiId,
+  paymentMessage,
+  receiptReceivedMessage,
+  adminPaymentAlert,
 };
