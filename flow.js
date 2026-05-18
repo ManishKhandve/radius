@@ -411,7 +411,7 @@ async function processState(session, body, senderId, msg) {
       session.data.cleaningArea = selectedArea;
       session.data.cleaningLocation = `${selectedArea}, ${session.data.cleaningCity}`;
       session.state = "COLLECT_FLAT";
-      return [config.collectFlatMessage];
+      return [config.collectFlatMessage[session.data.lang || "en"]];
     }
 
     case "COLLECT_FLAT": {
@@ -433,7 +433,7 @@ async function processState(session, body, senderId, msg) {
         // Maid flow
         session.data.flat = body;
         session.state = "COLLECT_DATE";
-        return [config.collectDateMessage];
+        return [config.collectDateMessage[session.data.lang || "en"]];
       }
     }
 
@@ -465,8 +465,9 @@ async function processState(session, body, senderId, msg) {
       if (body === "1") {
         return finishCleaning(session, senderId);
       } else if (body === "2") {
+        const lang = session.data.lang || "en";
         clearSession(senderId);
-        return [config.cancelMessage];
+        return [config.cancelMessage[lang]];
       } else {
         return [config.cleaningConfirmMessage(session.data, session.data.lang)];
       }
@@ -722,8 +723,9 @@ async function processState(session, body, senderId, msg) {
         return [config.paymentMessage[d.lang]];
       }
       if (body === "2") {
+        const lang = session.data.lang || "en";
         clearSession(senderId);
-        return [config.cancelMessage];
+        return [config.cancelMessage[lang]];
       }
       return [config.confirmMessage(session.data)];
     }
