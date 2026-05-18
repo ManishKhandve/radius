@@ -5,6 +5,7 @@
 const { Client, RemoteAuth } = require("whatsapp-web.js");
 const { createClient: createSupabaseClient } = require("@supabase/supabase-js");
 const { SupabaseStore } = require("./supabase-store");
+const { addInvite } = require("./invite-store");
 require("dotenv").config();
 const express = require("express");
 const QRCode = require("qrcode");
@@ -43,6 +44,33 @@ app.get("/status", (_req, res) => {
 });
 
 app.get("/ping", (_req, res) => res.send("pong"));
+
+// GET /send?to=91XXXXXXXXXX&token=SECRET — admin initiates conversation
+app.get("/send", async (req, res) => {
+  const { to, token } = req.query;
+
+  if (!token || token !== process.env.ADMIN_TOKEN) {
+    return res.status(401).send("Unauthorized");
+  }
+  if (!to) {
+    return res.status(400).send("Missing ?to= phone number");
+  }
+  if (!client || !botReady) {
+    return res.status(503).send("Bot not ready yet — try again in a moment");
+  }
+
+  // Normalize to WhatsApp ID format
+  const phone = to.replace(/[^0-9]/g, "") + "@c.us";
+
+  try {
+    await addInvite(phone);
+    await client.sendMessage(phone, config.adminIntroMessage);
+    res.send(`✅ Message sent to ${phone}`);
+  } catch (err) {
+    console.error("[send] Error:", err.message);
+    res.status(500).send(`Error: ${err.message}`);
+  }
+});
 
 // ─── HTML helper ─────────────────────────────────────────────
 function statusPage(mode, qrDataUrl) {

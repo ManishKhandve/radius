@@ -941,6 +941,16 @@ Reply *2* to Cancel ❌`;
   return lang === 'hi' ? hi : lang === 'mr' ? mr : en;
 };
 
+const adminIntroMessage = `👋 Hi! *CLEANLY Services* offers:
+
+🧹 *Monthly Maid Placement*
+Cooking, Cleaning, Babysitting, Caretaking & more
+
+🏠 *Home Deep Cleaning*
+Flats, Bathrooms, Villas — Pune & PCMC ✅
+
+Reply *1* to explore our services.`;
+
 const cancelMessage = "❌ Booking cancelled. No worries!\n\nReply *hi* anytime to start again. 😊";
 
 const errorMessage = "⚠️ Something went wrong. Type *hi* to start again.";
@@ -1084,4 +1094,5 @@ module.exports = {
   paymentMessage,
   receiptReceivedMessage,
   adminPaymentAlert,
+  adminIntroMessage,
 };

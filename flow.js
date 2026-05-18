@@ -4,6 +4,7 @@
 
 const config = require("./config");
 const sheets = require("./sheets");
+const { isInvited, removeInvite } = require("./invite-store");
 
 const sessions = new Map();
 
@@ -62,10 +63,26 @@ async function handleMessage(msg) {
 
   let session = getSession(senderId);
 
-  // If no active session, ONLY create one if it's an ad message or a restart keyword
+  // If no active session, check if admin invited this person OR if it's an ad link
   if (!session) {
-    if (!isRestart(body) && !isAdMessage(body)) {
-      return []; // Ignore random personal messages — return empty so no reply is sent
+    // Check Supabase for a pending admin invite
+    const invited = await isInvited(senderId);
+    if (invited) {
+      // Delete invite immediately — session takes over from here
+      await removeInvite(senderId);
+      session = createSession(senderId);
+      try {
+        const c = await msg.getContact();
+        session.data.contactName = c.pushname || c.name || "there";
+      } catch { session.data.contactName = "there"; }
+      session.data.whatsappNumber = senderId;
+      session.state = "LANGUAGE";
+      return [config.languageMessage];
+    }
+
+    // Otherwise only FB/IG ad links can start the bot
+    if (!isAdMessage(body)) {
+      return [];
     }
 
     session = createSession(senderId);
