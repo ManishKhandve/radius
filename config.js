@@ -959,41 +959,26 @@ const errorMessage = "⚠️ Something went wrong. Type *hi* to start again.";
 const upiId = process.env.UPI_ID || "cleanly@upi";
 
 const paymentMessage = {
-  en: `💳 *Registration Fee Payment*
+  en: `Hello,
+Please pay ₹1000 booking amount using the below payment link:
 
-To confirm your booking, please pay ₹1,000 registration fee:
+upi://pay?pa=${upiId}&pn=Cleanly&am=1000&cu=INR
 
-*UPI ID:* \`${upiId}\`
-*Amount:* ₹1,000
+After payment kindly share the screenshot for admin to verify.`,
 
-🔗 *Or tap to pay directly:*
-upi://pay?pa=${upiId}&pn=CLEANLY+Services&am=1000&cu=INR&tn=Registration+Fee
+  hi: `नमस्ते,
+कृपया नीचे दिए गए पेमेंट लिंक से ₹1000 बुकिंग राशि जमा करें:
 
-📸 After payment, *send a screenshot* of your transaction receipt here.`,
+upi://pay?pa=${upiId}&pn=Cleanly&am=1000&cu=INR
 
-  hi: `💳 *रजिस्ट्रेशन फीस पेमेंट*
+पेमेंट के बाद एडमिन वेरिफिकेशन के लिए स्क्रीनशॉट भेजें।`,
 
-बुकिंग कन्फर्म करने के लिए ₹1,000 रजिस्ट्रेशन फीस जमा करें:
+  mr: `नमस्कार,
+कृपया खालील पेमेंट लिंकद्वारे ₹1000 बुकिंग रक्कम भरा:
 
-*UPI ID:* \`${upiId}\`
-*राशि:* ₹1,000
+upi://pay?pa=${upiId}&pn=Cleanly&am=1000&cu=INR
 
-🔗 *या सीधे पेमेंट करें:*
-upi://pay?pa=${upiId}&pn=CLEANLY+Services&am=1000&cu=INR&tn=Registration+Fee
-
-📸 पेमेंट के बाद यहाँ *स्क्रीनशॉट भेजें।*`,
-
-  mr: `💳 *नोंदणी शुल्क पेमेंट*
-
-बुकिंग कन्फर्म करण्यासाठी ₹1,000 नोंदणी शुल्क भरा:
-
-*UPI ID:* \`${upiId}\`
-*रक्कम:* ₹1,000
-
-🔗 *किंवा थेट पेमेंट करा:*
-upi://pay?pa=${upiId}&pn=CLEANLY+Services&am=1000&cu=INR&tn=Registration+Fee
-
-📸 पेमेंटनंतर येथे *स्क्रीनशॉट पाठवा.*`
+पेमेंटनंतर एडमिन व्हेरिफिकेशनसाठी स्क्रीनशॉट पाठवा.`
 };
 
 const receiptReceivedMessage = {
