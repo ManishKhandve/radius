@@ -223,9 +223,9 @@ const collectFlatMessage = `🏠 Great choice!
 Please share your *flat number and area/society name* so we can confirm availability near you.
 (Example: Flat 4B, Cidco N-6)`;
 
-const collectDateMessage = `📅 When would you like her to start?
+const collectDateMessage = `📅 When would you like her trial date?
 
-Please enter your preferred start date.
+Please enter your preferred trial date.
 (Example: 20 May or 20/05/2025)`;
 
 // --- Cleaning Flow Messages ---
@@ -853,7 +853,7 @@ function confirmMessage(data) {
 💰 Budget     : ${data.budget}
 👩 Maid Chosen: ${data.maidChoice}
 🏠 Address    : ${address}
-📅 Start Date : ${data.startDate}
+📅 Trial Date : ${data.startDate}
 📦 Plan       : ${data.selectedPlan || 'N/A'}
 
 Reply *1* to Confirm ✅
@@ -868,7 +868,7 @@ Hi ${data.customerName}, your booking details:
 👩 Maid      : ${data.maidName}
 🧹 Work      : ${data.workType}
 ⏰ Timing    : ${data.timing}
-📅 Start Date: ${data.startDate}
+📅 Trial Date: ${data.startDate}
 🏠 Address   : ${data.flat}
 
 We will contact you shortly to introduce the maid.
@@ -886,7 +886,7 @@ function adminBookingAlert(data) {
 👩 Maid     : ${data.maidChoice}
 🧹 Work     : ${data.workType}
 ⏰ Timing   : ${data.timing}
-📅 Start    : ${data.startDate}
+📅 Trial    : ${data.startDate}
 
 ➡️ Confirm maid and call customer within 2 hrs.`;
 }
