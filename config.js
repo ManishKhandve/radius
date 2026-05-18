@@ -57,17 +57,17 @@ Please choose your preferred language:
 
 const mainMenuMessage = {
   en: `Main menu
-- Which service are you looking for?
-1. HOME deep cleaning service
-2. MONTHLY maid service`,
+Which service are you looking for?
+1️⃣ HOME deep cleaning service
+2️⃣ MONTHLY maid service`,
   hi: `मुख्य मेनू
 आपको कौन सी सेवा चाहिए?
-1. घर की डीप क्लीनिंग
-2. मंथली मेड सर्विस`,
+1️⃣ घर की डीप क्लीनिंग
+2️⃣ मंथली मेड सर्विस`,
   mr: `मुख्य मेनू
 तुम्हाला कोणती सेवा हवी आहे?
-1. घराची डीप क्लीनिंग
-2. मंथली मेड सर्विस`
+1️⃣ घराची डीप क्लीनिंग
+2️⃣ मंथली मेड सर्विस`
 };
 
 // --- Maid Flow Messages ---
