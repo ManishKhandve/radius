@@ -691,7 +691,7 @@ async function processState(session, body, senderId, msg) {
       return [confirmMsg];
     }
     case "COLLECT_DATE": {
-      if (body.length <= 3) return [config.collectDateMessage];
+      if (body.length <= 3) return [config.collectDateMessage[session.data.lang || "en"]];
       session.data.startDate = body;
       session.state = "MAID_PLAN";
       return [config.maidPlanMessage[session.data.lang]];
