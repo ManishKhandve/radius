@@ -411,7 +411,7 @@ async function processState(session, body, senderId, msg) {
       session.data.cleaningArea = selectedArea;
       session.data.cleaningLocation = `${selectedArea}, ${session.data.cleaningCity}`;
       session.state = "COLLECT_FLAT";
-      return [config.collectFlatMessage];
+      return [config.collectFlatMessage[session.data.lang || "en"]];
     }
 
     case "COLLECT_FLAT": {
@@ -433,7 +433,7 @@ async function processState(session, body, senderId, msg) {
         // Maid flow
         session.data.flat = body;
         session.state = "COLLECT_DATE";
-        return [config.collectDateMessage];
+        return [config.collectDateMessage[session.data.lang || "en"]];
       }
     }
 
@@ -465,8 +465,9 @@ async function processState(session, body, senderId, msg) {
       if (body === "1") {
         return finishCleaning(session, senderId);
       } else if (body === "2") {
+        const lang = session.data.lang || "en";
         clearSession(senderId);
-        return [config.cancelMessage];
+        return [config.cancelMessage[lang]];
       } else {
         return [config.cleaningConfirmMessage(session.data, session.data.lang)];
       }
@@ -576,13 +577,20 @@ async function processState(session, body, senderId, msg) {
           : "🌟 Here are our top picks for you:\n\n";
 
         const emojis = ["1️⃣", "2️⃣", "3️⃣", "4️⃣", "5️⃣"];
+        const l = session.data.lang;
+        const lbl = {
+          work:   l === "hi" ? "काम"       : l === "mr" ? "काम"       : "Work",
+          exp:    l === "hi" ? "अनुभव"     : l === "mr" ? "अनुभव"     : "Experience",
+          salary: l === "hi" ? "अपेक्षित सैलरी" : l === "mr" ? "अपेक्षित पगार" : "Expected Salary",
+          dist:   l === "hi" ? "दूरी"      : l === "mr" ? "अंतर"      : "Distance",
+        };
         topMaids.forEach((maid, i) => {
           resultMsg += `${emojis[i]} *ID:* M${maid.id}
-👤 *Name:* ${maid.name}
-🧹 *Work:* ${maid.service_type || 'Not specified'}
-✨ *Experience:* ${maid.experience || 'Not specified'}
-💰 *Expected Salary:* ₹${maid.salary_expectation || 'Negotiable'}
-📍 *Distance:* ${maid.distance.toFixed(1)} km
+👤 ${maid.name}
+🧹 *${lbl.work}:* ${maid.service_type || '-'}
+✨ *${lbl.exp}:* ${maid.experience || '-'}
+💰 *${lbl.salary}:* ₹${maid.salary_expectation || 'Negotiable'}
+📍 *${lbl.dist}:* ${maid.distance.toFixed(1)} km
 ➖➖➖➖➖➖➖➖➖➖➖➖➖\n`;
         });
 
@@ -601,7 +609,12 @@ async function processState(session, body, senderId, msg) {
 
       } catch (err) {
         console.error("Matching Error:", err);
-        return ["Sorry, there was an error finding maids. Please make sure the system is properly configured with Supabase."];
+        const errLang = session.data.lang || "en";
+        return [errLang === "hi"
+          ? "मेड ढूंढने में कुछ गड़बड़ हुई। सपोर्ट के लिए कॉल करें।"
+          : errLang === "mr"
+          ? "मेड शोधताना चूक झाली. सपोर्टसाठी फोन करा."
+          : "Something went wrong while finding maids. Please contact support."];
       }
     }
 
@@ -727,8 +740,9 @@ async function processState(session, body, senderId, msg) {
         return [config.paymentMessage[d.lang]];
       }
       if (body === "2") {
+        const lang = session.data.lang || "en";
         clearSession(senderId);
-        return [config.cancelMessage];
+        return [config.cancelMessage[lang]];
       }
       return [config.confirmMessage(session.data, session.data.lang || "en")];
     }
