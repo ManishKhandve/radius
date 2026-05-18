@@ -1,5 +1,6 @@
 const fs = require('fs');
 const path = require('path');
+const fsp = fs.promises;
 
 /**
  * Custom RemoteAuth store for whatsapp-web.js backed by Supabase Storage.
@@ -24,8 +25,11 @@ class SupabaseStore {
   }
 
   async save({ session }) {
-    // RemoteAuth compresses the session to <dataPath>/<sessionName>.zip before calling save()
     const zipPath = path.join(this.dataPath, `${session}.zip`);
+    if (!fs.existsSync(zipPath)) {
+      console.warn(`[supabase-store] Zip not found, skipping save: ${zipPath}`);
+      return;
+    }
     const fileBuffer = fs.readFileSync(zipPath);
 
     const { error } = await this.supabase.storage
@@ -39,8 +43,10 @@ class SupabaseStore {
     console.log(`[supabase-store] Session saved: ${session}`);
   }
 
-  async extract({ session, path }) {
-    // RemoteAuth calls this on startup to restore the session zip
+  async extract({ session, path: destPath }) {
+    // Ensure the target directory exists (deleted cache causes ENOENT otherwise)
+    fs.mkdirSync(path.dirname(destPath), { recursive: true });
+
     const { data, error } = await this.supabase.storage
       .from(this.bucketName)
       .download(`${session}.zip`);
@@ -48,7 +54,7 @@ class SupabaseStore {
     if (error) throw new Error(`Supabase extract error: ${error.message}`);
 
     const buffer = Buffer.from(await data.arrayBuffer());
-    fs.writeFileSync(path, buffer);
+    fs.writeFileSync(destPath, buffer);
     console.log(`[supabase-store] Session restored: ${session}`);
   }
 
