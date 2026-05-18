@@ -34,11 +34,10 @@ const timings = {
 };
 
 const budgets = {
-  "1": "Based on skill and experience",
-  "2": "₹4,000 – ₹6,000",
-  "3": "₹6,000 – ₹10,000",
-  "4": "₹10,000 – ₹20,000",
-  "5": "₹20,000 – ₹30,000 (10+ education + experience)"
+  "1": "₹4,000 – ₹6,000",
+  "2": "₹6,000 – ₹10,000",
+  "3": "₹10,000 – ₹20,000",
+  "4": "₹20,000 – ₹30,000 (10+ education + experience)"
 };
 
 const langs = {
@@ -60,11 +59,11 @@ const mainMenuMessage = {
 Which service are you looking for?
 1️⃣ HOME deep cleaning service
 2️⃣ MONTHLY maid service`,
-  hi: `मुख्य मेनू
+  hi: `मेन मेनू
 आपको कौन सी सेवा चाहिए?
 1️⃣ घर की डीप क्लीनिंग
 2️⃣ मंथली मेड सर्विस`,
-  mr: `मुख्य मेनू
+  mr: `मेन मेनू
 तुम्हाला कोणती सेवा हवी आहे?
 1️⃣ घराची डीप क्लीनिंग
 2️⃣ मंथली मेड सर्विस`
@@ -112,23 +111,26 @@ const timingMessage = {
 
 const budgetMessage = {
   en: `💰 What is your monthly budget for the maid's salary?
-1️⃣ Based on skill and experience
-2️⃣ ₹4,000 – ₹6,000
-3️⃣ ₹6,000 – ₹10,000
-4️⃣ ₹10,000 – ₹20,000
-5️⃣ ₹20,000 – ₹30,000 (10+ education + experience)`,
+_(Salary is based on skill and experience)_
+
+1️⃣ ₹4,000 – ₹6,000
+2️⃣ ₹6,000 – ₹10,000
+3️⃣ ₹10,000 – ₹20,000
+4️⃣ ₹20,000 – ₹30,000 (10+ education + experience)`,
   hi: `💰 मेड की सैलरी का मंथली बजट क्या है?
-1️⃣ स्किल और अनुभव के हिसाब से
-2️⃣ ₹4,000 – ₹6,000
-3️⃣ ₹6,000 – ₹10,000
-4️⃣ ₹10,000 – ₹20,000
-5️⃣ ₹20,000 – ₹30,000 (10+ पढ़ाई + अनुभव)`,
+_(सैलरी स्किल और अनुभव के हिसाब से तय होती है)_
+
+1️⃣ ₹4,000 – ₹6,000
+2️⃣ ₹6,000 – ₹10,000
+3️⃣ ₹10,000 – ₹20,000
+4️⃣ ₹20,000 – ₹30,000 (10+ पढ़ाई + अनुभव)`,
   mr: `💰 मेडच्या पगाराचे मंथली बजट किती आहे?
-1️⃣ स्किल आणि अनुभवानुसार
-2️⃣ ₹4,000 – ₹6,000
-3️⃣ ₹6,000 – ₹10,000
-4️⃣ ₹10,000 – ₹20,000
-5️⃣ ₹20,000 – ₹30,000 (10+ शिक्षण + अनुभव)`
+_(पगार स्किल आणि अनुभवानुसार ठरतो)_
+
+1️⃣ ₹4,000 – ₹6,000
+2️⃣ ₹6,000 – ₹10,000
+3️⃣ ₹10,000 – ₹20,000
+4️⃣ ₹20,000 – ₹30,000 (10+ शिक्षण + अनुभव)`
 };
 
 const maidCityMessage = {
@@ -448,7 +450,7 @@ const bathroomSubscriptionCountMessage = {
 1️⃣ 2 बाथरूम
 2️⃣ 3 बाथरूम
 3️⃣ 4 बाथरूम`,
-  mr: `किती बाथरूम समाविष्ट करायचे आहेत?
+  mr: `किती बाथरूम साफ़ करायचे आहेत?
 1️⃣ 2 बाथरूम
 2️⃣ 3 बाथरूम
 3️⃣ 4 बाथरूम`
@@ -488,7 +490,7 @@ Reply:
 ✅ 3 व्हिजिट (दर महिन्याला 1 व्हिजिट, 3 महिने)
 ✅ बाथरूमची डीप क्लीनिंग
 ✅ हार्ड वॉटर स्टेन काढणे
-✅ फ्लोर आणि टाइल्सची खोल साफसफाई
+✅ फ्लोर आणि टाइल्सची साफसफाई
 ✅ फिटिंग्ज आणि फिक्स्चरची साफसफाई
 ✅ मिरर आणि काचेची साफसफाई
 📌 फक्त ${count} बाथरूमसाठी वैध
@@ -826,7 +828,7 @@ const maidPlanMessage = {
 • घरी मेडचा इंटरव्ह्यू
 • आयडी आणि डॉक्युमेंट व्हेरिफिकेशन
 • अनुभव आणि स्किल तपासणी
-• सर्विस करार मदत
+• सर्विस एग्रीमेंट मध्ये मदत
 • 1 महिन्यात 1 फ्री रिप्लेसमेंट
 
 2️⃣ *पार्ट-टाइम व्हेरिफाइड — ₹12,000*
@@ -864,7 +866,7 @@ function confirmMessage(data, lang = "en") {
   const address = data.maidCity && data.maidArea ? `${data.flat}, ${data.maidArea}, ${data.maidCity}` : data.flat;
   const plan = data.selectedPlan || 'N/A';
 
-  if (lang === "hi") return `📋 *बुकिंग सारांश*
+  if (lang === "hi") return `📋 *बुकिंग डिटेल्स*
 
 👤 नाम         : ${data.contactName}
 🧹 काम         : ${data.workType}
@@ -878,7 +880,7 @@ function confirmMessage(data, lang = "en") {
 *1* रिप्लाई करें — कन्फर्म ✅
 *2* रिप्लाई करें — कैंसिल ❌`;
 
-  if (lang === "mr") return `📋 *बुकिंग सारांश*
+  if (lang === "mr") return `📋 *बुकिंग डिटेल्स*
 
 👤 नाव          : ${data.contactName}
 🧹 काम          : ${data.workType}
@@ -890,7 +892,7 @@ function confirmMessage(data, lang = "en") {
 📦 प्लान         : ${plan}
 
 *1* रिप्लाय करा — कन्फर्म ✅
-*2* रिप्लाय करा — रद्द ❌`;
+*2* रिप्लाय करा — कैंसल ❌`;
 
   return `📋 *Booking Summary*
 
@@ -995,25 +997,25 @@ const cleaningConfirmMessage = (data, lang) => {
 Reply *1* to Confirm ✅
 Reply *2* to Cancel ❌`;
 
-  const hi = `📋 *क्लीनिंग बुकिंग सारांश*
+  const hi = `📋 *क्लीनिंग बुकिंग डिटेल*
 👤 नाम       : ${data.contactName}
-🧹 सेवा       : ${data.cleaningServiceType}
-ℹ️ विवरण      : ${data.cleaningDetails}
-🏠 स्थान      : ${data.cleaningLocation}
+🧹 सर्विस    : ${data.cleaningServiceType}
+ℹ️ डिटेल     : ${data.cleaningDetails}
+🏠 लोकेशन   : ${data.cleaningLocation}
 📅 तारीख     : ${data.cleaningDate}${priceDisplay}
 
-पुष्टि करने के लिए *1* रिप्लाई करें ✅
-रद्द करने के लिए *2* रिप्लाई करें ❌`;
+कन्फर्म करने के लिए *1* रिप्लाई करें ✅
+कैंसल करने के लिए *2* रिप्लाई करें ❌`;
 
-  const mr = `📋 *क्लिनिंग बुकिंग सारांश*
+  const mr = `📋 *क्लिनिंग बुकिंग डिटेल*
 👤 नाव       : ${data.contactName}
-🧹 सेवा       : ${data.cleaningServiceType}
-ℹ️ तपशील     : ${data.cleaningDetails}
-🏠 ठिकाण      : ${data.cleaningLocation}
+🧹 सर्विस    : ${data.cleaningServiceType}
+ℹ️ डिटेल     : ${data.cleaningDetails}
+🏠 लोकेशन   : ${data.cleaningLocation}
 📅 तारीख     : ${data.cleaningDate}${priceDisplay}
 
-पुष्टी करण्यासाठी *1* रिप्लाय करा ✅
-रद्द करण्यासाठी *2* रिप्लाय करा ❌`;
+कन्फर्म करण्यासाठी *1* रिप्लाय करा ✅
+कैंसल करण्यासाठी *2* रिप्लाय करा ❌`;
 
   return lang === 'hi' ? hi : lang === 'mr' ? mr : en;
 };
@@ -1031,7 +1033,7 @@ Reply *1* to explore our services.`;
 const cancelMessage = {
   en: "❌ Booking cancelled. No worries!\n\nType *hi* anytime to start again. 😊",
   hi: "❌ बुकिंग कैंसिल हो गई। कोई बात नहीं!\n\nदोबारा शुरू करने के लिए *hi* टाइप करें। 😊",
-  mr: "❌ बुकिंग रद्द झाली. काळजी नको!\n\nपुन्हा सुरू करण्यासाठी *hi* टाइप करा. 😊"
+  mr: "❌ बुकिंग कैंसिल झाली. काळजी नको!\n\nपुन्हा सुरू करण्यासाठी *hi* टाइप करा. 😊"
 };
 
 const errorMessage = "⚠️ Something went wrong. Type *hi* to start again.";
@@ -1048,7 +1050,7 @@ upi://pay?pa=${upiId}&pn=Cleanly&am=1000&cu=INR
 After payment kindly share the screenshot for admin to verify.`,
 
   hi: `नमस्ते,
-कृपया नीचे दिए गए पेमेंट लिंक से ₹1000 बुकिंग राशि जमा करें:
+कृपया नीचे दिए गए पेमेंट लिंक से ₹1000 बुकिंग अमाउंट जमा करें:
 
 upi://pay?pa=${upiId}&pn=Cleanly&am=1000&cu=INR
 
@@ -1070,19 +1072,54 @@ Thank you! Our admin will verify your payment and confirm your booking within 2�
 📞 For urgent queries: ${contactNumber}
 — ${businessName}`,
 
-  hi: `✅ *रसीद मिल गई!*
+  hi: `✅ *Transaction Receipt मिल गई!*
 
-धन्यवाद! हमारी टीम आपका पेमेंट वेरिफाई करके 2–4 घंटों में बुकिंग कन्फर्म करेगी।
+धन्यवाद! हमारी टीम आपका पेमेंट वेरिफाई करके १ घंटे में बुकिंग कन्फर्म करेगी।
 
 📞 जरूरी सवालों के लिए: ${contactNumber}
 — ${businessName}`,
 
-  mr: `✅ *पावती मिळाली!*
+  mr: `✅ *Transaction Receipt मिळाली!*
 
-धन्यवाद! आमची टीम तुमचे पेमेंट व्हेरिफाय करून 2–4 तासांत बुकिंग कन्फर्म करेल.
+धन्यवाद! आमची टीम तुमचे पेमेंट व्हेरिफाय करून 1 तासांत बुकिंग कन्फर्म करेल.
 
-📞 तातडीच्या प्रश्नांसाठी: ${contactNumber}
+📞 महत्त्वाच्या प्रश्नांसाठी: ${contactNumber}
 — ${businessName}`
+};
+
+const paymentVerifiedMessage = (name, bookingId, lang = 'en') => {
+  if (lang === 'hi') return `✅ *पेमेंट वेरिफाई हो गया!*
+
+नमस्ते ${name},
+आपका ₹1000 का पेमेंट वेरिफाई हो गया है।
+🔖 बुकिंग ID: ${bookingId}
+
+हम जल्द ही आपसे मेड की डिटेल्स शेयर करेंगे।
+
+कोई सवाल? यहाँ रिप्लाई करें! 🙏
+— ${businessName}`;
+
+  if (lang === 'mr') return `✅ *पेमेंट व्हेरिफाय झाले!*
+
+नमस्कार ${name},
+तुमचे ₹1000 चे पेमेंट व्हेरिफाय झाले आहे.
+🔖 बुकिंग ID: ${bookingId}
+
+आम्ही लवकरच मेडची माहिती शेअर करू.
+
+काही प्रश्न? इथे रिप्लाय करा! 🙏
+— ${businessName}`;
+
+  return `✅ *Payment Verified!*
+
+Hi ${name},
+Your ₹1000 booking payment has been verified.
+🔖 Booking ID: ${bookingId}
+
+We will share the maid's details with you shortly.
+
+Questions? Reply here anytime! 🙏
+— ${businessName}`;
 };
 
 function adminPaymentAlert(data) {
@@ -1152,6 +1189,7 @@ module.exports = {
   confirmMessage,
   cleaningConfirmMessage,
   bookingConfirmation,
+  paymentVerifiedMessage,
   adminBookingAlert,
   adminCleaningAlert,
   cancelMessage,

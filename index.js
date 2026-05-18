@@ -11,6 +11,15 @@ const express = require("express");
 const QRCode = require("qrcode");
 const flow = require("./flow");
 const config = require("./config");
+const sheets = require("./sheets");
+
+// ─── Global crash guards ──────────────────────────────────────
+process.on("uncaughtException", (err) => {
+  console.error("[crash] Uncaught exception (server kept alive):", err.message);
+});
+process.on("unhandledRejection", (reason) => {
+  console.error("[crash] Unhandled rejection (server kept alive):", reason?.message || reason);
+});
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -44,6 +53,18 @@ app.get("/status", (_req, res) => {
 });
 
 app.get("/ping", (_req, res) => res.send("pong"));
+
+// GET /qr — returns latest QR as JSON for polling
+app.get("/qr", async (_req, res) => {
+  if (botReady)   return res.json({ status: "connected" });
+  if (!currentQR) return res.json({ status: "waiting" });
+  try {
+    const qrDataUrl = await QRCode.toDataURL(currentQR, { width: 300 });
+    res.json({ status: "qr", qr: qrDataUrl });
+  } catch {
+    res.json({ status: "error" });
+  }
+});
 
 // GET /admin?token=SECRET — admin panel with send form
 app.get("/admin", (req, res) => {
@@ -81,6 +102,34 @@ app.get("/send", async (req, res) => {
   }
 });
 
+// POST /verify-payment — called by Google Apps Script when admin ticks checkbox
+app.post("/verify-payment", async (req, res) => {
+  const { token, phone, bookingId, name, lang } = req.body;
+
+  if (!token || token !== process.env.ADMIN_TOKEN) {
+    return res.status(403).json({ error: "Unauthorized" });
+  }
+  if (!phone || !bookingId) {
+    return res.status(400).json({ error: "Missing phone or bookingId" });
+  }
+  if (!client || !botReady) {
+    return res.status(503).json({ error: "Bot not ready" });
+  }
+
+  const whatsappId = phone.replace(/[^0-9]/g, "") + "@c.us";
+
+  try {
+    const msg = config.paymentVerifiedMessage(name || "there", bookingId, lang || "en");
+    await client.sendMessage(whatsappId, msg);
+    await sheets.markPaymentVerified(bookingId);
+    console.log(`[verify-payment] Confirmed: ${bookingId} → ${whatsappId}`);
+    res.json({ success: true });
+  } catch (err) {
+    console.error("[verify-payment] Error:", err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // ─── HTML helper ─────────────────────────────────────────────
 function statusPage(mode, qrDataUrl) {
   const title = config.businessName + " — WhatsApp Bot";
@@ -95,11 +144,48 @@ h1{margin:0 0 .5rem}p{color:#94a3b8;margin:.25rem 0}</style></head>
 <script>setInterval(()=>fetch('/status').then(r=>r.json()).then(d=>{document.getElementById('s').textContent=d.activeSessions;document.getElementById('u').textContent=Math.floor(d.uptime)+'s'}),5000)</script></body></html>`;
   }
   if (mode === "qr") {
-    return `<!DOCTYPE html><html><head><meta charset="utf-8"><title>${title}</title><meta http-equiv="refresh" content="30">
-<style>body{font-family:system-ui,sans-serif;display:flex;justify-content:center;align-items:center;height:100vh;margin:0;background:#0a1628;color:#e2e8f0}
-.card{text-align:center;background:#1e293b;padding:2rem;border-radius:1rem;box-shadow:0 8px 32px rgba(0,0,0,.4)}
-img{border-radius:.5rem;margin:1rem 0}</style></head>
-<body><div class="card"><h2>📱 Scan QR to Link WhatsApp</h2><img src="${qrDataUrl}" alt="QR Code"/><p style="color:#94a3b8;font-size:.85rem">Open WhatsApp → Linked Devices → Link a Device</p><p style="color:#64748b;font-size:.75rem">Page refreshes every 30 seconds</p></div></body></html>`;
+    return `<!DOCTYPE html><html><head><meta charset="utf-8"><title>${title}</title>
+<style>
+body{font-family:system-ui,sans-serif;display:flex;justify-content:center;align-items:center;height:100vh;margin:0;background:#0a1628;color:#e2e8f0}
+.card{text-align:center;background:#1e293b;padding:2rem;border-radius:1rem;box-shadow:0 8px 32px rgba(0,0,0,.4);max-width:340px;width:100%}
+img{border-radius:.5rem;margin:.75rem 0;width:260px;height:260px}
+.badge{display:inline-block;padding:.25rem .75rem;border-radius:999px;font-size:.75rem;margin-bottom:.5rem}
+.fresh{background:#14532d;color:#86efac}
+.stale{background:#713f12;color:#fde68a}
+</style></head>
+<body><div class="card">
+  <h2 style="margin-bottom:.25rem">📱 Scan to Link WhatsApp</h2>
+  <p style="color:#94a3b8;font-size:.82rem;margin-bottom:.5rem">Open WhatsApp → Linked Devices → Link a Device</p>
+  <span class="badge fresh" id="badge">🟢 Fresh QR</span><br>
+  <img id="qrimg" src="${qrDataUrl}" alt="QR Code"/>
+  <p style="color:#64748b;font-size:.75rem" id="hint">Auto-refreshes every 15 sec — scan immediately after refresh</p>
+</div>
+<script>
+  let countdown = 15;
+  setInterval(async () => {
+    countdown--;
+    document.getElementById('hint').textContent = 'Refreshing in ' + countdown + 's — scan immediately after';
+    if (countdown <= 3) {
+      document.getElementById('badge').className = 'badge stale';
+      document.getElementById('badge').textContent = '🟡 Expiring…';
+    }
+    if (countdown <= 0) {
+      countdown = 15;
+      try {
+        const r = await fetch('/qr');
+        const d = await r.json();
+        if (d.status === 'connected') {
+          document.querySelector('.card').innerHTML = '<h2>✅ Bot is Live!</h2><p style="color:#86efac">WhatsApp linked successfully.</p>';
+        } else if (d.status === 'qr' && d.qr) {
+          document.getElementById('qrimg').src = d.qr;
+          document.getElementById('badge').className = 'badge fresh';
+          document.getElementById('badge').textContent = '🟢 Fresh QR';
+        }
+      } catch(e) {}
+    }
+  }, 1000);
+</script>
+</body></html>`;
   }
   return `<!DOCTYPE html><html><head><meta charset="utf-8"><title>${title}</title><meta http-equiv="refresh" content="15">
 <style>body{font-family:system-ui,sans-serif;display:flex;justify-content:center;align-items:center;height:100vh;margin:0;background:#0a1628;color:#e2e8f0}
@@ -255,7 +341,11 @@ async function bootstrap() {
           continue;
         }
         if (typeof reply === "string") {
-          await msg.reply(reply);
+          try {
+            await msg.reply(reply);
+          } catch (e) {
+            console.error("[wa] Failed to send reply:", e.message);
+          }
         }
       }
     } catch (err) {

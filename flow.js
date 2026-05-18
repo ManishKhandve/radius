@@ -74,8 +74,8 @@ async function handleMessage(msg) {
       try {
         const c = await msg.getContact();
         session.data.contactName = c.pushname || c.name || "there";
-      } catch { session.data.contactName = "there"; }
-      session.data.whatsappNumber = senderId;
+        session.data.whatsappNumber = c.id._serialized || senderId;
+      } catch { session.data.contactName = "there"; session.data.whatsappNumber = senderId; }
       session.state = "LANGUAGE";
       return [config.languageMessage];
     }
@@ -89,8 +89,8 @@ async function handleMessage(msg) {
     try {
       const c = await msg.getContact();
       session.data.contactName = c.pushname || c.name || "there";
-    } catch { session.data.contactName = "there"; }
-    session.data.whatsappNumber = senderId;
+      session.data.whatsappNumber = c.id._serialized || senderId;
+    } catch { session.data.contactName = "there"; session.data.whatsappNumber = senderId; }
     session.state = "LANGUAGE";
     return [config.languageMessage];
   }
@@ -313,8 +313,8 @@ async function processState(session, body, senderId, msg) {
 
     case "CLEANING_BATHROOM_ACTION": {
       if (body === "1") {
-        session.state = "CLEANING_LOCATION";
-        return [config.cleaningLocationMessage[session.data.lang]];
+        session.state = "COLLECT_FLAT";
+        return [config.collectFlatMessage[session.data.lang || "en"]];
       } else if (body === "2") {
         const msg = config.supportMessage[session.data.lang];
         clearSession(senderId);
@@ -326,8 +326,8 @@ async function processState(session, body, senderId, msg) {
 
     case "CLEANING_CONTINUE": {
       if (body === "1") {
-        session.state = "CLEANING_LOCATION";
-        return [config.cleaningLocationMessage[session.data.lang]];
+        session.state = "COLLECT_FLAT";
+        return [config.collectFlatMessage[session.data.lang || "en"]];
       } else {
         // Invalid input
         return [session.data.lang === "hi" ? "आगे बढ़ने के लिए 1 रिप्लाई करें।" : session.data.lang === "mr" ? "पुढे जाण्यासाठी 1 रिप्लाय करा." : "Please reply 1 to continue."];
@@ -376,8 +376,8 @@ async function processState(session, body, senderId, msg) {
         
         session.data.cleaningDetails = "Mini Services: " + serviceDetails.join(', ');
         session.data.cleaningPrice = `₹${totalPrice}`;
-        session.state = "CLEANING_LOCATION";
-        return [config.cleaningLocationMessage[session.data.lang]];
+        session.state = "COLLECT_FLAT";
+        return [config.collectFlatMessage[session.data.lang || "en"]];
         
       } catch (err) {
         const msg = session.data.lang === "hi"
@@ -427,6 +427,7 @@ async function processState(session, body, senderId, msg) {
       // Check if we're in cleaning flow or maid flow
       if (session.data.serviceCategory === "cleaning") {
         session.data.flat = body;
+        session.data.cleaningLocation = body; // address is the location, no area selection needed
         session.state = "CLEANING_DATE";
         return [config.cleaningDateMessage[session.data.lang]];
       } else {

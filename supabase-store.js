@@ -39,7 +39,7 @@ class SupabaseStore {
         contentType: 'application/zip',
       });
 
-    if (error) throw new Error(`Supabase save error: ${error.message}`);
+    if (error) { console.error(`[supabase-store] Save error: ${error.message}`); return; }
     console.log(`[supabase-store] Session saved: ${session}`);
   }
 

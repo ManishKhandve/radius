@@ -335,6 +335,36 @@ async function updateCustomerStatus(whatsappNumber, status) {
   }
 }
 
+/**
+ * Marks a booking payment as verified — updates column V to "Payment Verified".
+ */
+async function markPaymentVerified(bookingId) {
+  try {
+    const sheets = await getClient();
+    const res = await sheets.spreadsheets.values.get({
+      spreadsheetId: sheetId(),
+      range: `${SHEET_BOOKINGS}!A:A`,
+    });
+
+    const rows = res.data.values || [];
+    let targetRow = -1;
+    for (let i = 1; i < rows.length; i++) {
+      if (rows[i] && rows[i][0] === bookingId) { targetRow = i + 1; break; }
+    }
+    if (targetRow === -1) { console.warn(`[sheets] Booking not found for verify: ${bookingId}`); return; }
+
+    await sheets.spreadsheets.values.update({
+      spreadsheetId: sheetId(),
+      range: `${SHEET_BOOKINGS}!V${targetRow}`,
+      valueInputOption: "USER_ENTERED",
+      requestBody: { values: [["Payment Verified"]] },
+    });
+    console.log(`[sheets] Payment marked verified: ${bookingId}`);
+  } catch (err) {
+    console.error("[sheets] markPaymentVerified error:", err.message);
+  }
+}
+
 // ─── Exports ─────────────────────────────────────────────────
 module.exports = {
   appendCustomer,
@@ -342,6 +372,7 @@ module.exports = {
   appendCleaningBooking,
   updateCustomerStatus,
   updateBookingPayment,
+  markPaymentVerified,
   generateCustomerId,
   generateBookingId,
 };
