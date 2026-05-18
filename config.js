@@ -188,11 +188,14 @@ const pcmcAreaCoordinates = {
   "Wakad": { lat: 18.5988, lng: 73.7626 }
 };
 
+const EMOJI_DIGITS = ['0️⃣','1️⃣','2️⃣','3️⃣','4️⃣','5️⃣','6️⃣','7️⃣','8️⃣','9️⃣'];
+const numToEmoji = (n) => String(n).split('').map(d => EMOJI_DIGITS[+d]).join('');
+
 const getAreaMessage = (city, lang) => {
   const areas = city === "Pune" ? puneAreas : pcmcAreas;
   let text = "";
   areas.forEach((area, index) => {
-    text += `${index + 1}. ${area}\n`;
+    text += `${numToEmoji(index + 1)} ${area}\n`;
   });
   
   if (lang === "hi") {
@@ -218,15 +221,29 @@ const maidChoiceMessage = `👩 Which maid did you like?
 Please type her *Name or ID* exactly as shown in the app.
 (Example: Sunita Bai or M001)`;
 
-const collectFlatMessage = `🏠 Great choice!
+const collectFlatMessage = {
+  en: `🏠 Please share your *flat number and area/society name*.
+(Example: Flat 4B, Cidco N-6)`,
+  hi: `🏠 अपना *फ्लैट नंबर और एरिया/सोसायटी का नाम* बताएं।
+(उदाहरण: Flat 4B, Cidco N-6)`,
+  mr: `🏠 तुमचा *फ्लॅट नंबर आणि एरिया/सोसायटी चे नाव* सांगा.
+(उदाहरण: Flat 4B, Cidco N-6)`
+};
 
-Please share your *flat number and area/society name* so we can confirm availability near you.
-(Example: Flat 4B, Cidco N-6)`;
-
-const collectDateMessage = `📅 When would you like her trial date?
+const collectDateMessage = {
+  en: `📅 When would you like her trial date?
 
 Please enter your preferred trial date.
-(Example: 20 May or 20/05/2025)`;
+(Example: 20 May or 20/05/2025)`,
+  hi: `📅 ट्रायल डेट कब चाहिए?
+
+पसंदीदा ट्रायल डेट बताएं।
+(उदाहरण: 20 May या 20/05/2025)`,
+  mr: `📅 ट्रायल डेट कधी हवी आहे?
+
+पसंदीची ट्रायल डेट सांगा.
+(उदाहरण: 20 May किंवा 20/05/2025)`
+};
 
 // --- Cleaning Flow Messages ---
 
@@ -683,7 +700,7 @@ const getCleaningAreaMessage = (city, lang) => {
   const areas = city === "Pune" ? puneAreas : pcmcAreas;
   let text = "";
   areas.forEach((area, index) => {
-    text += `${index + 1}. ${area}\n`;
+    text += `${numToEmoji(index + 1)} ${area}\n`;
   });
   
   if (lang === "hi") {
@@ -1011,7 +1028,11 @@ Flats, Bathrooms, Villas — Pune & PCMC ✅
 
 Reply *1* to explore our services.`;
 
-const cancelMessage = "❌ Booking cancelled. No worries!\n\nReply *hi* anytime to start again. 😊";
+const cancelMessage = {
+  en: "❌ Booking cancelled. No worries!\n\nType *hi* anytime to start again. 😊",
+  hi: "❌ बुकिंग कैंसिल हो गई। कोई बात नहीं!\n\nदोबारा शुरू करने के लिए *hi* टाइप करें। 😊",
+  mr: "❌ बुकिंग रद्द झाली. काळजी नको!\n\nपुन्हा सुरू करण्यासाठी *hi* टाइप करा. 😊"
+};
 
 const errorMessage = "⚠️ Something went wrong. Type *hi* to start again.";
 
