@@ -411,7 +411,7 @@ async function processState(session, body, senderId, msg) {
       session.data.cleaningArea = selectedArea;
       session.data.cleaningLocation = `${selectedArea}, ${session.data.cleaningCity}`;
       session.state = "COLLECT_FLAT";
-      return [config.collectFlatMessage[session.data.lang || "en"]];
+      return [config.collectFlatMessage];
     }
 
     case "COLLECT_FLAT": {
@@ -433,7 +433,7 @@ async function processState(session, body, senderId, msg) {
         // Maid flow
         session.data.flat = body;
         session.state = "COLLECT_DATE";
-        return [config.collectDateMessage[session.data.lang || "en"]];
+        return [config.collectDateMessage];
       }
     }
 
@@ -465,9 +465,8 @@ async function processState(session, body, senderId, msg) {
       if (body === "1") {
         return finishCleaning(session, senderId);
       } else if (body === "2") {
-        const lang = session.data.lang || "en";
         clearSession(senderId);
-        return [config.cancelMessage[lang]];
+        return [config.cancelMessage];
       } else {
         return [config.cleaningConfirmMessage(session.data, session.data.lang)];
       }
@@ -526,7 +525,12 @@ async function processState(session, body, senderId, msg) {
         : config.pcmcAreaCoordinates[selectedArea];
 
       if (!areaCoords) {
-        return ["Sorry, we couldn't find coordinates for this area. Please contact support."];
+        const lang = session.data.lang || "en";
+        return [lang === "hi"
+          ? "इस एरिया की जानकारी नहीं मिली। सपोर्ट के लिए कॉल करें।"
+          : lang === "mr"
+          ? "या एरियाची माहिती मिळाली नाही. सपोर्टसाठी फोन करा."
+          : "Sorry, we couldn't find details for this area. Please contact support."];
       }
 
       // Save lead (fire-and-forget)
@@ -685,7 +689,7 @@ async function processState(session, body, senderId, msg) {
       if (!plan) return [config.maidPlanMessage[session.data.lang]];
       session.data.selectedPlan = plan;
       session.state = "CONFIRM";
-      return [config.confirmMessage(session.data)];
+      return [config.confirmMessage(session.data, session.data.lang || "en")];
     }
 
     case "CONFIRM": {
@@ -723,11 +727,10 @@ async function processState(session, body, senderId, msg) {
         return [config.paymentMessage[d.lang]];
       }
       if (body === "2") {
-        const lang = session.data.lang || "en";
         clearSession(senderId);
-        return [config.cancelMessage[lang]];
+        return [config.cancelMessage];
       }
-      return [config.confirmMessage(session.data)];
+      return [config.confirmMessage(session.data, session.data.lang || "en")];
     }
 
     case "PAYMENT_RECEIPT": {

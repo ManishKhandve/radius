@@ -188,14 +188,11 @@ const pcmcAreaCoordinates = {
   "Wakad": { lat: 18.5988, lng: 73.7626 }
 };
 
-const EMOJI_DIGITS = ['0️⃣','1️⃣','2️⃣','3️⃣','4️⃣','5️⃣','6️⃣','7️⃣','8️⃣','9️⃣'];
-const numToEmoji = (n) => String(n).split('').map(d => EMOJI_DIGITS[+d]).join('');
-
 const getAreaMessage = (city, lang) => {
   const areas = city === "Pune" ? puneAreas : pcmcAreas;
   let text = "";
   areas.forEach((area, index) => {
-    text += `${numToEmoji(index + 1)} ${area}\n`;
+    text += `${index + 1}. ${area}\n`;
   });
   
   if (lang === "hi") {
@@ -221,29 +218,15 @@ const maidChoiceMessage = `👩 Which maid did you like?
 Please type her *Name or ID* exactly as shown in the app.
 (Example: Sunita Bai or M001)`;
 
-const collectFlatMessage = {
-  en: `🏠 Please share your *flat number and area/society name*.
-(Example: Flat 4B, Cidco N-6)`,
-  hi: `🏠 अपना *फ्लैट नंबर और एरिया/सोसायटी का नाम* बताएं।
-(उदाहरण: Flat 4B, Cidco N-6)`,
-  mr: `🏠 तुमचा *फ्लॅट नंबर आणि एरिया/सोसायटी चे नाव* सांगा.
-(उदाहरण: Flat 4B, Cidco N-6)`
-};
+const collectFlatMessage = `🏠 Great choice!
 
-const collectDateMessage = {
-  en: `📅 When would you like her trial date?
+Please share your *flat number and area/society name* so we can confirm availability near you.
+(Example: Flat 4B, Cidco N-6)`;
+
+const collectDateMessage = `📅 When would you like her trial date?
 
 Please enter your preferred trial date.
-(Example: 20 May or 20/05/2025)`,
-  hi: `📅 ट्रायल डेट कब चाहिए?
-
-पसंदीदा ट्रायल डेट बताएं।
-(उदाहरण: 20 May या 20/05/2025)`,
-  mr: `📅 ट्रायल डेट कधी हवी आहे?
-
-पसंदीची ट्रायल डेट सांगा.
-(उदाहरण: 20 May किंवा 20/05/2025)`
-};
+(Example: 20 May or 20/05/2025)`;
 
 // --- Cleaning Flow Messages ---
 
@@ -700,7 +683,7 @@ const getCleaningAreaMessage = (city, lang) => {
   const areas = city === "Pune" ? puneAreas : pcmcAreas;
   let text = "";
   areas.forEach((area, index) => {
-    text += `${numToEmoji(index + 1)} ${area}\n`;
+    text += `${index + 1}. ${area}\n`;
   });
   
   if (lang === "hi") {
@@ -860,8 +843,38 @@ const maidPlans = {
 
 // ─── Formatting Functions ──────────────────────────────────────
 
-function confirmMessage(data) {
+function confirmMessage(data, lang = "en") {
   const address = data.maidCity && data.maidArea ? `${data.flat}, ${data.maidArea}, ${data.maidCity}` : data.flat;
+  const plan = data.selectedPlan || 'N/A';
+
+  if (lang === "hi") return `📋 *बुकिंग सारांश*
+
+👤 नाम         : ${data.contactName}
+🧹 काम         : ${data.workType}
+⏰ समय         : ${data.timing}
+💰 बजट         : ${data.budget}
+👩 मेड चुनी    : ${data.maidChoice}
+🏠 पता          : ${address}
+📅 ट्रायल डेट  : ${data.startDate}
+📦 प्लान        : ${plan}
+
+*1* रिप्लाई करें — कन्फर्म ✅
+*2* रिप्लाई करें — कैंसिल ❌`;
+
+  if (lang === "mr") return `📋 *बुकिंग सारांश*
+
+👤 नाव          : ${data.contactName}
+🧹 काम          : ${data.workType}
+⏰ वेळ          : ${data.timing}
+💰 बजट          : ${data.budget}
+👩 मेड निवडली   : ${data.maidChoice}
+🏠 पत्ता         : ${address}
+📅 ट्रायल डेट   : ${data.startDate}
+📦 प्लान         : ${plan}
+
+*1* रिप्लाय करा — कन्फर्म ✅
+*2* रिप्लाय करा — रद्द ❌`;
+
   return `📋 *Booking Summary*
 
 👤 Name       : ${data.contactName}
@@ -871,13 +884,43 @@ function confirmMessage(data) {
 👩 Maid Chosen: ${data.maidChoice}
 🏠 Address    : ${address}
 📅 Trial Date : ${data.startDate}
-📦 Plan       : ${data.selectedPlan || 'N/A'}
+📦 Plan       : ${plan}
 
 Reply *1* to Confirm ✅
 Reply *2* to Cancel ❌`;
 }
 
-function bookingConfirmation(data) {
+function bookingConfirmation(data, lang = "en") {
+  if (lang === "hi") return `✅ *बुकिंग कन्फर्म हो गई!*
+
+${data.customerName}, आपकी बुकिंग डिटेल्स:
+
+👩 मेड        : ${data.maidName}
+🧹 काम        : ${data.workType}
+⏰ समय        : ${data.timing}
+📅 ट्रायल डेट : ${data.startDate}
+🏠 पता         : ${data.flat}
+
+हम जल्द ही मेड से मिलवाने के लिए संपर्क करेंगे।
+
+कोई सवाल? यहाँ रिप्लाई करें! 🙏
+— ${businessName}`;
+
+  if (lang === "mr") return `✅ *बुकिंग कन्फर्म झाली!*
+
+${data.customerName}, तुमची बुकिंग डिटेल्स:
+
+👩 मेड        : ${data.maidName}
+🧹 काम        : ${data.workType}
+⏰ वेळ        : ${data.timing}
+📅 ट्रायल डेट : ${data.startDate}
+🏠 पत्ता       : ${data.flat}
+
+आम्ही लवकरच मेडची ओळख करून देण्यासाठी संपर्क करू.
+
+काही प्रश्न? इथे रिप्लाय करा! 🙏
+— ${businessName}`;
+
   return `✅ *Booking Confirmed!*
 
 Hi ${data.customerName}, your booking details:
@@ -968,11 +1011,7 @@ Flats, Bathrooms, Villas — Pune & PCMC ✅
 
 Reply *1* to explore our services.`;
 
-const cancelMessage = {
-  en: "❌ Booking cancelled. No worries!\n\nType *hi* anytime to start again. 😊",
-  hi: "❌ बुकिंग कैंसिल हो गई। कोई बात नहीं!\n\nदोबारा शुरू करने के लिए *hi* टाइप करें। 😊",
-  mr: "❌ बुकिंग रद्द झाली. काळजी नको!\n\nपुन्हा सुरू करण्यासाठी *hi* टाइप करा. 😊"
-};
+const cancelMessage = "❌ Booking cancelled. No worries!\n\nReply *hi* anytime to start again. 😊";
 
 const errorMessage = "⚠️ Something went wrong. Type *hi* to start again.";
 
@@ -1089,7 +1128,6 @@ module.exports = {
   cleaningCustomDateMessage,
   cleaningThanksMessage,
   supportMessage,
-  numToEmoji,
   confirmMessage,
   cleaningConfirmMessage,
   bookingConfirmation,
