@@ -50,7 +50,7 @@ function getZone(distance) {
 /**
  * Fetch top 3 maids based on the customer's coordinates
  */
-async function getTopMaids(customerLat, customerLng) {
+async function getTopMaids(customerLat, customerLng, workType) {
   if (!supabase) {
     throw new Error("Supabase credentials missing. Please set SUPABASE_URL and SUPABASE_KEY.");
   }
@@ -59,10 +59,13 @@ async function getTopMaids(customerLat, customerLng) {
     throw new Error("Customer location coordinates are missing.");
   }
 
-  // Fetch all maids — no status filter so partially-filled rows are included
-  const { data: maids, error } = await supabase
-    .from('maids')
-    .select('*');
+  // Filter by work type using case-insensitive match on service_type column
+  let query = supabase.from('maids').select('*');
+  if (workType) {
+    query = query.ilike('service_type', `%${workType}%`);
+  }
+
+  const { data: maids, error } = await query;
 
   if (error) {
     console.error("Supabase Error:", error);

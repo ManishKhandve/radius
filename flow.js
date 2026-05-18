@@ -478,25 +478,7 @@ async function processState(session, body, senderId, msg) {
     case "WORK_TYPE": {
       const v = config.workTypes[body];
       if (!v) return [config.workTypeMessage[session.data.lang]];
-      
-      if (body === "5") {
-        // Custom work type - still needs text input as it's genuinely custom
-        session.state = "WORK_TYPE_CUSTOM";
-        const msg = session.data.lang === "hi" ? "काम का प्रकार बताएं:" : session.data.lang === "mr" ? "कामाचा प्रकार सांगा:" : "Please type the specific work you need help with:";
-        return [msg];
-      }
-      
       session.data.workType = v;
-      session.state = "TIMING";
-      return [config.timingMessage[session.data.lang]];
-    }
-    
-    case "WORK_TYPE_CUSTOM": {
-      if (body.length < 2) {
-         const msg = session.data.lang === "hi" ? "काम का प्रकार बताएं:" : session.data.lang === "mr" ? "कामाचा प्रकार सांगा:" : "Please type the specific work you need help with:";
-         return [msg];
-      }
-      session.data.workType = "Custom: " + body;
       session.state = "TIMING";
       return [config.timingMessage[session.data.lang]];
     }
@@ -570,7 +552,7 @@ async function processState(session, body, senderId, msg) {
       // Fetch from matching engine
       try {
         const { getTopMaids } = require('./matching.js');
-        const topMaids = await getTopMaids(areaCoords.lat, areaCoords.lng);
+        const topMaids = await getTopMaids(areaCoords.lat, areaCoords.lng, session.data.workType);
         
         if (topMaids.length === 0) {
           // If no maids found in 8km

@@ -23,7 +23,7 @@ const workTypes = {
   "2": "Cleaning",
   "3": "Babysitter",
   "4": "Caretaker",
-  "5": "Custom"
+  "5": "All Rounder"
 };
 
 const timings = {
@@ -77,19 +77,19 @@ const workTypeMessage = {
 2️⃣ Cleaning
 3️⃣ Babysitter
 4️⃣ Caretaker
-5️⃣ Custom (Type what you need)`,
+5️⃣ All Rounder`,
   hi: `कौन से काम की जरूरत है?
 1️⃣ खाना बनाना
 2️⃣ सफाई
 3️⃣ बच्चों की देखभाल
 4️⃣ बुजुर्गों की देखभाल
-5️⃣ कस्टम (अपनी जरूरत लिखें)`,
+5️⃣ ऑल राउंडर`,
   mr: `कोणत्या कामाची गरज आहे?
 1️⃣ स्वयंपाक
 2️⃣ साफसफाई
 3️⃣ मुलांची काळजी
 4️⃣ वृद्धांची काळजी
-5️⃣ कस्टम (तुमची गरज लिहा)`
+5️⃣ ऑल राउंडर`
 };
 
 const timingMessage = {
