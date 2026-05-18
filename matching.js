@@ -59,8 +59,8 @@ async function getTopMaids(customerLat, customerLng, workType) {
     throw new Error("Customer location coordinates are missing.");
   }
 
-  // Filter by work type using case-insensitive match on service_type column
-  let query = supabase.from('maids').select('*');
+  // Only show maids with status "Interested" + filter by work type
+  let query = supabase.from('maids').select('*').eq('status', 'Interested');
   if (workType) {
     query = query.ilike('service_type', `%${workType}%`);
   }
