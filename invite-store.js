@@ -15,7 +15,7 @@ async function isInvited(phone) {
 async function addInvite(phone) {
   await supabase
     .from('pending_invites')
-    .upsert({ phone }); // upsert so duplicate sends don't error
+    .upsert({ phone });
 }
 
 async function removeInvite(phone) {
@@ -25,4 +25,28 @@ async function removeInvite(phone) {
     .eq('phone', phone);
 }
 
-module.exports = { isInvited, addInvite, removeInvite };
+/**
+ * Uploads a WhatsApp media receipt to Supabase Storage (receipts bucket)
+ * and returns the permanent public URL.
+ *
+ * @param {string} bookingId  - used as part of the filename
+ * @param {string} mediaData  - base64 encoded image data from msg.downloadMedia()
+ * @param {string} mimetype   - e.g. 'image/jpeg'
+ * @returns {string} public URL
+ */
+async function uploadReceipt(bookingId, mediaData, mimetype) {
+  const ext      = mimetype.split('/')[1] || 'jpg';
+  const fileName = `${bookingId}-${Date.now()}.${ext}`;
+  const buffer   = Buffer.from(mediaData, 'base64');
+
+  const { error } = await supabase.storage
+    .from('receipts')
+    .upload(fileName, buffer, { contentType: mimetype, upsert: false });
+
+  if (error) throw new Error(`Receipt upload failed: ${error.message}`);
+
+  const { data } = supabase.storage.from('receipts').getPublicUrl(fileName);
+  return data.publicUrl;
+}
+
+module.exports = { isInvited, addInvite, removeInvite, uploadReceipt };

@@ -4,7 +4,7 @@
 
 const config = require("./config");
 const sheets = require("./sheets");
-const { isInvited, removeInvite } = require("./invite-store");
+const { isInvited, removeInvite, uploadReceipt } = require("./invite-store");
 
 const sessions = new Map();
 
@@ -760,19 +760,27 @@ async function processState(session, body, senderId, msg) {
         return [nudge];
       }
 
-      // For text: accept transaction ID or any note
-      // For image: use caption if they added one
       const caption = (msg.body || "").trim();
-      const receiptNote = isImage
-        ? (caption ? `Photo received — caption: ${caption}` : "Receipt photo received via WhatsApp")
-        : `Transaction note: ${caption}`;
-
       const d = session.data;
+
+      // For images: download from WhatsApp and upload to Supabase Storage
+      let receiptUrl = "";
+      if (isImage) {
+        try {
+          const media = await msg.downloadMedia();
+          receiptUrl = await uploadReceipt(d.bookingId, media.data, media.mimetype);
+        } catch (e) {
+          console.error("[flow] receipt upload err:", e.message);
+          receiptUrl = caption ? `Upload failed — caption: ${caption}` : "Upload failed — check WhatsApp";
+        }
+      } else {
+        receiptUrl = `Transaction ID: ${caption}`;
+      }
 
       // Update payment columns in Sheets
       (async () => {
         try {
-          await sheets.updateBookingPayment(d.bookingId, receiptNote);
+          await sheets.updateBookingPayment(d.bookingId, receiptUrl);
           await sheets.updateCustomerStatus(d.whatsappNumber, "Payment Received");
         } catch (e) { console.error("[flow] payment update err:", e.message); }
       })();
@@ -782,7 +790,7 @@ async function processState(session, body, senderId, msg) {
         phone: d.whatsappNumber,
         bookingId: d.bookingId,
         maidChoice: d.maidChoice,
-        receiptNote,
+        receiptNote: receiptUrl,
       });
 
       clearSession(senderId);
