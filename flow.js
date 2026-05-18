@@ -595,7 +595,8 @@ async function processState(session, body, senderId, msg) {
 🧹 *Work:* ${maid.service_type || 'Not specified'}
 ✨ *Experience:* ${maid.experience || 'Not specified'}
 💰 *Expected Salary:* ₹${maid.salary_expectation || 'Negotiable'}
-📍 *Distance:* ${maid.distance.toFixed(1)} km\n\n`;
+📍 *Distance:* ${maid.distance.toFixed(1)} km
+➖➖➖➖➖➖➖➖➖➖➖➖➖\n`;
         });
 
         resultMsg += session.data.lang === "hi"
