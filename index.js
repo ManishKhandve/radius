@@ -2,7 +2,7 @@
 // index.js — WhatsApp client (Baileys) + Express server + QR page
 // ============================================================
 
-const { default: makeWASocket, DisconnectReason, downloadMediaMessage } = require('@whiskeysockets/baileys');
+const { default: makeWASocket, DisconnectReason, downloadMediaMessage, fetchLatestBaileysVersion } = require('@whiskeysockets/baileys');
 const { createClient: createSupabaseClient } = require('@supabase/supabase-js');
 const { useSupabaseAuthState } = require('./supabase-store');
 const { addInvite } = require('./invite-store');
@@ -256,14 +256,19 @@ async function bootstrap() {
   const { state, saveCreds } = await useSupabaseAuthState(supabase);
   const logger = pino({ level: 'silent' });
 
+  const { version, isLatest } = await fetchLatestBaileysVersion();
+  console.log(`[wa] WA version: ${version.join('.')}, isLatest: ${isLatest}`);
+
   sock = makeWASocket({
+    version,
     auth: state,
     printQRInTerminal: false,
     logger,
-    browser: ['CLEANLY Bot', 'Chrome', '120.0.0'],
+    browser: ['Ubuntu', 'Chrome', '120.0.0'],
     generateHighQualityLinkPreview: false,
-    connectTimeoutMs: 30000,
-    defaultQueryTimeoutMs: 30000,
+    markOnlineOnConnect: false,
+    connectTimeoutMs: 60000,
+    defaultQueryTimeoutMs: 60000,
   });
 
   // Persist credentials whenever they change
