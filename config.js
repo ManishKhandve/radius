@@ -766,11 +766,11 @@ const maidPlanMessage = {
 
 💡 *Registration Fee:* ₹1,000 (adjusted in your final service fee)
 
+👉 Reply with *1*, *2*, or *3* to select your plan.
+
 📌 *Note:* CLEANLY is a brand of Platinum Company
 
-🔗 For more info: cleanly-maid-service.netlify.app
-
-👉 Reply with *1*, *2*, or *3* to select your plan.`,
+🔗 For more info: cleanly-maid-service.netlify.app`,
   hi: `📦 *अपना प्लान चुनें:*
 
 1️⃣ *पार्ट-टाइम स्टैंडर्ड — ₹6,000*
@@ -797,11 +797,11 @@ const maidPlanMessage = {
 
 💡 *रजिस्ट्रेशन फीस:* ₹1,000 (फाइनल सर्विस फीस में एडजस्ट होगी)
 
+👉 प्लान चुनने के लिए *1*, *2*, या *3* रिप्लाई करें।
+
 📌 *नोट:* CLEANLY, Platinum Company का एक ब्रांड है
 
-🔗 ज्यादा जानकारी: cleanly-maid-service.netlify.app
-
-👉 प्लान चुनने के लिए *1*, *2*, या *3* रिप्लाई करें।`,
+🔗 ज्यादा जानकारी: cleanly-maid-service.netlify.app`,
   mr: `📦 *तुमचा प्लान निवडा:*
 
 1️⃣ *पार्ट-टाइम स्टँडर्ड — ₹6,000*
@@ -828,11 +828,11 @@ const maidPlanMessage = {
 
 💡 *रजिस्ट्रेशन फी:* ₹1,000 (फायनल सर्विस फीमध्ये अ‍ॅडजस्ट होईल)
 
+👉 प्लान निवडण्यासाठी *1*, *2*, किंवा *3* रिप्लाय करा.
+
 📌 *नोट:* CLEANLY हा Platinum Company चा एक ब्रँड आहे
 
-🔗 अधिक माहिती: cleanly-maid-service.netlify.app
-
-👉 प्लान निवडण्यासाठी *1*, *2*, किंवा *3* रिप्लाय करा.`
+🔗 अधिक माहिती: cleanly-maid-service.netlify.app`
 };
 
 const maidPlans = {
