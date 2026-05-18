@@ -1,70 +1,87 @@
-const fs = require('fs');
-const path = require('path');
-const fsp = fs.promises;
+// ============================================================
+// supabase-store.js — Baileys auth state backed by Supabase Storage
+// ============================================================
 
-/**
- * Custom RemoteAuth store for whatsapp-web.js backed by Supabase Storage.
- * Implements the 4-method interface: sessionExists, save, extract, delete.
- *
- * RemoteAuth writes/reads the zip at: .wwebjs_auth/<sessionName>.zip
- * sessionName = "RemoteAuth-<clientId>"  (e.g. "RemoteAuth-cleanly-bot")
- */
-class SupabaseStore {
-  constructor({ supabase, bucketName = 'whatsapp-sessions', dataPath = './.wwebjs_auth' }) {
-    this.supabase = supabase;
-    this.bucketName = bucketName;
-    this.dataPath = dataPath;
-  }
+const { initAuthCreds, BufferJSON } = require('@whiskeysockets/baileys');
 
-  async sessionExists({ session }) {
-    const { data, error } = await this.supabase.storage
-      .from(this.bucketName)
-      .list();
-    if (error || !data) return false;
-    return data.some(f => f.name === `${session}.zip`);
-  }
+const BUCKET      = 'whatsapp-sessions';
+const CREDS_FILE  = 'baileys-creds.json';
+const KEYS_FILE   = 'baileys-keys.json';
 
-  async save({ session }) {
-    const zipPath = path.join(this.dataPath, `${session}.zip`);
-    if (!fs.existsSync(zipPath)) {
-      console.warn(`[supabase-store] Zip not found, skipping save: ${zipPath}`);
-      return;
+async function useSupabaseAuthState(supabase) {
+  let creds;
+  let keys = {};
+
+  // ── Load creds ──────────────────────────────────────────────
+  try {
+    const { data, error } = await supabase.storage.from(BUCKET).download(CREDS_FILE);
+    if (!error && data) {
+      creds = JSON.parse(await data.text(), BufferJSON.reviver);
+      console.log('[supabase-auth] Credentials restored');
     }
-    const fileBuffer = fs.readFileSync(zipPath);
+  } catch (e) {
+    console.warn('[supabase-auth] No saved credentials, starting fresh');
+  }
+  if (!creds) creds = initAuthCreds();
 
-    const { error } = await this.supabase.storage
-      .from(this.bucketName)
-      .upload(`${session}.zip`, fileBuffer, {
-        upsert: true,
-        contentType: 'application/zip',
-      });
+  // ── Load keys ───────────────────────────────────────────────
+  try {
+    const { data, error } = await supabase.storage.from(BUCKET).download(KEYS_FILE);
+    if (!error && data) {
+      keys = JSON.parse(await data.text(), BufferJSON.reviver);
+      console.log('[supabase-auth] Keys restored');
+    }
+  } catch (e) { /* no keys yet — normal on first run */ }
 
-    if (error) { console.error(`[supabase-store] Save error: ${error.message}`); return; }
-    console.log(`[supabase-store] Session saved: ${session}`);
+  // ── Persist helpers ─────────────────────────────────────────
+  async function saveCreds() {
+    try {
+      const buf = Buffer.from(JSON.stringify(creds, BufferJSON.replacer));
+      const { error } = await supabase.storage.from(BUCKET)
+        .upload(CREDS_FILE, buf, { upsert: true, contentType: 'application/json' });
+      if (error) console.error('[supabase-auth] Creds save error:', error.message);
+      else console.log('[supabase-auth] Credentials saved');
+    } catch (e) {
+      console.error('[supabase-auth] Creds save error:', e.message);
+    }
   }
 
-  async extract({ session, path: destPath }) {
-    // Ensure the target directory exists (deleted cache causes ENOENT otherwise)
-    fs.mkdirSync(path.dirname(destPath), { recursive: true });
-
-    const { data, error } = await this.supabase.storage
-      .from(this.bucketName)
-      .download(`${session}.zip`);
-
-    if (error) throw new Error(`Supabase extract error: ${error.message}`);
-
-    const buffer = Buffer.from(await data.arrayBuffer());
-    fs.writeFileSync(destPath, buffer);
-    console.log(`[supabase-store] Session restored: ${session}`);
+  async function saveKeys() {
+    try {
+      const buf = Buffer.from(JSON.stringify(keys, BufferJSON.replacer));
+      const { error } = await supabase.storage.from(BUCKET)
+        .upload(KEYS_FILE, buf, { upsert: true, contentType: 'application/json' });
+      if (error) console.error('[supabase-auth] Keys save error:', error.message);
+    } catch (e) {
+      console.error('[supabase-auth] Keys save error:', e.message);
+    }
   }
 
-  async delete({ session }) {
-    const { error } = await this.supabase.storage
-      .from(this.bucketName)
-      .remove([`${session}.zip`]);
-
-    if (error) console.error(`[supabase-store] Delete error: ${error.message}`);
-  }
+  return {
+    state: {
+      creds,
+      keys: {
+        get: async (type, ids) => {
+          const result = {};
+          for (const id of ids) {
+            const val = keys[`${type}-${id}`];
+            if (val !== undefined) result[id] = val;
+          }
+          return result;
+        },
+        set: async (data) => {
+          for (const [type, typeData] of Object.entries(data)) {
+            for (const [id, value] of Object.entries(typeData || {})) {
+              if (value) keys[`${type}-${id}`] = value;
+              else delete keys[`${type}-${id}`];
+            }
+          }
+          await saveKeys();
+        },
+      },
+    },
+    saveCreds,
+  };
 }
 
-module.exports = { SupabaseStore };
+module.exports = { useSupabaseAuthState };
