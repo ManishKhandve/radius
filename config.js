@@ -764,9 +764,9 @@ const maidPlanMessage = {
 • Experience and skill screening
 • 2 free replacements within 6 months
 
-💡 *Registration Fee:* ₹1,000 (adjusted in your final service fee)
-
 👉 Reply with *1*, *2*, or *3* to select your plan.
+
+💡 *Registration Fee:* ₹1,000 (adjusted in your final service fee)
 
 📌 *Note:* CLEANLY is a brand of Platinum Company
 
@@ -795,9 +795,9 @@ const maidPlanMessage = {
 • अनुभव और स्किल की जांच
 • 6 महीने में 2 फ्री रिप्लेसमेंट
 
-💡 *रजिस्ट्रेशन फीस:* ₹1,000 (फाइनल सर्विस फीस में एडजस्ट होगी)
-
 👉 प्लान चुनने के लिए *1*, *2*, या *3* रिप्लाई करें।
+
+💡 *रजिस्ट्रेशन फीस:* ₹1,000 (फाइनल सर्विस फीस में एडजस्ट होगी)
 
 📌 *नोट:* CLEANLY, Platinum Company का एक ब्रांड है
 
@@ -826,9 +826,9 @@ const maidPlanMessage = {
 • अनुभव आणि स्किल तपासणी
 • 6 महिन्यांत 2 फ्री रिप्लेसमेंट
 
-💡 *रजिस्ट्रेशन फी:* ₹1,000 (फायनल सर्विस फीमध्ये अ‍ॅडजस्ट होईल)
-
 👉 प्लान निवडण्यासाठी *1*, *2*, किंवा *3* रिप्लाय करा.
+
+💡 *रजिस्ट्रेशन फी:* ₹1,000 (फायनल सर्विस फीमध्ये अ‍ॅडजस्ट होईल)
 
 📌 *नोट:* CLEANLY हा Platinum Company चा एक ब्रँड आहे
 
