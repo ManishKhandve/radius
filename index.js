@@ -270,9 +270,12 @@ async function bootstrap() {
     logger,
     browser: ['Ubuntu', 'Chrome', '120.0.0'],
     generateHighQualityLinkPreview: false,
-    markOnlineOnConnect: false,
+    markOnlineOnConnect: true,
+    syncFullHistory: false,
     connectTimeoutMs: 60000,
     defaultQueryTimeoutMs: 60000,
+    keepAliveIntervalMs: 30000,
+    getMessage: async () => undefined,
   });
 
   // Persist credentials whenever they change
