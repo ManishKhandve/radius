@@ -33,6 +33,15 @@ let sock           = null;
 let supabase       = null;
 let isBootstrapping = false;
 
+// Store outgoing messages so WhatsApp can retry decryption if needed
+const sentMessageStore = new Map();
+function storeMessage(result) {
+  if (result?.key?.id && result?.message) {
+    sentMessageStore.set(result.key.id, result.message);
+    if (sentMessageStore.size > 500) sentMessageStore.delete(sentMessageStore.keys().next().value);
+  }
+}
+
 // Convert any phone/JID to Baileys @s.whatsapp.net format
 function toJid(phone) {
   return phone.replace(/[^0-9]/g, '') + '@s.whatsapp.net';
@@ -91,7 +100,7 @@ app.get('/send', async (req, res) => {
   const jid = toJid(to);
   try {
     await addInvite(jid);
-    await sock.sendMessage(jid, { text: config.adminIntroMessage });
+    storeMessage(await sock.sendMessage(jid, { text: config.adminIntroMessage }));
     res.send(`✅ Message sent to ${jid}`);
   } catch (err) {
     console.error('[send] Error:', err.message);
@@ -137,7 +146,7 @@ app.post('/verify-payment', async (req, res) => {
   const jid = toJid(phone);
   try {
     const msg = config.paymentVerifiedMessage(name || 'there', bookingId, lang || 'en');
-    await sock.sendMessage(jid, { text: msg });
+    storeMessage(await sock.sendMessage(jid, { text: msg }));
     await sheets.markPaymentVerified(bookingId);
     console.log(`[verify-payment] Confirmed: ${bookingId} → ${jid}`);
     res.json({ success: true });
@@ -336,7 +345,7 @@ async function bootstrap() {
     connectTimeoutMs: 60000,
     defaultQueryTimeoutMs: 60000,
     keepAliveIntervalMs: 30000,
-    getMessage: async () => undefined,
+    getMessage: async (key) => sentMessageStore.get(key.id),
   });
 
   // Persist credentials whenever they change
@@ -421,7 +430,7 @@ async function bootstrap() {
             }
           },
           reply: async (text) => {
-            await liveSock.sendMessage(jid, { text });
+            storeMessage(await liveSock.sendMessage(jid, { text }));
           },
         };
 
@@ -430,7 +439,7 @@ async function bootstrap() {
         for (const reply of replies) {
           if (typeof reply === 'object' && reply._adminAlert) {
             try {
-              await liveSock.sendMessage(ownerJid, { text: reply._adminAlert });
+              storeMessage(await liveSock.sendMessage(ownerJid, { text: reply._adminAlert }));
             } catch (e) {
               console.error('[wa] Failed to send admin alert:', e.message);
             }
@@ -438,7 +447,7 @@ async function bootstrap() {
           }
           if (typeof reply === 'string') {
             try {
-              await liveSock.sendMessage(jid, { text: reply });
+              storeMessage(await liveSock.sendMessage(jid, { text: reply }));
             } catch (e) {
               console.error('[wa] Failed to send reply:', e.message);
             }
@@ -447,7 +456,7 @@ async function bootstrap() {
       } catch (err) {
         console.error('[wa] Message handler error:', err.message);
         try {
-          await sock.sendMessage(rawMsg.key.remoteJid, { text: config.errorMessage });
+          storeMessage(await sock.sendMessage(rawMsg.key.remoteJid, { text: config.errorMessage }));
           flow.clearSession(rawMsg.key.remoteJid);
         } catch (_) {}
       }
