@@ -113,20 +113,29 @@ app.post('/reset-session', async (req, res) => {
   const { token } = req.body;
   if (!token || token !== process.env.ADMIN_TOKEN) return res.status(401).json({ error: 'Unauthorized' });
 
-  console.log('[reset] Clearing identity from Supabase…');
+  // 1. Delete from Supabase
+  console.log('[reset] Clearing identity from Supabase and local cache…');
   try {
     if (!supabase) {
       supabase = createSupabaseClient(process.env.SUPABASE_URL, process.env.SUPABASE_KEY);
     }
     await supabase.storage.from('whatsapp-sessions').remove([
-      'creds.json', 'baileys-creds.json', 'baileys-keys.json', // all possible names
+      'creds.json', 'baileys-creds.json', 'baileys-keys.json',
     ]);
-    console.log('[reset] Identity deleted — QR scan required on next start');
   } catch (e) {
-    console.warn('[reset] Could not delete identity files:', e.message);
+    console.warn('[reset] Supabase delete error:', e.message);
   }
 
-  // Kill current socket
+  // 2. Wipe local /tmp auth directory so useMultiFileAuthState can't reuse old creds
+  try {
+    const { rm } = require('fs/promises');
+    await rm('/tmp/baileys-auth', { recursive: true, force: true });
+    console.log('[reset] Local auth cache cleared');
+  } catch (e) {
+    console.warn('[reset] Local cache clear error:', e.message);
+  }
+
+  // 3. Kill current socket
   if (sock) {
     try { sock.end(undefined); } catch (_) {}
     sock = null;
@@ -135,6 +144,7 @@ app.post('/reset-session', async (req, res) => {
   currentQR       = null;
   isBootstrapping = false;
 
+  console.log('[reset] Ready — QR will appear at /');
   // Start fresh — will generate new QR
   setTimeout(() => bootstrap(), 1000);
   res.json({ success: true, message: 'Session cleared. Scan QR at / within 60 seconds.' });
