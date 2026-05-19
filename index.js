@@ -341,7 +341,7 @@ async function bootstrap() {
             }
           },
           reply: async (text) => {
-            await liveSock.sendMessage(jid, { text }, { quoted: rawMsg });
+            await liveSock.sendMessage(jid, { text });
           },
         };
 
@@ -358,7 +358,7 @@ async function bootstrap() {
           }
           if (typeof reply === 'string') {
             try {
-              await liveSock.sendMessage(jid, { text: reply }, { quoted: rawMsg });
+              await liveSock.sendMessage(jid, { text: reply });
             } catch (e) {
               console.error('[wa] Failed to send reply:', e.message);
             }
