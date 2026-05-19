@@ -113,15 +113,17 @@ app.post('/reset-session', async (req, res) => {
   const { token } = req.body;
   if (!token || token !== process.env.ADMIN_TOKEN) return res.status(401).json({ error: 'Unauthorized' });
 
-  console.log('[reset] Clearing Baileys session from Supabase…');
+  console.log('[reset] Clearing identity from Supabase…');
   try {
     if (!supabase) {
       supabase = createSupabaseClient(process.env.SUPABASE_URL, process.env.SUPABASE_KEY);
     }
-    await supabase.storage.from('whatsapp-sessions').remove(['baileys-creds.json', 'baileys-keys.json']);
-    console.log('[reset] Session files deleted');
+    await supabase.storage.from('whatsapp-sessions').remove([
+      'creds.json', 'baileys-creds.json', 'baileys-keys.json', // all possible names
+    ]);
+    console.log('[reset] Identity deleted — QR scan required on next start');
   } catch (e) {
-    console.warn('[reset] Could not delete session files:', e.message);
+    console.warn('[reset] Could not delete identity files:', e.message);
   }
 
   // Kill current socket
