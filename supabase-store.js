@@ -75,15 +75,6 @@ async function useSupabaseAuthState(supabase) {
   }
   console.log(`[supabase-auth] ✅ Restored ${restored}/${AUTH_FILES.length} auth files from Supabase`);
 
-  // ── Clear sessions to force fresh pre-key exchange on reconnect ──
-  // Sessions diverge while the bot is offline (recipient's ratchet advances,
-  // bot's saved ratchet stays behind). Starting fresh avoids Bad MAC and
-  // 'Waiting for this message' on the first reply after every restart.
-  try {
-    await fs.writeFile(path.join(AUTH_DIR, 'sessions.json'), '{}', 'utf-8');
-    console.log('[supabase-auth] 🔄 Cleared stale sessions — fresh encryption on next send');
-  } catch (_) {}
-
   // ── Use official Baileys auth state (battle-tested Signal impl) ──
   const { state, saveCreds: _saveCreds } = await useMultiFileAuthState(AUTH_DIR);
 

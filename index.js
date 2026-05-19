@@ -405,6 +405,13 @@ async function bootstrap() {
         const jid = rawMsg.key.remoteJid;
         if (!jid || jid.endsWith('@g.us')) continue;
 
+        // @lid is WhatsApp's internal device-sync identifier used in multi-device.
+        // These are NOT real user messages — they're copies of messages routed to
+        // linked devices for sync. Replying to @lid JIDs uses a different Signal
+        // session than the user's actual @s.whatsapp.net session, so the reply
+        // can't be decrypted → "Waiting for this message". Skip entirely.
+        if (jid.endsWith('@lid')) continue;
+
         // rawMsg.message is null when Signal decryption failed (Bad MAC).
         // Replying with a broken session causes "Waiting for this message"
         // on the recipient side. Skip and let the Signal session auto-reset
