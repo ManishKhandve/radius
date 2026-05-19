@@ -1,128 +1,128 @@
 // ============================================================
-// supabase-store.js — Baileys auth state backed by Supabase Storage
+// supabase-store.js — Baileys auth state using official useMultiFileAuthState
+// with Supabase Storage as cold backup (restored on each startup)
 // ============================================================
 
-const { initAuthCreds, BufferJSON, proto } = require('@whiskeysockets/baileys');
+const { useMultiFileAuthState } = require('@whiskeysockets/baileys');
+const fs   = require('fs/promises');
+const path = require('path');
 
-const BUCKET      = 'whatsapp-sessions';
-const CREDS_FILE  = 'baileys-creds.json';
-const KEYS_FILE   = 'baileys-keys.json';
+const BUCKET   = 'whatsapp-sessions';
+const AUTH_DIR = '/tmp/baileys-auth';
+
+// All files that useMultiFileAuthState may create
+const AUTH_FILES = [
+  'creds.json',
+  'pre-keys.json',
+  'sessions.json',
+  'sender-keys.json',
+  'app-state-sync-keys.json',
+  'app-state-sync-version.json',
+  'sender-key-memory.json',
+];
+
+const KEY_FILE_MAP = {
+  'pre-key':               'pre-keys.json',
+  'session':               'sessions.json',
+  'sender-key':            'sender-keys.json',
+  'app-state-sync-key':    'app-state-sync-keys.json',
+  'app-state-sync-version':'app-state-sync-version.json',
+  'sender-key-memory':     'sender-key-memory.json',
+};
 
 const delay = (ms) => new Promise(r => setTimeout(r, ms));
 
-async function upload(supabase, file, buf) {
-  for (let attempt = 1; attempt <= 3; attempt++) {
+async function sbDownload(supabase, filename) {
+  for (let i = 1; i <= 3; i++) {
+    try {
+      const { data, error } = await supabase.storage.from(BUCKET).download(filename);
+      if (data && !error) return await data.text();
+      if (error?.statusCode === 404 || error?.message?.includes('not found')) return null;
+    } catch (_) {}
+    if (i < 3) await delay(600 * i);
+  }
+  return null;
+}
+
+async function sbUpload(supabase, filename, content) {
+  const buf = Buffer.from(content);
+  for (let i = 1; i <= 3; i++) {
     try {
       const { error } = await supabase.storage.from(BUCKET)
-        .upload(file, buf, { upsert: true, contentType: 'application/json' });
+        .upload(filename, buf, { upsert: true, contentType: 'application/json' });
       if (!error) return true;
-      console.error(`[supabase-auth] Upload ${file} attempt ${attempt} error:`, error.message);
+      console.error(`[supabase-auth] Upload ${filename} attempt ${i}:`, error.message);
     } catch (e) {
-      console.error(`[supabase-auth] Upload ${file} attempt ${attempt} exception:`, e.message);
+      console.error(`[supabase-auth] Upload ${filename} attempt ${i} exception:`, e.message);
     }
-    if (attempt < 3) await delay(800 * attempt);
+    if (i < 3) await delay(600 * i);
   }
-  console.error(`[supabase-auth] ❌ Failed to upload ${file} after 3 attempts`);
   return false;
 }
 
 async function useSupabaseAuthState(supabase) {
-  let creds;
-  let keys = {};
+  // ── Prepare local auth directory ─────────────────────────────
+  await fs.mkdir(AUTH_DIR, { recursive: true });
 
-  // ── Load creds ──────────────────────────────────────────────
-  try {
-    const { data, error } = await supabase.storage.from(BUCKET).download(CREDS_FILE);
-    if (error) {
-      console.log('[supabase-auth] No credentials in Supabase — starting fresh');
-    } else if (data) {
-      creds = JSON.parse(await data.text(), BufferJSON.reviver);
-      console.log('[supabase-auth] ✅ Credentials restored');
+  // ── Restore files from Supabase ──────────────────────────────
+  let restored = 0;
+  for (const file of AUTH_FILES) {
+    const content = await sbDownload(supabase, file);
+    if (content) {
+      await fs.writeFile(path.join(AUTH_DIR, file), content, 'utf-8');
+      restored++;
     }
-  } catch (e) {
-    console.warn('[supabase-auth] Credentials load failed:', e.message, '— starting fresh');
   }
-  if (!creds) creds = initAuthCreds();
+  console.log(`[supabase-auth] ✅ Restored ${restored}/${AUTH_FILES.length} auth files from Supabase`);
 
-  // ── Load keys ───────────────────────────────────────────────
+  // ── Clear sessions to force fresh pre-key exchange on reconnect ──
+  // Sessions diverge while the bot is offline (recipient's ratchet advances,
+  // bot's saved ratchet stays behind). Starting fresh avoids Bad MAC and
+  // 'Waiting for this message' on the first reply after every restart.
   try {
-    const { data, error } = await supabase.storage.from(BUCKET).download(KEYS_FILE);
-    if (error) {
-      console.log('[supabase-auth] No keys in Supabase — starting fresh');
-    } else if (data) {
-      keys = JSON.parse(await data.text(), BufferJSON.reviver);
-      console.log(`[supabase-auth] ✅ Keys restored (${Object.keys(keys).length} entries)`);
-    }
-  } catch (e) {
-    console.warn('[supabase-auth] Keys load failed:', e.message, '— starting fresh');
-  }
+    await fs.writeFile(path.join(AUTH_DIR, 'sessions.json'), '{}', 'utf-8');
+    console.log('[supabase-auth] 🔄 Cleared stale sessions — fresh encryption on next send');
+  } catch (_) {}
 
-  // ── Clear stale Signal sessions on every startup ────────────
-  // Signal ratchet state diverges after a bot restart — the recipient's
-  // WhatsApp advances the ratchet while the bot was offline, so any
-  // sessions saved before the restart are now out of sync.
-  // Clearing them forces a fresh pre-key exchange on next send, which
-  // is the only guaranteed way to produce messages the recipient can decrypt.
-  const staleSessions = Object.keys(keys).filter(k => k.startsWith('session-'));
-  if (staleSessions.length > 0) {
-    for (const k of staleSessions) delete keys[k];
-    console.log(`[supabase-auth] 🔄 Cleared ${staleSessions.length} stale sessions — fresh encryption on next send`);
-  } else {
-    console.log('[supabase-auth] No stale sessions to clear');
-  }
+  // ── Use official Baileys auth state (battle-tested Signal impl) ──
+  const { state, saveCreds: _saveCreds } = await useMultiFileAuthState(AUTH_DIR);
 
-  // ── Persist helpers ─────────────────────────────────────────
-  async function saveCreds() {
-    const buf = Buffer.from(JSON.stringify(creds, BufferJSON.replacer));
-    const ok = await upload(supabase, CREDS_FILE, buf);
-    if (ok) console.log('[supabase-auth] Credentials saved');
-  }
+  // ── Sequential Supabase sync chain ───────────────────────────
+  // Keeps uploads in order so a slow older upload never overwrites
+  // a newer one (the original race-condition root cause).
+  let syncChain = Promise.resolve();
 
-  // Sequential write chain — each save waits for the previous to finish.
-  // Prevents an older concurrent upload from overwriting newer key state.
-  let keySaveChain = Promise.resolve();
-
-  function saveKeys() {
-    keySaveChain = keySaveChain.catch(() => {}).then(async () => {
-      // Snapshot taken inside the chain so it always captures the latest
-      // in-memory state at the time this particular save runs.
-      const snapshot = Buffer.from(JSON.stringify(keys, BufferJSON.replacer));
-      await upload(supabase, KEYS_FILE, snapshot);
+  function scheduleSync(files) {
+    syncChain = syncChain.catch(() => {}).then(async () => {
+      for (const filename of files) {
+        try {
+          const content = await fs.readFile(path.join(AUTH_DIR, filename), 'utf-8').catch(() => null);
+          if (content) await sbUpload(supabase, filename, content);
+        } catch (e) {
+          console.error(`[supabase-auth] Sync error for ${filename}:`, e.message);
+        }
+      }
     });
   }
 
-  return {
-    state: {
-      creds,
-      keys: {
-        get: async (type, ids) => {
-          const result = {};
-          for (const id of ids) {
-            let val = keys[`${type}-${id}`];
-            if (val !== undefined) {
-              // app-state-sync-key must be reconstructed as a proto object
-              // after JSON deserialization — matches useMultiFileAuthState
-              if (type === 'app-state-sync-key') {
-                try { val = proto.Message.AppStateSyncKeyData.fromObject(val); } catch (_) {}
-              }
-              result[id] = val;
-            }
-          }
-          return result;
-        },
-        set: (data) => {
-          for (const [type, typeData] of Object.entries(data)) {
-            for (const [id, value] of Object.entries(typeData || {})) {
-              if (value) keys[`${type}-${id}`] = value;
-              else delete keys[`${type}-${id}`];
-            }
-          }
-          saveKeys(); // non-blocking — in-memory is updated immediately
-        },
-      },
-    },
-    saveCreds,
+  // ── Wrap saveCreds to also push creds.json to Supabase ───────
+  const saveCreds = async () => {
+    await _saveCreds();
+    scheduleSync(['creds.json']);
+    console.log('[supabase-auth] Credentials saved');
   };
+
+  // ── Wrap keys.set to push affected key files to Supabase ─────
+  const origSet = state.keys.set.bind(state.keys);
+  state.keys.set = async (data) => {
+    await origSet(data); // write to local FS first (official impl, awaited)
+    const files = [...new Set(
+      Object.keys(data).map(t => KEY_FILE_MAP[t]).filter(Boolean)
+    )];
+    if (files.length) scheduleSync(files);
+  };
+
+  return { state, saveCreds };
 }
 
 module.exports = { useSupabaseAuthState };
