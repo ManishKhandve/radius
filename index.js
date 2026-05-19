@@ -1,90 +1,79 @@
 // ============================================================
-// index.js — WhatsApp client (Baileys) + Express server + QR page
+// index.js — WhatsApp via Green API + Express server
 // ============================================================
 
-const { default: makeWASocket, DisconnectReason, downloadMediaMessage, fetchLatestBaileysVersion, Browsers } = require('@whiskeysockets/baileys');
-const { createClient: createSupabaseClient } = require('@supabase/supabase-js');
-const { useSupabaseAuthState } = require('./supabase-store');
-const { addInvite } = require('./invite-store');
 require('dotenv').config();
 const express = require('express');
-const QRCode  = require('qrcode');
-const pino    = require('pino');
 const flow    = require('./flow');
 const config  = require('./config');
 const sheets  = require('./sheets');
+const { addInvite } = require('./invite-store');
 
 // ─── Global crash guards ──────────────────────────────────────
-process.on('uncaughtException', (err) => {
-  console.error('[crash] Uncaught exception (server kept alive):', err.message);
-});
-process.on('unhandledRejection', (reason) => {
-  console.error('[crash] Unhandled rejection (server kept alive):', reason?.message || reason);
-});
+process.on('uncaughtException',  (err) => console.error('[crash] Uncaught exception:', err.message));
+process.on('unhandledRejection', (r)   => console.error('[crash] Unhandled rejection:', r?.message || r));
 
 const app  = express();
 app.use(express.json());
 const PORT = process.env.PORT || 3000;
 
-// ─── State ───────────────────────────────────────────────────
-let currentQR      = null;
-let botReady       = false;
-let sock           = null;
-let supabase       = null;
-let isBootstrapping  = false;
-let replacedAt       = 0;   // timestamp of last 440, used to throttle reconnect attempts
+// ─── Green API helpers ────────────────────────────────────────
+const GA_INSTANCE = process.env.GREENAPI_INSTANCE_ID;
+const GA_TOKEN    = process.env.GREENAPI_TOKEN;
+const GA_BASE     = `https://api.green-api.com/waInstance${GA_INSTANCE}`;
 
-// Store outgoing messages so WhatsApp can retry decryption if needed
-const sentMessageStore = new Map();
-function storeMessage(result) {
-  if (result?.key?.id && result?.message) {
-    sentMessageStore.set(result.key.id, result.message);
-    if (sentMessageStore.size > 500) sentMessageStore.delete(sentMessageStore.keys().next().value);
+function toChatId(phone) {
+  return phone.replace(/[^0-9]/g, '') + '@c.us';
+}
+
+const ownerChatId = toChatId(process.env.OWNER_WHATSAPP || '919975233763');
+
+async function gaSend(chatId, text) {
+  try {
+    const res = await fetch(`${GA_BASE}/sendMessage/${GA_TOKEN}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ chatId, message: text }),
+    });
+    if (!res.ok) console.error('[green] Send error:', await res.text());
+    return res.ok;
+  } catch (e) {
+    console.error('[green] Send exception:', e.message);
+    return false;
   }
 }
 
-// Convert any phone/JID to Baileys @s.whatsapp.net format
-function toJid(phone) {
-  return phone.replace(/[^0-9]/g, '') + '@s.whatsapp.net';
-}
+const botReady = () => !!(GA_INSTANCE && GA_TOKEN);
 
-const ownerJid = toJid(process.env.OWNER_WHATSAPP || '919975233763');
+// ─── Express Routes ───────────────────────────────────────────
 
-// ─── Express Routes ──────────────────────────────────────────
-
-app.get('/', async (_req, res) => {
-  if (botReady) return res.send(statusPage('connected'));
-  if (currentQR) {
-    try {
-      const qrDataUrl = await QRCode.toDataURL(currentQR, { width: 300 });
-      return res.send(statusPage('qr', qrDataUrl));
-    } catch (e) {
-      return res.send(statusPage('error'));
-    }
+app.get('/', (_req, res) => {
+  const title = config.businessName + ' — WhatsApp Bot';
+  if (botReady()) {
+    res.send(`<!DOCTYPE html><html><head><meta charset="utf-8"><title>${title}</title>
+<style>body{font-family:system-ui,sans-serif;display:flex;justify-content:center;align-items:center;height:100vh;margin:0;background:#0a1628;color:#e2e8f0}
+.card{text-align:center;background:#1e293b;padding:3rem;border-radius:1rem;box-shadow:0 8px 32px rgba(0,0,0,.4)}
+.dot{display:inline-block;width:14px;height:14px;border-radius:50%;background:#22c55e;margin-right:8px;animation:pulse 2s infinite}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}</style></head>
+<body><div class="card"><h1><span class="dot"></span> Bot is Live</h1><p>${config.businessName}</p>
+<p style="font-size:.85rem;margin-top:1rem;color:#94a3b8">Sessions: <span id="s">—</span> | Uptime: <span id="u">—</span></p></div>
+<script>setInterval(()=>fetch('/status').then(r=>r.json()).then(d=>{document.getElementById('s').textContent=d.activeSessions;document.getElementById('u').textContent=Math.floor(d.uptime)+'s'}),5000)</script>
+</body></html>`);
+  } else {
+    res.send(`<!DOCTYPE html><html><head><meta charset="utf-8"><title>${title}</title></head>
+<body style="font-family:system-ui;background:#0a1628;color:#e2e8f0;display:flex;align-items:center;justify-content:center;height:100vh;margin:0">
+<div style="text-align:center;background:#1e293b;padding:3rem;border-radius:1rem">
+<h2>⚠️ Not Configured</h2>
+<p style="color:#94a3b8;margin-top:1rem">Set GREENAPI_INSTANCE_ID and GREENAPI_TOKEN in Render environment variables.</p>
+</div></body></html>`);
   }
-  return res.send(statusPage('initializing'));
 });
 
 app.get('/status', (_req, res) => {
-  res.json({
-    connected: botReady,
-    activeSessions: flow.activeSessionCount(),
-    uptime: process.uptime(),
-  });
+  res.json({ connected: botReady(), activeSessions: flow.activeSessionCount(), uptime: process.uptime() });
 });
 
 app.get('/ping', (_req, res) => res.send('pong'));
-
-app.get('/qr', async (_req, res) => {
-  if (botReady)   return res.json({ status: 'connected' });
-  if (!currentQR) return res.json({ status: 'waiting' });
-  try {
-    const qrDataUrl = await QRCode.toDataURL(currentQR, { width: 300 });
-    res.json({ status: 'qr', qr: qrDataUrl });
-  } catch {
-    res.json({ status: 'error' });
-  }
-});
 
 app.get('/admin', (req, res) => {
   const { token } = req.query;
@@ -96,72 +85,31 @@ app.get('/send', async (req, res) => {
   const { to, token } = req.query;
   if (!token || token !== process.env.ADMIN_TOKEN) return res.status(401).send('Unauthorized');
   if (!to) return res.status(400).send('Missing ?to= phone number');
-  if (!sock || !botReady) return res.status(503).send('Bot not ready yet — try again in a moment');
+  if (!botReady()) return res.status(503).send('Bot not configured');
 
-  const jid = toJid(to);
+  const chatId = toChatId(to);
   try {
-    await addInvite(jid);
-    storeMessage(await sock.sendMessage(jid, { text: config.adminIntroMessage }));
-    res.send(`✅ Message sent to ${jid}`);
+    await addInvite(chatId);
+    await gaSend(chatId, config.adminIntroMessage);
+    res.send(`✅ Message sent to ${chatId}`);
   } catch (err) {
     console.error('[send] Error:', err.message);
     res.status(500).send(`Error: ${err.message}`);
   }
 });
 
-app.post('/reset-session', async (req, res) => {
-  const { token } = req.body;
-  if (!token || token !== process.env.ADMIN_TOKEN) return res.status(401).json({ error: 'Unauthorized' });
-
-  // 1. Delete from Supabase
-  console.log('[reset] Clearing identity from Supabase and local cache…');
-  try {
-    if (!supabase) {
-      supabase = createSupabaseClient(process.env.SUPABASE_URL, process.env.SUPABASE_KEY);
-    }
-    await supabase.storage.from('whatsapp-sessions').remove([
-      'creds.json', 'baileys-creds.json', 'baileys-keys.json',
-    ]);
-  } catch (e) {
-    console.warn('[reset] Supabase delete error:', e.message);
-  }
-
-  // 2. Wipe local /tmp auth directory so useMultiFileAuthState can't reuse old creds
-  try {
-    const { rm } = require('fs/promises');
-    await rm('/tmp/baileys-auth', { recursive: true, force: true });
-    console.log('[reset] Local auth cache cleared');
-  } catch (e) {
-    console.warn('[reset] Local cache clear error:', e.message);
-  }
-
-  // 3. Kill current socket
-  if (sock) {
-    try { sock.end(undefined); } catch (_) {}
-    sock = null;
-  }
-  botReady        = false;
-  currentQR       = null;
-  isBootstrapping = false;
-
-  console.log('[reset] Ready — QR will appear at /');
-  // Start fresh — will generate new QR
-  setTimeout(() => bootstrap(), 1000);
-  res.json({ success: true, message: 'Session cleared. Scan QR at / within 60 seconds.' });
-});
-
 app.post('/verify-payment', async (req, res) => {
   const { token, phone, bookingId, name, lang } = req.body;
   if (!token || token !== process.env.ADMIN_TOKEN) return res.status(403).json({ error: 'Unauthorized' });
   if (!phone || !bookingId) return res.status(400).json({ error: 'Missing phone or bookingId' });
-  if (!sock || !botReady) return res.status(503).json({ error: 'Bot not ready' });
+  if (!botReady()) return res.status(503).json({ error: 'Bot not configured' });
 
-  const jid = toJid(phone);
+  const chatId = toChatId(phone);
   try {
     const msg = config.paymentVerifiedMessage(name || 'there', bookingId, lang || 'en');
-    storeMessage(await sock.sendMessage(jid, { text: msg }));
+    await gaSend(chatId, msg);
     await sheets.markPaymentVerified(bookingId);
-    console.log(`[verify-payment] Confirmed: ${bookingId} → ${jid}`);
+    console.log(`[verify-payment] Confirmed: ${bookingId} → ${chatId}`);
     res.json({ success: true });
   } catch (err) {
     console.error('[verify-payment] Error:', err.message);
@@ -169,347 +117,106 @@ app.post('/verify-payment', async (req, res) => {
   }
 });
 
-// ─── HTML helpers ─────────────────────────────────────────────
-function statusPage(mode, qrDataUrl) {
-  const title = config.businessName + ' — WhatsApp Bot';
-  if (mode === 'connected') {
-    return `<!DOCTYPE html><html><head><meta charset="utf-8"><title>${title}</title>
-<style>body{font-family:system-ui,sans-serif;display:flex;justify-content:center;align-items:center;height:100vh;margin:0;background:#0a1628;color:#e2e8f0}
-.card{text-align:center;background:#1e293b;padding:3rem;border-radius:1rem;box-shadow:0 8px 32px rgba(0,0,0,.4)}
-.dot{display:inline-block;width:14px;height:14px;border-radius:50%;background:#22c55e;margin-right:8px;animation:pulse 2s infinite}
-@keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
-h1{margin:0 0 .5rem}p{color:#94a3b8;margin:.25rem 0}</style></head>
-<body><div class="card"><h1><span class="dot"></span> Bot is Live</h1><p>${config.businessName}</p><p style="font-size:.85rem;margin-top:1rem">Sessions: <span id="s">—</span> | Uptime: <span id="u">—</span></p></div>
-<script>setInterval(()=>fetch('/status').then(r=>r.json()).then(d=>{document.getElementById('s').textContent=d.activeSessions;document.getElementById('u').textContent=Math.floor(d.uptime)+'s'}),5000)</script></body></html>`;
-  }
-  if (mode === 'qr') {
-    return `<!DOCTYPE html><html><head><meta charset="utf-8"><title>${title}</title>
-<style>
-body{font-family:system-ui,sans-serif;display:flex;justify-content:center;align-items:center;height:100vh;margin:0;background:#0a1628;color:#e2e8f0}
-.card{text-align:center;background:#1e293b;padding:2rem;border-radius:1rem;box-shadow:0 8px 32px rgba(0,0,0,.4);max-width:340px;width:100%}
-img{border-radius:.5rem;margin:.75rem 0;width:260px;height:260px}
-.badge{display:inline-block;padding:.25rem .75rem;border-radius:999px;font-size:.75rem;margin-bottom:.5rem}
-.fresh{background:#14532d;color:#86efac}
-.stale{background:#713f12;color:#fde68a}
-</style></head>
-<body><div class="card">
-  <h2 style="margin-bottom:.25rem">📱 Scan to Link WhatsApp</h2>
-  <p style="color:#94a3b8;font-size:.82rem;margin-bottom:.5rem">Open WhatsApp → Linked Devices → Link a Device</p>
-  <span class="badge fresh" id="badge">🟢 Fresh QR</span><br>
-  <img id="qrimg" src="${qrDataUrl}" alt="QR Code"/>
-  <p style="color:#64748b;font-size:.75rem" id="hint">Auto-refreshes every 15 sec — scan immediately after refresh</p>
-</div>
-<script>
-  let countdown = 15;
-  setInterval(async () => {
-    countdown--;
-    document.getElementById('hint').textContent = 'Refreshing in ' + countdown + 's — scan immediately after';
-    if (countdown <= 3) {
-      document.getElementById('badge').className = 'badge stale';
-      document.getElementById('badge').textContent = '🟡 Expiring…';
-    }
-    if (countdown <= 0) {
-      countdown = 15;
-      try {
-        const r = await fetch('/qr');
-        const d = await r.json();
-        if (d.status === 'connected') {
-          document.querySelector('.card').innerHTML = '<h2>✅ Bot is Live!</h2><p style="color:#86efac">WhatsApp linked successfully.</p>';
-        } else if (d.status === 'qr' && d.qr) {
-          document.getElementById('qrimg').src = d.qr;
-          document.getElementById('badge').className = 'badge fresh';
-          document.getElementById('badge').textContent = '🟢 Fresh QR';
-        }
-      } catch(e) {}
-    }
-  }, 1000);
-</script>
-</body></html>`;
-  }
-  return `<!DOCTYPE html><html><head><meta charset="utf-8"><title>${title}</title><meta http-equiv="refresh" content="15">
-<style>body{font-family:system-ui,sans-serif;display:flex;justify-content:center;align-items:center;height:100vh;margin:0;background:#0a1628;color:#e2e8f0}
-.card{text-align:center;background:#1e293b;padding:3rem;border-radius:1rem}</style></head>
-<body><div class="card"><h2>⏳ Starting…</h2><p style="color:#94a3b8">WhatsApp client is initializing. Please wait.</p><p style="color:#64748b;font-size:.75rem">Page refreshes every 15 seconds</p></div></body></html>`;
-}
+// ─── Incoming webhook from Green API ─────────────────────────
+app.post('/webhook', async (req, res) => {
+  res.sendStatus(200); // always respond immediately
 
-function adminPage(token) {
-  return `<!DOCTYPE html>
-<html>
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>CLEANLY — Send Message</title>
-  <style>
-    * { box-sizing: border-box; margin: 0; padding: 0; }
-    body { font-family: system-ui, sans-serif; background: #0a1628; color: #e2e8f0; min-height: 100vh; display: flex; justify-content: center; align-items: center; padding: 1rem; }
-    .card { background: #1e293b; border-radius: 1rem; padding: 2rem; width: 100%; max-width: 420px; box-shadow: 0 8px 32px rgba(0,0,0,.4); }
-    h2 { margin-bottom: 1.5rem; font-size: 1.2rem; color: #f1f5f9; }
-    label { display: block; font-size: .85rem; color: #94a3b8; margin-bottom: .4rem; }
-    input { width: 100%; padding: .75rem 1rem; border-radius: .5rem; border: 1px solid #334155; background: #0f172a; color: #f1f5f9; font-size: 1rem; margin-bottom: 1rem; outline: none; }
-    input:focus { border-color: #38bdf8; }
-    button { width: 100%; padding: .85rem; border-radius: .5rem; border: none; background: #22c55e; color: #fff; font-size: 1rem; font-weight: 600; cursor: pointer; }
-    button:hover { background: #16a34a; }
-    button:disabled { background: #334155; cursor: not-allowed; }
-    .result { margin-top: 1rem; padding: .75rem 1rem; border-radius: .5rem; font-size: .9rem; display: none; }
-    .result.ok  { background: #14532d; color: #86efac; }
-    .result.err { background: #4c0519; color: #fca5a5; }
-    .hint { font-size: .78rem; color: #64748b; margin-top: -.5rem; margin-bottom: 1rem; }
-  </style>
-</head>
-<body>
-<div class="card">
-  <h2>📤 Send Intro Message</h2>
-  <label>Country Code + Number</label>
-  <input type="tel" id="phone" placeholder="919876543210" inputmode="numeric" />
-  <p class="hint">Include country code, no + or spaces. E.g. 919876543210</p>
-  <button id="btn" onclick="send()">Send Message</button>
-  <div class="result" id="result"></div>
+  const { typeWebhook, senderData, messageData } = req.body || {};
+  if (typeWebhook !== 'incomingMessageReceived') return;
+  if (!senderData?.chatId || !messageData) return;
 
-  <hr style="border-color:#334155;margin:1.5rem 0">
-  <h2 style="margin-bottom:.75rem;color:#f87171">🔄 Reset WhatsApp Session</h2>
-  <p style="font-size:.82rem;color:#94a3b8;margin-bottom:1rem">Use this if messages show "Waiting for this message" — clears saved session and generates a new QR code.</p>
-  <button id="rbtn" onclick="resetSession()" style="background:#dc2626">Reset Session &amp; Re-scan QR</button>
-  <div class="result" id="rresult"></div>
-</div>
-<script>
-  async function send() {
-    const phone = document.getElementById('phone').value.replace(/\\D/g, '');
-    const btn   = document.getElementById('btn');
-    const result = document.getElementById('result');
-    if (phone.length < 10) {
-      result.textContent = '⚠️ Enter a valid phone number';
-      result.className = 'result err';
-      result.style.display = 'block';
-      return;
-    }
-    btn.disabled = true;
-    btn.textContent = 'Sending…';
-    result.style.display = 'none';
-    try {
-      const res = await fetch('/send?to=' + phone + '&token=${token}');
-      const text = await res.text();
-      result.textContent = res.ok ? '✅ ' + text : '❌ ' + text;
-      result.className = 'result ' + (res.ok ? 'ok' : 'err');
-    } catch (e) {
-      result.textContent = '❌ Network error';
-      result.className = 'result err';
-    }
-    result.style.display = 'block';
-    btn.disabled = false;
-    btn.textContent = 'Send Message';
-    if (document.getElementById('phone')) document.getElementById('phone').value = '';
-  }
-  document.getElementById('phone').addEventListener('keydown', e => { if (e.key === 'Enter') send(); });
+  const chatId = senderData.chatId;
+  if (chatId.endsWith('@g.us')) return; // skip groups
 
-  async function resetSession() {
-    if (!confirm('This will disconnect WhatsApp and require a new QR scan. Are you sure?')) return;
-    const rbtn = document.getElementById('rbtn');
-    const rresult = document.getElementById('rresult');
-    rbtn.disabled = true;
-    rbtn.textContent = 'Resetting…';
-    rresult.style.display = 'none';
-    try {
-      const res = await fetch('/reset-session', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ token: '${token}' })
-      });
-      const d = await res.json();
-      rresult.textContent = res.ok ? '✅ ' + d.message : '❌ ' + (d.error || 'Failed');
-      rresult.className = 'result ' + (res.ok ? 'ok' : 'err');
-      if (res.ok) setTimeout(() => { window.location.href = '/'; }, 3000);
-    } catch (e) {
-      rresult.textContent = '❌ Network error';
-      rresult.className = 'result err';
-    }
-    rresult.style.display = 'block';
-    rbtn.disabled = false;
-    rbtn.textContent = 'Reset Session & Re-scan QR';
-  }
-</script>
-</body>
-</html>`;
-}
+  const msgType = messageData.typeMessage || '';
+  let body = '';
+  if (msgType === 'textMessage')         body = messageData.textMessageData?.textMessage || '';
+  else if (msgType === 'extendedTextMessage') body = messageData.extendedTextMessageData?.text || '';
+  else if (msgType === 'imageMessage')   body = messageData.imageMessageData?.caption || '';
 
-// ─── Bootstrap: init Baileys socket ──────────────────────────
-async function bootstrap() {
-  if (isBootstrapping) return;
-  isBootstrapping = true;
+  console.log(`[webhook] Message from ${chatId}: "${body.slice(0, 40)}"`);
 
-  if (!supabase) {
-    supabase = createSupabaseClient(process.env.SUPABASE_URL, process.env.SUPABASE_KEY);
-  }
+  const wrappedMsg = {
+    from: chatId,
+    body,
+    type: msgType === 'imageMessage' ? 'image' : 'chat',
+    getContact: async () => ({
+      pushname: senderData.senderName || '',
+      name:     senderData.senderName || '',
+      id: { _serialized: chatId },
+    }),
+    downloadMedia: async () => null,
+    reply: async (text) => { await gaSend(chatId, text); },
+  };
 
-  const { state, saveCreds } = await useSupabaseAuthState(supabase);
-  const logger = pino({ level: 'warn' }); // warn level exposes hidden Baileys errors
-
-  const { version, isLatest } = await fetchLatestBaileysVersion();
-  console.log(`[wa] WA version: ${version.join('.')}, isLatest: ${isLatest}`);
-
-  sock = makeWASocket({
-    version,
-    auth: state,
-    printQRInTerminal: false,
-    logger,
-    browser: Browsers.ubuntu('Chrome'),
-    generateHighQualityLinkPreview: false,
-    markOnlineOnConnect: true,
-    syncFullHistory: false,
-    connectTimeoutMs: 60000,
-    defaultQueryTimeoutMs: 60000,
-    keepAliveIntervalMs: 30000,
-    getMessage: async (key) => sentMessageStore.get(key.id),
-  });
-
-  // Persist credentials whenever they change
-  sock.ev.on('creds.update', saveCreds);
-
-  // QR / connection state changes
-  sock.ev.on('connection.update', ({ connection, lastDisconnect, qr }) => {
-    if (qr) {
-      currentQR = qr;
-      console.log('[wa] QR received — scan at http://localhost:' + PORT);
-    }
-    if (connection === 'open') {
-      botReady        = true;
-      currentQR       = null;
-      isBootstrapping = false;
-      console.log('[wa] ✅ WhatsApp client is ready!');
-    }
-    if (connection === 'close') {
-      botReady = false;
-      const code      = lastDisconnect?.error?.output?.statusCode;
-      const loggedOut = code === DisconnectReason.loggedOut;
-      const replaced  = code === 440;
-
-      if (loggedOut) {
-        console.log('[wa] Logged out — re-scan QR at the URL');
-        isBootstrapping = false;
-        setTimeout(() => bootstrap(), 3000);
-      } else if (replaced) {
-        // Reconnect once after 60 s — long enough for any competing session
-        // (e.g. Render deploy overlap) to have settled. If we got a 440 very
-        // recently (< 3 min ago), skip reconnect to avoid a rapid loop.
-        const now = Date.now();
-        if (now - replacedAt < 180000) {
-          console.warn('[wa] 440 again within 3 min — skipping reconnect to prevent loop');
-        } else {
-          replacedAt = now;
-          console.log('[wa] Connection replaced — reconnecting in 60 s...');
-          isBootstrapping = false;
-          setTimeout(() => bootstrap(), 60000);
-        }
-      } else {
-        console.warn('[wa] Disconnected, code:', code, '(reconnecting in 5s...)');
-        isBootstrapping = false;
-        setTimeout(() => bootstrap(), 5000);
+  try {
+    const replies = await flow.handleMessage(wrappedMsg);
+    for (const reply of replies) {
+      if (typeof reply === 'object' && reply._adminAlert) {
+        await gaSend(ownerChatId, reply._adminAlert);
+        continue;
+      }
+      if (typeof reply === 'string') {
+        await gaSend(chatId, reply);
       }
     }
-  });
-
-  // Incoming messages
-  sock.ev.on('messages.upsert', async ({ messages, type }) => {
-    if (type !== 'notify') return;
-
-    for (const rawMsg of messages) {
-      try {
-        if (rawMsg.key.fromMe) continue;
-        const jid = rawMsg.key.remoteJid;
-        if (!jid || jid.endsWith('@g.us')) continue;
-
-        // @lid is WhatsApp's internal device-sync identifier used in multi-device.
-        // These are NOT real user messages — they're copies of messages routed to
-        // linked devices for sync. Replying to @lid JIDs uses a different Signal
-        // session than the user's actual @s.whatsapp.net session, so the reply
-        // can't be decrypted → "Waiting for this message". Skip entirely.
-        if (jid.endsWith('@lid')) continue;
-
-        // rawMsg.message is null when Signal decryption failed (Bad MAC).
-        // Replying with a broken session causes "Waiting for this message"
-        // on the recipient side. Skip and let the Signal session auto-reset
-        // via the prekey bundle exchange that WhatsApp triggers automatically.
-        if (!rawMsg.message) {
-          console.warn('[wa] Skipping undecryptable message from', jid, '— session will auto-reset');
-          continue;
-        }
-
-        const msgContent = rawMsg.message || {};
-        const msgType    = Object.keys(msgContent)[0] || '';
-
-        let body = '';
-        if (msgType === 'conversation')         body = msgContent.conversation || '';
-        else if (msgType === 'extendedTextMessage') body = msgContent.extendedTextMessage?.text || '';
-        else if (msgType === 'imageMessage')    body = msgContent.imageMessage?.caption || '';
-
-        // Capture current socket in closure so replies always use the live socket
-        const liveSock = sock;
-
-        // whatsapp-web.js compatible wrapper — flow.js never needs to change
-        const wrappedMsg = {
-          from: jid,
-          body,
-          type: msgType === 'imageMessage' ? 'image' : 'chat',
-          getContact: async () => ({
-            pushname: rawMsg.pushName || '',
-            name:     rawMsg.pushName || '',
-            id: { _serialized: jid },
-          }),
-          downloadMedia: async () => {
-            try {
-              const buffer = await downloadMediaMessage(rawMsg, 'buffer', {}, {
-                logger,
-                reuploadRequest: liveSock.updateMediaMessage,
-              });
-              return {
-                data:     buffer.toString('base64'),
-                mimetype: msgContent.imageMessage?.mimetype || 'image/jpeg',
-              };
-            } catch (e) {
-              console.error('[wa] Media download error:', e.message);
-              return null;
-            }
-          },
-          reply: async (text) => {
-            storeMessage(await liveSock.sendMessage(jid, { text }));
-          },
-        };
-
-        const replies = await flow.handleMessage(wrappedMsg);
-
-        for (const reply of replies) {
-          if (typeof reply === 'object' && reply._adminAlert) {
-            try {
-              storeMessage(await liveSock.sendMessage(ownerJid, { text: reply._adminAlert }));
-            } catch (e) {
-              console.error('[wa] Failed to send admin alert:', e.message);
-            }
-            continue;
-          }
-          if (typeof reply === 'string') {
-            try {
-              storeMessage(await liveSock.sendMessage(jid, { text: reply }));
-            } catch (e) {
-              console.error('[wa] Failed to send reply:', e.message);
-            }
-          }
-        }
-      } catch (err) {
-        console.error('[wa] Message handler error:', err.message);
-        try {
-          storeMessage(await sock.sendMessage(rawMsg.key.remoteJid, { text: config.errorMessage }));
-          flow.clearSession(rawMsg.key.remoteJid);
-        } catch (_) {}
-      }
-    }
-  });
-}
-
-// ─── Start ───────────────────────────────────────────────────
-app.listen(PORT, () => {
-  console.log(`[server] Express running on http://localhost:${PORT}`);
+  } catch (err) {
+    console.error('[webhook] Handler error:', err.message);
+    try {
+      await gaSend(chatId, config.errorMessage);
+      flow.clearSession(chatId);
+    } catch (_) {}
+  }
 });
 
-bootstrap().catch((err) => {
-  console.error('[boot] Bootstrap failed:', err.message);
-  setTimeout(() => bootstrap().catch(e => console.error('[boot] Retry failed:', e.message)), 10000);
+// ─── Admin page ───────────────────────────────────────────────
+function adminPage(token) {
+  return `<!DOCTYPE html>
+<html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>CLEANLY — Admin</title>
+<style>*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:system-ui,sans-serif;background:#0a1628;color:#e2e8f0;min-height:100vh;display:flex;justify-content:center;align-items:center;padding:1rem}
+.card{background:#1e293b;border-radius:1rem;padding:2rem;width:100%;max-width:420px;box-shadow:0 8px 32px rgba(0,0,0,.4)}
+h2{margin-bottom:1.5rem;font-size:1.2rem;color:#f1f5f9}
+label{display:block;font-size:.85rem;color:#94a3b8;margin-bottom:.4rem}
+input{width:100%;padding:.75rem 1rem;border-radius:.5rem;border:1px solid #334155;background:#0f172a;color:#f1f5f9;font-size:1rem;margin-bottom:1rem;outline:none}
+input:focus{border-color:#38bdf8}
+button{width:100%;padding:.85rem;border-radius:.5rem;border:none;background:#22c55e;color:#fff;font-size:1rem;font-weight:600;cursor:pointer}
+button:hover{background:#16a34a}button:disabled{background:#334155;cursor:not-allowed}
+.result{margin-top:1rem;padding:.75rem 1rem;border-radius:.5rem;font-size:.9rem;display:none}
+.result.ok{background:#14532d;color:#86efac}.result.err{background:#4c0519;color:#fca5a5}
+.hint{font-size:.78rem;color:#64748b;margin-top:-.5rem;margin-bottom:1rem}</style>
+</head><body><div class="card">
+<h2>📤 Send Intro Message</h2>
+<label>Country Code + Number</label>
+<input type="tel" id="phone" placeholder="919876543210" inputmode="numeric"/>
+<p class="hint">Include country code, no + or spaces.</p>
+<button id="btn" onclick="send()">Send Message</button>
+<div class="result" id="result"></div>
+</div>
+<script>
+async function send(){
+  const phone=document.getElementById('phone').value.replace(/\\D/g,'');
+  const btn=document.getElementById('btn'),result=document.getElementById('result');
+  if(phone.length<10){result.textContent='⚠️ Enter a valid phone number';result.className='result err';result.style.display='block';return;}
+  btn.disabled=true;btn.textContent='Sending…';result.style.display='none';
+  try{const res=await fetch('/send?to='+phone+'&token=${token}');const text=await res.text();
+  result.textContent=res.ok?'✅ '+text:'❌ '+text;result.className='result '+(res.ok?'ok':'err');}
+  catch(e){result.textContent='❌ Network error';result.className='result err';}
+  result.style.display='block';btn.disabled=false;btn.textContent='Send Message';
+  document.getElementById('phone').value='';
+}
+document.getElementById('phone').addEventListener('keydown',e=>{if(e.key==='Enter')send();});
+</script></body></html>`;
+}
+
+// ─── Start ────────────────────────────────────────────────────
+app.listen(PORT, () => {
+  console.log(`[server] Running on http://localhost:${PORT}`);
+  if (botReady()) {
+    console.log(`[green] Green API configured — instance ${GA_INSTANCE}`);
+    console.log(`[green] Webhook URL: https://YOUR-RENDER-URL.onrender.com/webhook`);
+  } else {
+    console.warn('[green] ⚠️  GREENAPI_INSTANCE_ID or GREENAPI_TOKEN not set');
+  }
 });
