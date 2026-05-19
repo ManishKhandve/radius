@@ -31,7 +31,8 @@ let currentQR      = null;
 let botReady       = false;
 let sock           = null;
 let supabase       = null;
-let isBootstrapping = false;
+let isBootstrapping  = false;
+let replacedAt       = 0;   // timestamp of last 440, used to throttle reconnect attempts
 
 // Store outgoing messages so WhatsApp can retry decryption if needed
 const sentMessageStore = new Map();
@@ -374,7 +375,18 @@ async function bootstrap() {
         isBootstrapping = false;
         setTimeout(() => bootstrap(), 3000);
       } else if (replaced) {
-        console.log('[wa] Connection replaced — new session took over, not reconnecting');
+        // Reconnect once after 60 s — long enough for any competing session
+        // (e.g. Render deploy overlap) to have settled. If we got a 440 very
+        // recently (< 3 min ago), skip reconnect to avoid a rapid loop.
+        const now = Date.now();
+        if (now - replacedAt < 180000) {
+          console.warn('[wa] 440 again within 3 min — skipping reconnect to prevent loop');
+        } else {
+          replacedAt = now;
+          console.log('[wa] Connection replaced — reconnecting in 60 s...');
+          isBootstrapping = false;
+          setTimeout(() => bootstrap(), 60000);
+        }
       } else {
         console.warn('[wa] Disconnected, code:', code, '(reconnecting in 5s...)');
         isBootstrapping = false;
@@ -392,6 +404,15 @@ async function bootstrap() {
         if (rawMsg.key.fromMe) continue;
         const jid = rawMsg.key.remoteJid;
         if (!jid || jid.endsWith('@g.us')) continue;
+
+        // rawMsg.message is null when Signal decryption failed (Bad MAC).
+        // Replying with a broken session causes "Waiting for this message"
+        // on the recipient side. Skip and let the Signal session auto-reset
+        // via the prekey bundle exchange that WhatsApp triggers automatically.
+        if (!rawMsg.message) {
+          console.warn('[wa] Skipping undecryptable message from', jid, '— session will auto-reset');
+          continue;
+        }
 
         const msgContent = rawMsg.message || {};
         const msgType    = Object.keys(msgContent)[0] || '';
