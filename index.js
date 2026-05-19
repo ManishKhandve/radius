@@ -99,6 +99,35 @@ app.get('/send', async (req, res) => {
   }
 });
 
+app.post('/reset-session', async (req, res) => {
+  const { token } = req.body;
+  if (!token || token !== process.env.ADMIN_TOKEN) return res.status(401).json({ error: 'Unauthorized' });
+
+  console.log('[reset] Clearing Baileys session from Supabase…');
+  try {
+    if (!supabase) {
+      supabase = createSupabaseClient(process.env.SUPABASE_URL, process.env.SUPABASE_KEY);
+    }
+    await supabase.storage.from('whatsapp-sessions').remove(['baileys-creds.json', 'baileys-keys.json']);
+    console.log('[reset] Session files deleted');
+  } catch (e) {
+    console.warn('[reset] Could not delete session files:', e.message);
+  }
+
+  // Kill current socket
+  if (sock) {
+    try { sock.end(undefined); } catch (_) {}
+    sock = null;
+  }
+  botReady        = false;
+  currentQR       = null;
+  isBootstrapping = false;
+
+  // Start fresh — will generate new QR
+  setTimeout(() => bootstrap(), 1000);
+  res.json({ success: true, message: 'Session cleared. Scan QR at / within 60 seconds.' });
+});
+
 app.post('/verify-payment', async (req, res) => {
   const { token, phone, bookingId, name, lang } = req.body;
   if (!token || token !== process.env.ADMIN_TOKEN) return res.status(403).json({ error: 'Unauthorized' });
@@ -213,6 +242,12 @@ function adminPage(token) {
   <p class="hint">Include country code, no + or spaces. E.g. 919876543210</p>
   <button id="btn" onclick="send()">Send Message</button>
   <div class="result" id="result"></div>
+
+  <hr style="border-color:#334155;margin:1.5rem 0">
+  <h2 style="margin-bottom:.75rem;color:#f87171">🔄 Reset WhatsApp Session</h2>
+  <p style="font-size:.82rem;color:#94a3b8;margin-bottom:1rem">Use this if messages show "Waiting for this message" — clears saved session and generates a new QR code.</p>
+  <button id="rbtn" onclick="resetSession()" style="background:#dc2626">Reset Session &amp; Re-scan QR</button>
+  <div class="result" id="rresult"></div>
 </div>
 <script>
   async function send() {
@@ -243,6 +278,32 @@ function adminPage(token) {
     if (document.getElementById('phone')) document.getElementById('phone').value = '';
   }
   document.getElementById('phone').addEventListener('keydown', e => { if (e.key === 'Enter') send(); });
+
+  async function resetSession() {
+    if (!confirm('This will disconnect WhatsApp and require a new QR scan. Are you sure?')) return;
+    const rbtn = document.getElementById('rbtn');
+    const rresult = document.getElementById('rresult');
+    rbtn.disabled = true;
+    rbtn.textContent = 'Resetting…';
+    rresult.style.display = 'none';
+    try {
+      const res = await fetch('/reset-session', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ token: '${token}' })
+      });
+      const d = await res.json();
+      rresult.textContent = res.ok ? '✅ ' + d.message : '❌ ' + (d.error || 'Failed');
+      rresult.className = 'result ' + (res.ok ? 'ok' : 'err');
+      if (res.ok) setTimeout(() => { window.location.href = '/'; }, 3000);
+    } catch (e) {
+      rresult.textContent = '❌ Network error';
+      rresult.className = 'result err';
+    }
+    rresult.style.display = 'block';
+    rbtn.disabled = false;
+    rbtn.textContent = 'Reset Session & Re-scan QR';
+  }
 </script>
 </body>
 </html>`;
