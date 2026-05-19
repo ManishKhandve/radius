@@ -27,10 +27,11 @@ app.use(express.json());
 const PORT = process.env.PORT || 3000;
 
 // ─── State ───────────────────────────────────────────────────
-let currentQR = null;
-let botReady  = false;
-let sock      = null;
-let supabase  = null;
+let currentQR      = null;
+let botReady       = false;
+let sock           = null;
+let supabase       = null;
+let isBootstrapping = false;
 
 // Convert any phone/JID to Baileys @s.whatsapp.net format
 function toJid(phone) {
@@ -249,6 +250,9 @@ function adminPage(token) {
 
 // ─── Bootstrap: init Baileys socket ──────────────────────────
 async function bootstrap() {
+  if (isBootstrapping) return;
+  isBootstrapping = true;
+
   if (!supabase) {
     supabase = createSupabaseClient(process.env.SUPABASE_URL, process.env.SUPABASE_KEY);
   }
@@ -281,16 +285,27 @@ async function bootstrap() {
       console.log('[wa] QR received — scan at http://localhost:' + PORT);
     }
     if (connection === 'open') {
-      botReady  = true;
-      currentQR = null;
+      botReady        = true;
+      currentQR       = null;
+      isBootstrapping = false;
       console.log('[wa] ✅ WhatsApp client is ready!');
     }
     if (connection === 'close') {
       botReady = false;
       const code      = lastDisconnect?.error?.output?.statusCode;
       const loggedOut = code === DisconnectReason.loggedOut;
-      console.warn('[wa] Disconnected, code:', code, loggedOut ? '(logged out)' : '(reconnecting...)');
-      if (!loggedOut) setTimeout(() => bootstrap(), 5000);
+      const replaced  = code === 440;
+
+      if (loggedOut) {
+        console.log('[wa] Logged out — re-scan QR at the URL');
+        isBootstrapping = false;
+        setTimeout(() => bootstrap(), 3000);
+      } else if (replaced) {
+        console.log('[wa] Connection replaced — new session took over, not reconnecting');
+      } else {
+        console.warn('[wa] Disconnected, code:', code, '(reconnecting in 5s...)');
+        setTimeout(() => bootstrap(), 5000);
+      }
     }
   });
 
