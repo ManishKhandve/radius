@@ -314,7 +314,7 @@ async function processState(session, body, senderId, msg) {
     case "CLEANING_BATHROOM_ACTION": {
       if (body === "1") {
         session.state = "COLLECT_FLAT";
-        return [config.collectFlatMessage[session.data.lang || "en"]];
+        return [config.cleaningAddressMessage[session.data.lang || "en"]];
       } else if (body === "2") {
         const msg = config.supportMessage[session.data.lang];
         clearSession(senderId);
@@ -327,7 +327,7 @@ async function processState(session, body, senderId, msg) {
     case "CLEANING_CONTINUE": {
       if (body === "1") {
         session.state = "COLLECT_FLAT";
-        return [config.collectFlatMessage[session.data.lang || "en"]];
+        return [config.cleaningAddressMessage[session.data.lang || "en"]];
       } else {
         // Invalid input
         return [session.data.lang === "hi" ? "आगे बढ़ने के लिए 1 रिप्लाई करें।" : session.data.lang === "mr" ? "पुढे जाण्यासाठी 1 रिप्लाय करा." : "Please reply 1 to continue."];
@@ -377,7 +377,7 @@ async function processState(session, body, senderId, msg) {
         session.data.cleaningDetails = "Mini Services: " + serviceDetails.join(', ');
         session.data.cleaningPrice = `₹${totalPrice}`;
         session.state = "COLLECT_FLAT";
-        return [config.collectFlatMessage[session.data.lang || "en"]];
+        return [config.cleaningAddressMessage[session.data.lang || "en"]];
         
       } catch (err) {
         const msg = session.data.lang === "hi"
@@ -389,39 +389,11 @@ async function processState(session, body, senderId, msg) {
       }
     }
 
-    case "CLEANING_LOCATION": {
-      if (body === "1") {
-        session.data.cleaningCity = "Pune";
-      } else if (body === "2") {
-        session.data.cleaningCity = "PCMC";
-      } else {
-        return [config.cleaningLocationMessage[session.data.lang]];
-      }
-      session.state = "CLEANING_AREA";
-      return [config.getCleaningAreaMessage(session.data.cleaningCity, session.data.lang)];
-    }
-
-    case "CLEANING_AREA": {
-      const idx = parseInt(body) - 1;
-      const areas = session.data.cleaningCity === "Pune" ? config.puneAreas : config.pcmcAreas;
-      if (isNaN(idx) || idx < 0 || idx >= areas.length) {
-        return [config.getCleaningAreaMessage(session.data.cleaningCity, session.data.lang)];
-      }
-      const selectedArea = areas[idx];
-      session.data.cleaningArea = selectedArea;
-      session.data.cleaningLocation = `${selectedArea}, ${session.data.cleaningCity}`;
-      session.state = "COLLECT_FLAT";
-      return [config.collectFlatMessage[session.data.lang || "en"]];
-    }
-
     case "COLLECT_FLAT": {
+      const isCleaning = session.data.serviceCategory === "cleaning";
+      const lang = session.data.lang || "en";
       if (body.length <= 3) {
-        const msg = session.data.lang === "hi"
-          ? "🏠 अपना फ्लैट नंबर और एरिया/सोसायटी का नाम बताएं।\n(उदाहरण: Flat 4B, Cidco N-6)"
-          : session.data.lang === "mr"
-          ? "🏠 तुमचा फ्लॅट नंबर आणि एरिया/सोसायटी चे नाव सांगा.\n(उदाहरण: Flat 4B, Cidco N-6)"
-          : "🏠 Please share your flat number and area/society name.\n(Example: Flat 4B, Cidco N-6)";
-        return [msg];
+        return [isCleaning ? config.cleaningAddressMessage[lang] : config.collectFlatMessage[lang]];
       }
       
       // Check if we're in cleaning flow or maid flow

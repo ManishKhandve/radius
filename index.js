@@ -304,6 +304,7 @@ async function bootstrap() {
         console.log('[wa] Connection replaced — new session took over, not reconnecting');
       } else {
         console.warn('[wa] Disconnected, code:', code, '(reconnecting in 5s...)');
+        isBootstrapping = false;
         setTimeout(() => bootstrap(), 5000);
       }
     }
