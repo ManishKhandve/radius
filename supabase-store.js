@@ -46,15 +46,25 @@ async function useSupabaseAuthState(supabase) {
     }
   }
 
-  async function saveKeys() {
-    try {
-      const buf = Buffer.from(JSON.stringify(keys, BufferJSON.replacer));
-      const { error } = await supabase.storage.from(BUCKET)
-        .upload(KEYS_FILE, buf, { upsert: true, contentType: 'application/json' });
-      if (error) console.error('[supabase-auth] Keys save error:', error.message);
-    } catch (e) {
-      console.error('[supabase-auth] Keys save error:', e.message);
-    }
+  // Sequential write chain: each save waits for the previous to finish.
+  // Without this, two concurrent uploads can race — the slower one
+  // finishes last and overwrites Supabase with stale Signal keys,
+  // causing "Waiting for this message" after the bot restarts.
+  let keySaveChain = Promise.resolve();
+
+  function saveKeys() {
+    keySaveChain = keySaveChain.catch(() => {}).then(async () => {
+      // Snapshot is taken here (inside the chain), so it always
+      // captures the latest in-memory keys at the time this save runs.
+      const snapshot = Buffer.from(JSON.stringify(keys, BufferJSON.replacer));
+      try {
+        const { error } = await supabase.storage.from(BUCKET)
+          .upload(KEYS_FILE, snapshot, { upsert: true, contentType: 'application/json' });
+        if (error) console.error('[supabase-auth] Keys save error:', error.message);
+      } catch (e) {
+        console.error('[supabase-auth] Keys save error:', e.message);
+      }
+    });
   }
 
   return {
@@ -69,14 +79,14 @@ async function useSupabaseAuthState(supabase) {
           }
           return result;
         },
-        set: async (data) => {
+        set: (data) => {
           for (const [type, typeData] of Object.entries(data)) {
             for (const [id, value] of Object.entries(typeData || {})) {
               if (value) keys[`${type}-${id}`] = value;
               else delete keys[`${type}-${id}`];
             }
           }
-          await saveKeys();
+          saveKeys(); // non-blocking — in-memory update is immediate, Supabase write is queued
         },
       },
     },
