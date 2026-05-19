@@ -64,16 +64,21 @@ async function useSupabaseAuthState(supabase) {
   // ── Prepare local auth directory ─────────────────────────────
   await fs.mkdir(AUTH_DIR, { recursive: true });
 
-  // ── Restore files from Supabase ──────────────────────────────
+  // ── Restore files from Supabase (sessions intentionally excluded) ──
+  // sessions.json is kept ephemeral — always start with a fresh Signal session.
+  // Persisting sessions causes stale ratchet state after restarts, which is
+  // the root cause of 'Waiting for this message'. Signal handles fresh-session
+  // first messages (PreKeyWhisperMessage) automatically — no user impact.
+  const RESTORE_FILES = AUTH_FILES.filter(f => f !== 'sessions.json');
   let restored = 0;
-  for (const file of AUTH_FILES) {
+  for (const file of RESTORE_FILES) {
     const content = await sbDownload(supabase, file);
     if (content) {
       await fs.writeFile(path.join(AUTH_DIR, file), content, 'utf-8');
       restored++;
     }
   }
-  console.log(`[supabase-auth] ✅ Restored ${restored}/${AUTH_FILES.length} auth files from Supabase`);
+  console.log(`[supabase-auth] ✅ Restored ${restored}/${RESTORE_FILES.length} auth files (sessions always fresh)`);
 
   // ── Use official Baileys auth state (battle-tested Signal impl) ──
   const { state, saveCreds: _saveCreds } = await useMultiFileAuthState(AUTH_DIR);
@@ -104,11 +109,14 @@ async function useSupabaseAuthState(supabase) {
   };
 
   // ── Wrap keys.set to push affected key files to Supabase ─────
+  // sessions.json is excluded — intentionally ephemeral (see above).
   const origSet = state.keys.set.bind(state.keys);
   state.keys.set = async (data) => {
     await origSet(data); // write to local FS first (official impl, awaited)
     const files = [...new Set(
-      Object.keys(data).map(t => KEY_FILE_MAP[t]).filter(Boolean)
+      Object.keys(data)
+        .map(t => KEY_FILE_MAP[t])
+        .filter(f => f && f !== 'sessions.json') // never persist sessions
     )];
     if (files.length) scheduleSync(files);
   };

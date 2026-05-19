@@ -2,7 +2,7 @@
 // index.js — WhatsApp client (Baileys) + Express server + QR page
 // ============================================================
 
-const { default: makeWASocket, DisconnectReason, downloadMediaMessage, fetchLatestBaileysVersion } = require('@whiskeysockets/baileys');
+const { default: makeWASocket, DisconnectReason, downloadMediaMessage, fetchLatestBaileysVersion, Browsers } = require('@whiskeysockets/baileys');
 const { createClient: createSupabaseClient } = require('@supabase/supabase-js');
 const { useSupabaseAuthState } = require('./supabase-store');
 const { addInvite } = require('./invite-store');
@@ -329,7 +329,7 @@ async function bootstrap() {
   }
 
   const { state, saveCreds } = await useSupabaseAuthState(supabase);
-  const logger = pino({ level: 'silent' });
+  const logger = pino({ level: 'warn' }); // warn level exposes hidden Baileys errors
 
   const { version, isLatest } = await fetchLatestBaileysVersion();
   console.log(`[wa] WA version: ${version.join('.')}, isLatest: ${isLatest}`);
@@ -339,7 +339,7 @@ async function bootstrap() {
     auth: state,
     printQRInTerminal: false,
     logger,
-    browser: ['Ubuntu', 'Chrome', '120.0.0'],
+    browser: Browsers.ubuntu('Chrome'),
     generateHighQualityLinkPreview: false,
     markOnlineOnConnect: true,
     syncFullHistory: false,
