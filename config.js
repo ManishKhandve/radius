@@ -23,7 +23,6 @@ const workTypes = {
   "2": "Cleaning",
   "3": "Babysitter",
   "4": "Caretaker",
-  "5": "All Rounder"
 };
 
 const timings = {
@@ -76,19 +75,25 @@ const workTypeMessage = {
 2️⃣ Cleaning
 3️⃣ Babysitter
 4️⃣ Caretaker
-5️⃣ All Rounder`,
+5️⃣ Custom (type your specific need)`,
   hi: `कौन से काम की जरूरत है?
 1️⃣ खाना बनाना
 2️⃣ सफाई
 3️⃣ बच्चों की देखभाल
 4️⃣ बुजुर्गों की देखभाल
-5️⃣ ऑल राउंडर`,
+5️⃣ कस्टम (अपनी जरूरत लिखें)`,
   mr: `कोणत्या कामाची गरज आहे?
 1️⃣ स्वयंपाक
 2️⃣ साफसफाई
 3️⃣ मुलांची काळजी
 4️⃣ वृद्धांची काळजी
-5️⃣ ऑल राउंडर`
+5️⃣ कस्टम (तुमची गरज लिहा)`
+};
+
+const workTypeCustomMessage = {
+  en: `Please describe the type of work you need.\n(Example: Cook + Cleaning, Night duty, etc.)`,
+  hi: `आपको किस तरह का काम चाहिए, वो लिखें।\n(उदाहरण: खाना + सफाई, रात की ड्यूटी, आदि)`,
+  mr: `तुम्हाला कोणत्या प्रकारचे काम हवे आहे ते लिहा.\n(उदाहरण: स्वयंपाक + साफसफाई, रात्र ड्युटी, इ.)`
 };
 
 const timingMessage = {
@@ -1162,6 +1167,7 @@ module.exports = {
   languageMessage,
   mainMenuMessage,
   workTypeMessage,
+  workTypeCustomMessage,
   timingMessage,
   budgetMessage,
   glideLinkMessage,
