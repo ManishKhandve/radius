@@ -457,20 +457,9 @@ async function processState(session, body, senderId, msg) {
     // MAID SERVICE FLOW (Original)
     // ==========================================
     case "WORK_TYPE": {
-      if (body === "5") {
-        session.state = "WORK_TYPE_CUSTOM";
-        return [config.workTypeCustomMessage[session.data.lang]];
-      }
       const v = config.workTypes[body];
       if (!v) return [config.workTypeMessage[session.data.lang]];
       session.data.workType = v;
-      session.state = "TIMING";
-      return [config.timingMessage[session.data.lang]];
-    }
-
-    case "WORK_TYPE_CUSTOM": {
-      if (body.length < 3) return [config.workTypeCustomMessage[session.data.lang]];
-      session.data.workType = body;
       session.state = "TIMING";
       return [config.timingMessage[session.data.lang]];
     }
