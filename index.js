@@ -238,8 +238,12 @@ async function bootstrap() {
       try {
         console.log('[wa] msg from:', rawMsg.key.remoteJid, 'fromMe:', rawMsg.key.fromMe, 'hasMsg:', !!rawMsg.message);
         if (rawMsg.key.fromMe) continue;
-        const jid = rawMsg.key.remoteJid;
+        let jid = rawMsg.key.remoteJid;
         if (!jid || jid.endsWith('@g.us')) continue;
+        // Translate @lid to actual phone number if available
+        if (jid.endsWith('@lid') && rawMsg.key.senderPn) {
+          jid = rawMsg.key.senderPn;
+        }
         if (!rawMsg.message) {
           console.warn('[wa] Skipping undecryptable message from', jid);
           continue;
