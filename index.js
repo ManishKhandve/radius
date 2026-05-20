@@ -239,7 +239,7 @@ async function bootstrap() {
         console.log('[wa] msg from:', rawMsg.key.remoteJid, 'fromMe:', rawMsg.key.fromMe, 'hasMsg:', !!rawMsg.message);
         if (rawMsg.key.fromMe) continue;
         const jid = rawMsg.key.remoteJid;
-        if (!jid || jid.endsWith('@g.us') || jid.endsWith('@lid')) continue;
+        if (!jid || jid.endsWith('@g.us')) continue;
         if (!rawMsg.message) {
           console.warn('[wa] Skipping undecryptable message from', jid);
           continue;
