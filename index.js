@@ -232,9 +232,11 @@ async function bootstrap() {
   });
 
   sock.ev.on('messages.upsert', async ({ messages, type }) => {
+    console.log('[wa] upsert type:', type, 'count:', messages.length);
     if (type !== 'notify') return;
     for (const rawMsg of messages) {
       try {
+        console.log('[wa] msg from:', rawMsg.key.remoteJid, 'fromMe:', rawMsg.key.fromMe, 'hasMsg:', !!rawMsg.message);
         if (rawMsg.key.fromMe) continue;
         const jid = rawMsg.key.remoteJid;
         if (!jid || jid.endsWith('@g.us') || jid.endsWith('@lid')) continue;
