@@ -4,8 +4,11 @@ require('dotenv').config();
 const supabaseUrl = process.env.SUPABASE_URL;
 const supabaseKey = process.env.SUPABASE_KEY;
 
-// Create Supabase client only if credentials exist
-const supabase = (supabaseUrl && supabaseKey) ? createClient(supabaseUrl, supabaseKey) : null;
+// ws package fixes Node.js 20 WebSocket compatibility with Supabase
+const ws = require('ws');
+const supabase = (supabaseUrl && supabaseKey) ? createClient(supabaseUrl, supabaseKey, {
+  realtime: { transport: ws }
+}) : null;
 
 /**
  * Calculates the distance between two coordinates using the Haversine formula
