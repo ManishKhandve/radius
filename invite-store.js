@@ -1,52 +1,36 @@
-const { createClient } = require('@supabase/supabase-js');
+// invite-store.js — in-memory invite tracking (no Supabase needed on VPS)
 require('dotenv').config();
 
-const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_KEY);
+const invites = new Set();
 
 async function isInvited(phone) {
-  const { data } = await supabase
-    .from('pending_invites')
-    .select('phone')
-    .eq('phone', phone)
-    .single();
-  return !!data;
+  return invites.has(phone);
 }
 
 async function addInvite(phone) {
-  await supabase
-    .from('pending_invites')
-    .upsert({ phone });
+  invites.add(phone);
 }
 
 async function removeInvite(phone) {
-  await supabase
-    .from('pending_invites')
-    .delete()
-    .eq('phone', phone);
+  invites.delete(phone);
 }
 
-/**
- * Uploads a WhatsApp media receipt to Supabase Storage (receipts bucket)
- * and returns the permanent public URL.
- *
- * @param {string} bookingId  - used as part of the filename
- * @param {string} mediaData  - base64 encoded image data from msg.downloadMedia()
- * @param {string} mimetype   - e.g. 'image/jpeg'
- * @returns {string} public URL
- */
 async function uploadReceipt(bookingId, mediaData, mimetype) {
-  const ext      = mimetype.split('/')[1] || 'jpg';
-  const fileName = `${bookingId}-${Date.now()}.${ext}`;
-  const buffer   = Buffer.from(mediaData, 'base64');
-
-  const { error } = await supabase.storage
-    .from('receipts')
-    .upload(fileName, buffer, { contentType: mimetype, upsert: false });
-
-  if (error) throw new Error(`Receipt upload failed: ${error.message}`);
-
-  const { data } = supabase.storage.from('receipts').getPublicUrl(fileName);
-  return data.publicUrl;
+  // Receipt upload requires Supabase — skip on VPS, return null
+  if (!process.env.SUPABASE_URL || !process.env.SUPABASE_KEY) return null;
+  try {
+    const { createClient } = require('@supabase/supabase-js');
+    const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_KEY);
+    const ext      = mimetype.split('/')[1] || 'jpg';
+    const fileName = `${bookingId}-${Date.now()}.${ext}`;
+    const buffer   = Buffer.from(mediaData, 'base64');
+    const { error } = await supabase.storage
+      .from('receipts')
+      .upload(fileName, buffer, { contentType: mimetype, upsert: false });
+    if (error) return null;
+    const { data } = supabase.storage.from('receipts').getPublicUrl(fileName);
+    return data.publicUrl;
+  } catch { return null; }
 }
 
 module.exports = { isInvited, addInvite, removeInvite, uploadReceipt };
