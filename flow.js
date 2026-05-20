@@ -67,6 +67,7 @@ async function handleMessage(msg) {
   if (!session) {
     // Check Supabase for a pending admin invite
     const invited = await isInvited(senderId);
+    console.log('[flow] from:', senderId, '| invited:', invited, '| body:', body.slice(0, 40));
     if (invited) {
       // Delete invite immediately — session takes over from here
       await removeInvite(senderId);
