@@ -408,9 +408,9 @@ const flatDeepCleaningPriceMessage = (status, bhk, lang) => {
   let addOnsMr = "";
 
   if (status === "Furnished" || status === "Post Interior Cleaning") {
-    addOnsEn = `\n\n✨ *Recommended Add-ons:*\n• Kitchen external cleaning: ₹450\n• Sofa cleaning: ₹150 / seat\n\nReply *1* to proceed without add-ons\nReply *2* to cancel`;
-    addOnsHi = `\n\n✨ *सुझाए गए ऐड-ऑन:*\n• किचन एक्सटर्नल क्लीनिंग: ₹450\n• सोफा क्लीनिंग: ₹150 / सीट\n\nऐड-ऑन के बिना आगे बढ़ने के लिए *1* रिप्लाई करें\nकैंसिल के लिए *2* रिप्लाई करें`;
-    addOnsMr = `\n\n✨ *सुचवलेले ऐड-ऑन:*\n• किचन एक्सटर्नल क्लीनिंग: ₹450\n• सोफा क्लीनिंग: ₹150 / सीट\n\nऐड-ऑनशिवाय पुढे जाण्यासाठी *1* रिप्लाय करा\nकैंसलसाठी *2* रिप्लाय करा`;
+    addOnsEn = `\n\n✨ *Available Add-ons:*\n• Kitchen external cleaning: ₹450\n• Sofa cleaning: ₹150/seat\n\nReply *1* to continue without add-ons\nReply *2* to select add-ons\nReply *3* to cancel`;
+    addOnsHi = `\n\n✨ *उपलब्ध ऐड-ऑन:*\n• किचन एक्सटर्नल क्लीनिंग: ₹450\n• सोफा क्लीनिंग: ₹150/सीट\n\n*1* रिप्लाई करें — ऐड-ऑन के बिना आगे बढ़ें\n*2* रिप्लाई करें — ऐड-ऑन चुनें\n*3* रिप्लाई करें — कैंसिल`;
+    addOnsMr = `\n\n✨ *उपलब्ध ऐड-ऑन:*\n• किचन एक्सटर्नल क्लीनिंग: ₹450\n• सोफा क्लीनिंग: ₹150/सीट\n\n*1* रिप्लाय करा — ऐड-ऑनशिवाय पुढे चला\n*2* रिप्लाय करा — ऐड-ऑन निवडा\n*3* रिप्लाय करा — कैंसल`;
   } else {
     addOnsEn = `\n\nReply *1* to proceed with booking\nReply *2* to cancel`;
     addOnsHi = `\n\nबुकिंग के लिए *1* रिप्लाई करें\nकैंसिल के लिए *2* रिप्लाई करें`;
@@ -708,6 +708,39 @@ const cleaningAddressMessage = {
 (उदाहरण: Flat 4B, Sunrise Society, Baner, Pune)`,
   mr: `🏠 तुमचा संपूर्ण पत्ता सांगा.
 (उदाहरण: Flat 4B, Sunrise Society, Baner, Pune)`
+};
+
+const cleaningAddonsMessage = {
+  en: `✨ *Select Add-ons:*
+
+1️⃣ Kitchen External Cleaning — ₹450
+2️⃣ Sofa Cleaning — ₹150/seat
+3️⃣ Kitchen + Sofa (both)
+4️⃣ No add-ons, continue
+
+👉 Reply with your choice.`,
+  hi: `✨ *ऐड-ऑन चुनें:*
+
+1️⃣ किचन एक्सटर्नल क्लीनिंग — ₹450
+2️⃣ सोफा क्लीनिंग — ₹150/सीट
+3️⃣ किचन + सोफा (दोनों)
+4️⃣ कोई ऐड-ऑन नहीं, आगे बढ़ें
+
+👉 अपनी पसंद रिप्लाई करें।`,
+  mr: `✨ *ऐड-ऑन निवडा:*
+
+1️⃣ किचन एक्सटर्नल क्लीनिंग — ₹450
+2️⃣ सोफा क्लीनिंग — ₹150/सीट
+3️⃣ किचन + सोफा (दोन्ही)
+4️⃣ कोणतेही ऐड-ऑन नाही, पुढे चला
+
+👉 तुमची निवड रिप्लाय करा.`
+};
+
+const cleaningAddonsSofaMessage = {
+  en: `🛋️ How many sofa seats need cleaning?\n(Example: 3)`,
+  hi: `🛋️ कितने सोफा सीट साफ करनी हैं?\n(उदाहरण: 3)`,
+  mr: `🛋️ किती सोफा सीट साफ करायच्या आहेत?\n(उदाहरण: 3)`
 };
 
 const getCleaningAreaMessage = (city, lang) => {
@@ -1194,6 +1227,8 @@ module.exports = {
   miniServiceMessage,
   cleaningLocationMessage,
   cleaningAddressMessage,
+  cleaningAddonsMessage,
+  cleaningAddonsSofaMessage,
   getCleaningAreaMessage,
   cleaningDateMessage,
   cleaningCustomDateMessage,

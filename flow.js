@@ -326,19 +326,90 @@ async function processState(session, body, senderId, msg) {
     }
 
     case "CLEANING_CONTINUE": {
+      const lang = session.data.lang || "en";
+      const hasAddons = session.data.cleaningServiceType === "Flat Deep Cleaning" &&
+        (session.data.cleaningFlatStatus === "Furnished" || session.data.cleaningFlatStatus === "Post Interior Cleaning") &&
+        session.data.cleaningPrice !== "Inspection Required";
+
       if (body === "1") {
         session.state = "COLLECT_FLAT";
-        return [config.cleaningAddressMessage[session.data.lang || "en"]];
+        return [config.cleaningAddressMessage[lang]];
       } else if (body === "2") {
-        const lang = session.data.lang || "en";
+        if (hasAddons) {
+          session.state = "CLEANING_ADDONS";
+          return [config.cleaningAddonsMessage[lang]];
+        }
+        clearSession(senderId);
+        return [config.cancelMessage[lang]];
+      } else if (body === "3" && hasAddons) {
         clearSession(senderId);
         return [config.cancelMessage[lang]];
       } else {
-        const lang = session.data.lang || "en";
-        return [lang === "hi" ? "आगे बढ़ने के लिए *1* या कैंसिल के लिए *2* रिप्लाई करें।"
-              : lang === "mr" ? "पुढे जाण्यासाठी *1* किंवा कैंसलसाठी *2* रिप्लाय करा."
-              : "Reply *1* to proceed or *2* to cancel."];
+        const hint = hasAddons
+          ? (lang === "hi" ? "*1* (बिना ऐड-ऑन), *2* (ऐड-ऑन चुनें), या *3* (कैंसिल) रिप्लाई करें।"
+            : lang === "mr" ? "*1* (ऐड-ऑनशिवाय), *2* (ऐड-ऑन निवडा), किंवा *3* (कैंसल) रिप्लाय करा."
+            : "Reply *1* to continue, *2* to select add-ons, or *3* to cancel.")
+          : (lang === "hi" ? "आगे बढ़ने के लिए *1* या कैंसिल के लिए *2* रिप्लाई करें।"
+            : lang === "mr" ? "पुढे जाण्यासाठी *1* किंवा कैंसलसाठी *2* रिप्लाय करा."
+            : "Reply *1* to proceed or *2* to cancel.");
+        return [hint];
       }
+    }
+
+    case "CLEANING_ADDONS": {
+      const lang = session.data.lang || "en";
+      const base = parseInt((session.data.cleaningPrice || "0").replace(/[^0-9]/g, "")) || 0;
+
+      if (body === "1") {
+        // Kitchen only
+        const newTotal = base + 450;
+        session.data.cleaningPrice = `₹${newTotal}`;
+        session.data.cleaningDetails += " + Kitchen Cleaning (₹450)";
+        session.state = "COLLECT_FLAT";
+        return [lang === "hi"
+          ? `✅ किचन क्लीनिंग जोड़ी! नया कुल: ₹${newTotal}\n\n${config.cleaningAddressMessage.hi}`
+          : lang === "mr"
+          ? `✅ किचन क्लीनिंग जोडली! नवीन एकूण: ₹${newTotal}\n\n${config.cleaningAddressMessage.mr}`
+          : `✅ Kitchen cleaning added! New total: ₹${newTotal}\n\n${config.cleaningAddressMessage.en}`];
+      } else if (body === "2") {
+        session.data.addonKitchen = false;
+        session.state = "CLEANING_ADDON_SOFA";
+        return [config.cleaningAddonsSofaMessage[lang]];
+      } else if (body === "3") {
+        session.data.addonKitchen = true;
+        session.state = "CLEANING_ADDON_SOFA";
+        return [config.cleaningAddonsSofaMessage[lang]];
+      } else if (body === "4") {
+        session.state = "COLLECT_FLAT";
+        return [config.cleaningAddressMessage[lang]];
+      } else {
+        return [config.cleaningAddonsMessage[lang]];
+      }
+    }
+
+    case "CLEANING_ADDON_SOFA": {
+      const lang = session.data.lang || "en";
+      const seats = parseInt(body.replace(/[^0-9]/g, ""));
+      if (!seats || seats < 1 || seats > 30) {
+        return [config.cleaningAddonsSofaMessage[lang]];
+      }
+      const sofaTotal = seats * 150;
+      const kitchenTotal = session.data.addonKitchen ? 450 : 0;
+      const base = parseInt((session.data.cleaningPrice || "0").replace(/[^0-9]/g, "")) || 0;
+      const newTotal = base + sofaTotal + kitchenTotal;
+
+      let addonLine = `${seats} sofa seat(s) (₹${sofaTotal})`;
+      if (session.data.addonKitchen) addonLine = `Kitchen (₹450) + ` + addonLine;
+
+      session.data.cleaningPrice = `₹${newTotal}`;
+      session.data.cleaningDetails += ` + Add-ons: ${addonLine}`;
+      session.state = "COLLECT_FLAT";
+
+      return [lang === "hi"
+        ? `✅ ऐड-ऑन जोड़े गए! नया कुल: ₹${newTotal}\n\n${config.cleaningAddressMessage.hi}`
+        : lang === "mr"
+        ? `✅ ऐड-ऑन जोडले! नवीन एकूण: ₹${newTotal}\n\n${config.cleaningAddressMessage.mr}`
+        : `✅ Add-ons added! New total: ₹${newTotal}\n\n${config.cleaningAddressMessage.en}`];
     }
 
     case "CLEANING_MINI_SERVICE": {
