@@ -355,7 +355,8 @@ const villaPriceMessage = (sqft, price, rate, condition, lang) => {
 ✔ Rate: ₹${rate}/sq.ft
 ✔ Total Cost: ₹${price}
 
-👉 Reply *1* to proceed with booking`;
+Reply *1* to proceed with booking
+Reply *2* to cancel`;
 
   const hi = `💰 अनुमानित किंमत:
 ✔ साइज: ${sqft} Sq.Ft
@@ -363,7 +364,8 @@ const villaPriceMessage = (sqft, price, rate, condition, lang) => {
 ✔ रेट: ₹${rate}/sq.ft
 ✔ कुल खर्च: ₹${price}
 
-👉 बुकिंग के लिए *1* रिप्लाई करें`;
+बुकिंग के लिए *1* रिप्लाई करें
+कैंसिल के लिए *2* रिप्लाई करें`;
 
   const mr = `💰 अंदाजित किंमत:
 ✔ साइज: ${sqft} Sq.Ft
@@ -371,7 +373,8 @@ const villaPriceMessage = (sqft, price, rate, condition, lang) => {
 ✔ रेट: ₹${rate}/sq.ft
 ✔ एकूण खर्च: ₹${price}
 
-👉 बुकिंगसाठी *1* रिप्लाय करा`;
+बुकिंगसाठी *1* रिप्लाय करा
+कैंसलसाठी *2* रिप्लाय करा`;
 
   return lang === 'hi' ? hi : lang === 'mr' ? mr : en;
 };
@@ -405,13 +408,13 @@ const flatDeepCleaningPriceMessage = (status, bhk, lang) => {
   let addOnsMr = "";
 
   if (status === "Furnished" || status === "Post Interior Cleaning") {
-    addOnsEn = `\n\n✨ *Recommended Add-ons:*\n• Kitchen external cleaning: ₹450\n• Sofa cleaning: ₹150 / seat\n\n👉 Reply *1* to proceed without add-ons.`;
-    addOnsHi = `\n\n✨ *सुझाए गए ऐड-ऑन:*\n• किचन एक्सटर्नल क्लीनिंग: ₹450\n• सोफा क्लीनिंग: ₹150 / सीट\n\n👉 ऐड-ऑन के बिना आगे बढ़ने के लिए *1* रिप्लाई करें।`;
-    addOnsMr = `\n\n✨ *सुचवलेले ऐड-ऑन:*\n• किचन एक्सटर्नल क्लीनिंग: ₹450\n• सोफा क्लीनिंग: ₹150 / सीट\n\n👉 ऐड-ऑनशिवाय पुढे जाण्यासाठी *1* रिप्लाय करा.`;
+    addOnsEn = `\n\n✨ *Recommended Add-ons:*\n• Kitchen external cleaning: ₹450\n• Sofa cleaning: ₹150 / seat\n\nReply *1* to proceed without add-ons\nReply *2* to cancel`;
+    addOnsHi = `\n\n✨ *सुझाए गए ऐड-ऑन:*\n• किचन एक्सटर्नल क्लीनिंग: ₹450\n• सोफा क्लीनिंग: ₹150 / सीट\n\nऐड-ऑन के बिना आगे बढ़ने के लिए *1* रिप्लाई करें\nकैंसिल के लिए *2* रिप्लाई करें`;
+    addOnsMr = `\n\n✨ *सुचवलेले ऐड-ऑन:*\n• किचन एक्सटर्नल क्लीनिंग: ₹450\n• सोफा क्लीनिंग: ₹150 / सीट\n\nऐड-ऑनशिवाय पुढे जाण्यासाठी *1* रिप्लाय करा\nकैंसलसाठी *2* रिप्लाय करा`;
   } else {
-    addOnsEn = `\n\n👉 Reply *1* to proceed with booking`;
-    addOnsHi = `\n\n👉 बुकिंग के लिए *1* रिप्लाई करें`;
-    addOnsMr = `\n\n👉 बुकिंगसाठी *1* रिप्लाय करा`;
+    addOnsEn = `\n\nReply *1* to proceed with booking\nReply *2* to cancel`;
+    addOnsHi = `\n\nबुकिंग के लिए *1* रिप्लाई करें\nकैंसिल के लिए *2* रिप्लाई करें`;
+    addOnsMr = `\n\nबुकिंगसाठी *1* रिप्लाय करा\nकैंसलसाठी *2* रिप्लाय करा`;
   }
 
   const en = `💰 Estimated Pricing:
@@ -696,6 +699,15 @@ const cleaningLocationMessage = {
   mr: `📍 तुमचे शहर निवडा:
 1️⃣ Pune
 2️⃣ PCMC`
+};
+
+const cleaningAddressMessage = {
+  en: `🏠 Please share your complete address.
+(Example: Flat 4B, Sunrise Society, Baner, Pune)`,
+  hi: `🏠 अपना पूरा पता बताएं।
+(उदाहरण: Flat 4B, Sunrise Society, Baner, Pune)`,
+  mr: `🏠 तुमचा संपूर्ण पत्ता सांगा.
+(उदाहरण: Flat 4B, Sunrise Society, Baner, Pune)`
 };
 
 const getCleaningAreaMessage = (city, lang) => {
@@ -1181,6 +1193,7 @@ module.exports = {
   miniServiceItems,
   miniServiceMessage,
   cleaningLocationMessage,
+  cleaningAddressMessage,
   getCleaningAreaMessage,
   cleaningDateMessage,
   cleaningCustomDateMessage,

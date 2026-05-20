@@ -75,8 +75,8 @@ async function handleMessage(msg) {
       try {
         const c = await msg.getContact();
         session.data.contactName = c.pushname || c.name || "there";
-        session.data.whatsappNumber = c.id._serialized || senderId;
-      } catch { session.data.contactName = "there"; session.data.whatsappNumber = senderId; }
+        session.data.whatsappNumber = (c.id._serialized || senderId).split('@')[0];
+      } catch { session.data.contactName = "there"; session.data.whatsappNumber = senderId.split('@')[0]; }
       session.state = "LANGUAGE";
       return [config.languageMessage];
     }
@@ -90,8 +90,8 @@ async function handleMessage(msg) {
     try {
       const c = await msg.getContact();
       session.data.contactName = c.pushname || c.name || "there";
-      session.data.whatsappNumber = c.id._serialized || senderId;
-    } catch { session.data.contactName = "there"; session.data.whatsappNumber = senderId; }
+      session.data.whatsappNumber = (c.id._serialized || senderId).split('@')[0];
+    } catch { session.data.contactName = "there"; session.data.whatsappNumber = senderId.split('@')[0]; }
     session.state = "LANGUAGE";
     return [config.languageMessage];
   }
@@ -329,9 +329,15 @@ async function processState(session, body, senderId, msg) {
       if (body === "1") {
         session.state = "COLLECT_FLAT";
         return [config.cleaningAddressMessage[session.data.lang || "en"]];
+      } else if (body === "2") {
+        const lang = session.data.lang || "en";
+        clearSession(senderId);
+        return [config.cancelMessage[lang]];
       } else {
-        // Invalid input
-        return [session.data.lang === "hi" ? "आगे बढ़ने के लिए 1 रिप्लाई करें।" : session.data.lang === "mr" ? "पुढे जाण्यासाठी 1 रिप्लाय करा." : "Please reply 1 to continue."];
+        const lang = session.data.lang || "en";
+        return [lang === "hi" ? "आगे बढ़ने के लिए *1* या कैंसिल के लिए *2* रिप्लाई करें।"
+              : lang === "mr" ? "पुढे जाण्यासाठी *1* किंवा कैंसलसाठी *2* रिप्लाय करा."
+              : "Reply *1* to proceed or *2* to cancel."];
       }
     }
 
