@@ -8,6 +8,9 @@ const { isInvited, removeInvite, uploadReceipt } = require("./invite-store");
 
 const sessions = new Map();
 
+// Remember each user's last-used language so restarts skip language selection.
+const userLanguages = new Map(); // senderId → 'en' | 'hi' | 'mr'
+
 function getSession(senderId) {
   const s = sessions.get(senderId);
   if (!s) return null;
@@ -48,6 +51,14 @@ function isAdMessage(text) {
   );
 }
 
+// Restart shortcuts shown to users at the end of a flow.
+function restartIntent(text) {
+  const lower = text.toLowerCase().trim();
+  if (lower === 'clean' || lower === 'cleaning') return 'cleaning';
+  if (lower === 'maid' || lower === 'maid service') return 'maid';
+  return null;
+}
+
 async function handleMessage(msg) {
   const senderId = msg.from;
   const body = (msg.body || "").trim();
@@ -63,36 +74,49 @@ async function handleMessage(msg) {
 
   let session = getSession(senderId);
 
-  // If no active session, check if admin invited this person OR if it's an ad link
+  // If no active session, check restart keyword, admin invite, or ad link
   if (!session) {
-    // Check Supabase for a pending admin invite
     const invited = await isInvited(senderId);
-    console.log('[flow] from:', senderId, '| invited:', invited, '| body:', body.slice(0, 40));
-    if (invited) {
-      // Delete invite immediately — session takes over from here
-      await removeInvite(senderId);
-      session = createSession(senderId);
-      try {
-        const c = await msg.getContact();
-        session.data.contactName = c.pushname || c.name || "there";
-        session.data.whatsappNumber = (c.id._serialized || senderId).split('@')[0];
-      } catch { session.data.contactName = "there"; session.data.whatsappNumber = senderId.split('@')[0]; }
-      session.state = "LANGUAGE";
-      return [config.languageMessage];
-    }
+    const restart = restartIntent(body);
+    console.log('[flow] from:', senderId, '| invited:', invited, '| restart:', restart, '| body:', body.slice(0, 40));
 
-    // Otherwise only FB/IG ad links can start the bot
-    if (!isAdMessage(body)) {
+    if (!invited && !restart && !isAdMessage(body)) {
       return [];
     }
+
+    if (invited) await removeInvite(senderId);
 
     session = createSession(senderId);
     try {
       const c = await msg.getContact();
       session.data.contactName = c.pushname || c.name || "there";
       session.data.whatsappNumber = (c.id._serialized || senderId).split('@')[0];
-    } catch { session.data.contactName = "there"; session.data.whatsappNumber = senderId.split('@')[0]; }
-    session.state = "LANGUAGE";
+    } catch {
+      session.data.contactName = "there";
+      session.data.whatsappNumber = senderId.split('@')[0];
+    }
+
+    // Restart keyword path: skip language menu if we know it, jump straight into the flow
+    if (restart) {
+      const savedLang = userLanguages.get(senderId);
+      if (savedLang) {
+        session.data.lang = savedLang;
+        if (restart === 'cleaning') {
+          session.data.serviceCategory = 'cleaning';
+          session.state = 'CLEANING_NAME';
+          return [config.cleaningNameMessage[savedLang]];
+        }
+        session.data.serviceCategory = 'maid';
+        session.state = 'WORK_TYPE';
+        return [config.workTypeMessage[savedLang]];
+      }
+      // No remembered language yet — ask, then route into the requested flow
+      session.data.directFlow = restart;
+      session.state = 'LANGUAGE';
+      return [config.languageMessage];
+    }
+
+    session.state = 'LANGUAGE';
     return [config.languageMessage];
   }
 
@@ -130,6 +154,22 @@ async function processState(session, body, senderId, msg) {
       const lang = config.langs[body];
       if (!lang) return [config.languageMessage];
       session.data.lang = lang;
+      userLanguages.set(senderId, lang);
+
+      // Restart keyword set a target flow before language was picked
+      if (session.data.directFlow === 'cleaning') {
+        delete session.data.directFlow;
+        session.data.serviceCategory = 'cleaning';
+        session.state = 'CLEANING_NAME';
+        return [config.cleaningNameMessage[lang]];
+      }
+      if (session.data.directFlow === 'maid') {
+        delete session.data.directFlow;
+        session.data.serviceCategory = 'maid';
+        session.state = 'WORK_TYPE';
+        return [config.workTypeMessage[lang]];
+      }
+
       session.state = "MAIN_MENU";
       return [config.mainMenuMessage[lang]];
     }

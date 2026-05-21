@@ -746,13 +746,25 @@ const cleaningCustomDateMessage = {
 const cleaningThanksMessage = {
   en: `✅ Thank you!
 Our team will check and share Available slots
-You will receive a call shortly. 📞`,
+You will receive a call shortly. 📞
+
+🔁 *Need another service?*
+Type *clean* — for cleaning
+Type *maid* — for maid service`,
   hi: `✅ धन्यवाद!
 हमारी टीम उपलब्ध स्लॉट चेक करके बताएगी।
-आपको जल्द कॉल आएगा। 📞`,
+आपको जल्द कॉल आएगा। 📞
+
+🔁 *कोई और सेवा चाहिए?*
+*clean* टाइप करें — क्लीनिंग के लिए
+*maid* टाइप करें — मेड सर्विस के लिए`,
   mr: `✅ धन्यवाद!
 आमची टीम उपलब्ध स्लॉट चेक करून सांगेल.
-तुम्हाला लवकरच फोन येईल. 📞`
+तुम्हाला लवकरच फोन येईल. 📞
+
+🔁 *दुसरी सेवा हवी आहे?*
+*clean* टाइप करा — क्लीनिंगसाठी
+*maid* टाइप करा — मेड सर्विससाठी`
 };
 
 const supportMessage = {
@@ -975,9 +987,9 @@ Flats, Bathrooms, Villas — Pune & PCMC ✅
 Reply *1* to explore our services.`;
 
 const cancelMessage = {
-  en: "❌ Booking cancelled. No worries!\n\nType *hi* anytime to start again. 😊",
-  hi: "❌ बुकिंग कैंसिल हो गई। कोई बात नहीं!\n\nदोबारा शुरू करने के लिए *hi* टाइप करें। 😊",
-  mr: "❌ बुकिंग कैंसिल झाली. काळजी नको!\n\nपुन्हा सुरू करण्यासाठी *hi* टाइप करा. 😊"
+  en: "❌ Booking cancelled. No worries!\n\n🔁 To start again, type:\n*clean* — for cleaning\n*maid* — for maid service",
+  hi: "❌ बुकिंग कैंसिल हो गई। कोई बात नहीं!\n\n🔁 दोबारा शुरू करने के लिए टाइप करें:\n*clean* — क्लीनिंग के लिए\n*maid* — मेड सर्विस के लिए",
+  mr: "❌ बुकिंग कैंसिल झाली. काळजी नको!\n\n🔁 पुन्हा सुरू करण्यासाठी टाइप करा:\n*clean* — क्लीनिंगसाठी\n*maid* — मेड सर्विससाठी"
 };
 
 const errorMessage = "⚠️ Something went wrong. Type *hi* to start again.";
@@ -1014,21 +1026,33 @@ const receiptReceivedMessage = {
 Thank you! Our admin will verify your payment and confirm your booking within 2–4 hours.
 
 📞 For urgent queries: ${contactNumber}
-— ${businessName}`,
+— ${businessName}
+
+🔁 *Need another service?*
+Type *clean* — for cleaning
+Type *maid* — for maid service`,
 
   hi: `✅ *Transaction Receipt मिल गई!*
 
 धन्यवाद! हमारी टीम आपका पेमेंट वेरिफाई करके १ घंटे में बुकिंग कन्फर्म करेगी।
 
 📞 जरूरी सवालों के लिए: ${contactNumber}
-— ${businessName}`,
+— ${businessName}
+
+🔁 *कोई और सेवा चाहिए?*
+*clean* टाइप करें — क्लीनिंग के लिए
+*maid* टाइप करें — मेड सर्विस के लिए`,
 
   mr: `✅ *Transaction Receipt मिळाली!*
 
 धन्यवाद! आमची टीम तुमचे पेमेंट व्हेरिफाय करून 1 तासांत बुकिंग कन्फर्म करेल.
 
 📞 महत्त्वाच्या प्रश्नांसाठी: ${contactNumber}
-— ${businessName}`
+— ${businessName}
+
+🔁 *दुसरी सेवा हवी आहे?*
+*clean* टाइप करा — क्लीनिंगसाठी
+*maid* टाइप करा — मेड सर्विससाठी`
 };
 
 const paymentVerifiedMessage = (name, bookingId, lang = 'en') => {
