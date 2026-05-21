@@ -1188,26 +1188,35 @@ const errorMessage = "⚠️ Something went wrong. Type *hi* to start again.";
 const upiId = process.env.UPI_ID || "cleanly@upi";
 
 const paymentMessage = {
-  en: `Hello,
-Please pay ₹1000 booking amount using the below payment link:
+  en: `💰 Please pay ₹1000 booking amount.
 
+👉 Tap to pay:
 upi://pay?pa=${upiId}&pn=Cleanly&am=1000&cu=INR
 
-After payment kindly share the screenshot for admin to verify.`,
+UPI ID: ${upiId}
+Amount: ₹1000
 
-  hi: `नमस्ते,
-कृपया नीचे दिए गए पेमेंट लिंक से ₹1000 बुकिंग अमाउंट जमा करें:
+After paying, please share the payment screenshot here for verification.`,
 
+  hi: `💰 कृपया ₹1000 बुकिंग अमाउंट जमा करें।
+
+👉 पेमेंट के लिए नीचे टैप करें:
 upi://pay?pa=${upiId}&pn=Cleanly&am=1000&cu=INR
 
-पेमेंट के बाद एडमिन वेरिफिकेशन के लिए स्क्रीनशॉट भेजें।`,
+UPI ID: ${upiId}
+राशि: ₹1000
 
-  mr: `नमस्कार,
-कृपया खालील पेमेंट लिंकद्वारे ₹1000 बुकिंग रक्कम भरा:
+पेमेंट के बाद वेरिफिकेशन के लिए स्क्रीनशॉट यहाँ भेजें।`,
 
+  mr: `💰 कृपया ₹1000 बुकिंग रक्कम भरा.
+
+👉 पेमेंटसाठी खाली टॅप करा:
 upi://pay?pa=${upiId}&pn=Cleanly&am=1000&cu=INR
 
-पेमेंटनंतर एडमिन व्हेरिफिकेशनसाठी स्क्रीनशॉट पाठवा.`
+UPI ID: ${upiId}
+रक्कम: ₹1000
+
+पेमेंटनंतर व्हेरिफिकेशनसाठी स्क्रीनशॉट इथे पाठवा.`
 };
 
 const receiptReceivedMessage = {
