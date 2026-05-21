@@ -256,6 +256,8 @@ async function bootstrap() {
     if (connection === 'open') {
       botReady = true; currentQR = null; isBootstrapping = false;
       console.log('[wa] ✅ WhatsApp connected and ready!');
+      // Pre-fetch the Sheets row counts so the FIRST booking is instant
+      sheets.warmCounters().catch(e => console.warn('[boot] warmCounters failed:', e.message));
     }
     if (connection === 'close') {
       botReady = false;

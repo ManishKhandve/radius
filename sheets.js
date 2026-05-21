@@ -103,6 +103,27 @@ async function generateBookingId() {
   return nextId("B", "booking", SHEET_BOOKINGS);
 }
 
+/**
+ * Pre-fetch both row counts at bot startup so the FIRST customer/
+ * booking ID is generated instantly instead of paying the Sheets
+ * round-trip during the customer's interaction.
+ */
+async function warmCounters() {
+  const now = Date.now();
+  await Promise.all([
+    readRowCount(SHEET_CUSTOMERS).then(v => {
+      counters.customer.value = v;
+      counters.customer.fetchedAt = now;
+      console.log(`[sheets] customer counter warm — ${v} rows`);
+    }).catch(e => console.warn('[sheets] customer counter warm failed:', e.message)),
+    readRowCount(SHEET_BOOKINGS).then(v => {
+      counters.booking.value = v;
+      counters.booking.fetchedAt = now;
+      console.log(`[sheets] booking counter warm — ${v} rows`);
+    }).catch(e => console.warn('[sheets] booking counter warm failed:', e.message)),
+  ]);
+}
+
 // ─── Append Functions ────────────────────────────────────────
 
 /**
@@ -377,4 +398,5 @@ module.exports = {
   markPaymentVerified,
   generateCustomerId,
   generateBookingId,
+  warmCounters,
 };
