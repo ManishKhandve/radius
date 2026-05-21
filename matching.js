@@ -62,10 +62,13 @@ async function getTopMaids(customerLat, customerLng, workType) {
     throw new Error("Customer location coordinates are missing.");
   }
 
-  // Only show maids with status "Interested" + filter by work type
+  // Only show maids with status "Interested" + filter by work type.
+  // Fallback: also include maids tagged with the generic "Maid" service
+  // type (catch-all in the data) so customers always see candidates even
+  // when the data isn't perfectly tagged.
   let query = supabase.from('maids').select('*').eq('status', 'Interested');
   if (workType) {
-    query = query.ilike('service_type', `%${workType}%`);
+    query = query.or(`service_type.ilike.%${workType}%,service_type.ilike.Maid`);
   }
 
   const { data: maids, error } = await query;
@@ -90,11 +93,15 @@ async function getTopMaids(customerLat, customerLng, workType) {
 
     const distance = getDistanceFromLatLonInKm(customerLat, customerLng, maid.latitude, maid.longitude);
     const zone = getZone(distance);
-    maidsWithDistance.push({ ...maid, distance, zone });
+    // Specific service match ranks above generic "Maid" fallback
+    const serviceMatch = workType && maid.service_type
+      && maid.service_type.toLowerCase().includes(workType.toLowerCase()) ? 0 : 1;
+    maidsWithDistance.push({ ...maid, distance, zone, serviceMatch });
   }
 
-  // Sort: primary zone (P1→P4), secondary exact distance
+  // Sort: specific service match first, then zone (P1→P4), then exact distance
   maidsWithDistance.sort((a, b) => {
+    if (a.serviceMatch !== b.serviceMatch) return a.serviceMatch - b.serviceMatch;
     if (a.zone.level !== b.zone.level) return a.zone.level - b.zone.level;
     return a.distance - b.distance;
   });
