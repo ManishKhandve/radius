@@ -339,22 +339,32 @@ async function bootstrap() {
         };
 
         runQueued(userJid, async () => {
+          const before = flow.sessions?.get?.(userJid);
+          console.log('[task] start jid:', userJid, 'body:', JSON.stringify(body).slice(0, 30), 'state:', before?.state || 'NEW');
           try {
             // Fire-and-forget typing indicator — never await, never block
             liveSock.sendPresenceUpdate('composing', userJid).catch(() => {});
             const replies = await flow.handleMessage(wrappedMsg);
+            const after = flow.sessions?.get?.(userJid);
+            console.log('[task] flow returned', replies.length, 'replies; state →', after?.state || 'CLEARED');
             for (const reply of replies) {
               if (typeof reply === 'object' && reply._adminAlert) {
-                try { storeMessage(await liveSock.sendMessage(ownerJid, { text: reply._adminAlert })); } catch (_) {}
+                try {
+                  storeMessage(await liveSock.sendMessage(ownerJid, { text: reply._adminAlert }));
+                  console.log('[task] sent adminAlert to', ownerJid);
+                } catch (e) { console.error('[task] adminAlert send failed:', e.message); }
                 continue;
               }
               if (typeof reply === 'string') {
-                try { storeMessage(await liveSock.sendMessage(userJid, { text: reply })); } catch (_) {}
+                try {
+                  storeMessage(await liveSock.sendMessage(userJid, { text: reply }));
+                  console.log('[task] sent reply to', userJid, '(' + reply.length + ' chars)');
+                } catch (e) { console.error('[task] reply send failed:', e.message); }
               }
             }
             liveSock.sendPresenceUpdate('paused', userJid).catch(() => {});
           } catch (err) {
-            console.error('[wa] Handler error for', userJid, ':', err.message);
+            console.error('[task] handler error for', userJid, ':', err.message, err.stack);
             try { storeMessage(await liveSock.sendMessage(userJid, { text: config.errorMessage }));
                   flow.clearSession(userJid); } catch (_) {}
           }
