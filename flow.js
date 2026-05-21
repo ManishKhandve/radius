@@ -796,12 +796,13 @@ async function processState(session, body, senderId, msg) {
       if (body.length <= 3) return [config.collectDateMessage[session.data.lang || "en"]];
       session.data.startDate = body;
       session.state = "MAID_PLAN";
-      return [config.maidPlanMessage[session.data.lang]];
+      return [config.getMaidPlanMessage(session.data.timing, session.data.lang)];
     }
 
     case "MAID_PLAN": {
-      const plan = config.maidPlans[body];
-      if (!plan) return [config.maidPlanMessage[session.data.lang]];
+      const opts = config.getMaidPlanOptions(session.data.timing);
+      const plan = opts[body];
+      if (!plan) return [config.getMaidPlanMessage(session.data.timing, session.data.lang)];
       session.data.selectedPlan = plan;
       session.state = "CONFIRM";
       return [config.confirmMessage(session.data, session.data.lang || "en")];

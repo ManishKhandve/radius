@@ -919,6 +919,150 @@ const maidPlans = {
   "3": "Full-Time Verified (1 Month Salary)"
 };
 
+// Plan blocks per language — used to build a filtered plan message based on timing.
+const planBlocks = {
+  partTimeStandard: {
+    en: `*Part-Time Standard — ₹6,000*
+• One-time placement fee
+• Maid interviews at your home
+• Identity & document verification
+• Experience and skill screening
+• Service agreement assistance
+• 1 free replacement within 1 month`,
+    hi: `*पार्ट-टाइम स्टैंडर्ड — ₹6,000*
+• एक बार की प्लेसमेंट फीस
+• घर पर मेड का इंटरव्यू
+• आईडी और डॉक्युमेंट वेरिफिकेशन
+• अनुभव और स्किल की जांच
+• सर्विस एग्रीमेंट में मदद
+• 1 महीने में 1 फ्री रिप्लेसमेंट`,
+    mr: `*पार्ट-टाइम स्टँडर्ड — ₹6,000*
+• एक वेळची प्लेसमेंट फी
+• घरी मेडचा इंटरव्ह्यू
+• आयडी आणि डॉक्युमेंट व्हेरिफिकेशन
+• अनुभव आणि स्किल तपासणी
+• सर्विस एग्रीमेंट मध्ये मदत
+• 1 महिन्यात 1 फ्री रिप्लेसमेंट`,
+  },
+  partTimeVerified: {
+    en: `*Part-Time Verified — ₹12,000*
+• One-time placement fee
+• All services in Standard Plan
+• Police verification initiated (records & basic checks)
+• Experience and skill screening
+• 2 free replacements within 6 months`,
+    hi: `*पार्ट-टाइम वेरिफाइड — ₹12,000*
+• एक बार की प्लेसमेंट फीस
+• स्टैंडर्ड प्लान की सभी सेवाएं
+• पुलिस वेरिफिकेशन (रिकॉर्ड और बेसिक चेक)
+• अनुभव और स्किल की जांच
+• 6 महीने में 2 फ्री रिप्लेसमेंट`,
+    mr: `*पार्ट-टाइम व्हेरिफाइड — ₹12,000*
+• एक वेळची प्लेसमेंट फी
+• स्टँडर्ड प्लानच्या सर्व सेवा
+• पोलिस व्हेरिफिकेशन (रेकॉर्ड आणि बेसिक चेक)
+• अनुभव आणि स्किल तपासणी
+• 6 महिन्यांत 2 फ्री रिप्लेसमेंट`,
+  },
+  fullTimeVerified: {
+    en: `*Full-Time Verified — 1 Month Salary*
+• One-time fee (1 month salary)
+• All services in Standard Plan
+• Police verification initiated (records & basic checks)
+• Experience and skill screening
+• 2 free replacements within 6 months`,
+    hi: `*फुल-टाइम वेरिफाइड — 1 महीने की सैलरी*
+• एक बार की फीस (1 महीने की सैलरी)
+• स्टैंडर्ड प्लान की सभी सेवाएं
+• पुलिस वेरिफिकेशन (रिकॉर्ड और बेसिक चेक)
+• अनुभव और स्किल की जांच
+• 6 महीने में 2 फ्री रिप्लेसमेंट`,
+    mr: `*फुल-टाइम व्हेरिफाइड — 1 महिन्याचा पगार*
+• एक वेळची फी (1 महिन्याचा पगार)
+• स्टँडर्ड प्लानच्या सर्व सेवा
+• पोलिस व्हेरिफिकेशन (रेकॉर्ड आणि बेसिक चेक)
+• अनुभव आणि स्किल तपासणी
+• 6 महिन्यांत 2 फ्री रिप्लेसमेंट`,
+  },
+};
+
+const planHeader = {
+  en: `📦 *Choose Your Plan:*`,
+  hi: `📦 *अपना प्लान चुनें:*`,
+  mr: `📦 *तुमचा प्लान निवडा:*`,
+};
+
+const planFooter = {
+  en: `💡 *Registration Fee:* ₹1,000 (adjusted in your final service fee)
+
+📌 *Note:* CLEANLY is a brand of Platinum Company
+
+🔗 For more info: cleanly-maid-service.netlify.app`,
+  hi: `💡 *रजिस्ट्रेशन फीस:* ₹1,000 (फाइनल सर्विस फीस में एडजस्ट होगी)
+
+📌 *नोट:* CLEANLY, Platinum Company का एक ब्रांड है
+
+🔗 ज्यादा जानकारी: cleanly-maid-service.netlify.app`,
+  mr: `💡 *रजिस्ट्रेशन फी:* ₹1,000 (फायनल सर्विस फीमध्ये अ‍ॅडजस्ट होईल)
+
+📌 *नोट:* CLEANLY हा Platinum Company चा एक ब्रँड आहे
+
+🔗 अधिक माहिती: cleanly-maid-service.netlify.app`,
+};
+
+const replyHintSingle = {
+  en: `👉 Reply *1* to select this plan.`,
+  hi: `👉 इस प्लान को चुनने के लिए *1* रिप्लाई करें।`,
+  mr: `👉 हा प्लान निवडण्यासाठी *1* रिप्लाय करा.`,
+};
+
+const replyHintTwo = {
+  en: `👉 Reply with *1* or *2* to select your plan.`,
+  hi: `👉 प्लान चुनने के लिए *1* या *2* रिप्लाई करें।`,
+  mr: `👉 प्लान निवडण्यासाठी *1* किंवा *2* रिप्लाय करा.`,
+};
+
+function isPartTime(timing) {
+  return timing === 'Part Time (1-3 hrs)';
+}
+
+function getMaidPlanOptions(timing) {
+  if (isPartTime(timing)) {
+    return {
+      "1": "Part-Time Standard (₹6,000)",
+      "2": "Part-Time Verified (₹12,000)",
+    };
+  }
+  return {
+    "1": "Full-Time Verified (1 Month Salary)",
+  };
+}
+
+function getMaidPlanMessage(timing, lang) {
+  const L = ['en', 'hi', 'mr'].includes(lang) ? lang : 'en';
+  const header = planHeader[L];
+  const footer = planFooter[L];
+
+  if (isPartTime(timing)) {
+    return `${header}
+
+1️⃣ ${planBlocks.partTimeStandard[L]}
+
+2️⃣ ${planBlocks.partTimeVerified[L]}
+
+${replyHintTwo[L]}
+
+${footer}`;
+  }
+  return `${header}
+
+1️⃣ ${planBlocks.fullTimeVerified[L]}
+
+${replyHintSingle[L]}
+
+${footer}`;
+}
+
 // ─── Formatting Functions ──────────────────────────────────────
 
 function confirmMessage(data, lang = "en") {
@@ -1179,6 +1323,8 @@ module.exports = {
   getAreaMessage,
   maidPlanMessage,
   maidPlans,
+  getMaidPlanOptions,
+  getMaidPlanMessage,
   flatStatusMessage,
   furnishedSubMessage,
   emptySubMessage,
