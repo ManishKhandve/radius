@@ -359,6 +359,43 @@ async function updateCustomerStatus(whatsappNumber, status) {
 }
 
 /**
+ * Find a CLEANING_BOOKINGS row by bookingId (column A) and patch only the
+ * fields supplied in `updates`. Used to upgrade a 'New Lead' row to
+ * 'Confirmed' (or 'Cancelled') once the customer finishes the flow.
+ */
+async function updateCleaningBooking(bookingId, updates = {}) {
+  try {
+    const sheets = await getClient();
+    const res = await sheets.spreadsheets.values.get({
+      spreadsheetId: sheetId(),
+      range: `${SHEET_CLEANING_BOOKINGS}!A:A`,
+    });
+    const rows = res.data.values || [];
+    let row = -1;
+    for (let i = 1; i < rows.length; i++) {
+      if (rows[i] && rows[i][0] === bookingId) { row = i + 1; break; }
+    }
+    if (row === -1) { console.warn(`[sheets] Cleaning booking not found: ${bookingId}`); return; }
+
+    const data = [];
+    if (updates.details        !== undefined) data.push({ range: `${SHEET_CLEANING_BOOKINGS}!E${row}`, values: [[updates.details]] });
+    if (updates.location       !== undefined) data.push({ range: `${SHEET_CLEANING_BOOKINGS}!F${row}`, values: [[updates.location]] });
+    if (updates.preferredDate  !== undefined) data.push({ range: `${SHEET_CLEANING_BOOKINGS}!G${row}`, values: [[updates.preferredDate]] });
+    if (updates.status         !== undefined) data.push({ range: `${SHEET_CLEANING_BOOKINGS}!I${row}`, values: [[updates.status]] });
+    if (updates.estimatedPrice !== undefined) data.push({ range: `${SHEET_CLEANING_BOOKINGS}!L${row}`, values: [[updates.estimatedPrice]] });
+    if (data.length === 0) return;
+
+    await sheets.spreadsheets.values.batchUpdate({
+      spreadsheetId: sheetId(),
+      requestBody: { valueInputOption: 'USER_ENTERED', data },
+    });
+    console.log(`[sheets] Cleaning booking updated: ${bookingId} → ${updates.status || 'partial'}`);
+  } catch (err) {
+    console.error('[sheets] updateCleaningBooking error:', err.message);
+  }
+}
+
+/**
  * Marks a booking payment as verified — updates column V to "Payment Verified".
  */
 async function markPaymentVerified(bookingId) {
@@ -393,6 +430,7 @@ module.exports = {
   appendCustomer,
   appendBooking,
   appendCleaningBooking,
+  updateCleaningBooking,
   updateCustomerStatus,
   updateBookingPayment,
   markPaymentVerified,

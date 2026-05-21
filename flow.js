@@ -202,25 +202,55 @@ async function processState(session, body, senderId, msg) {
     // CLEANING SERVICE FLOW
     // ==========================================
     case "CLEANING_SERVICE_TYPE": {
+      let chosen = null;
+      let nextState = null;
+      let nextMessage = null;
       if (body === "1") {
-        session.data.cleaningServiceType = "Flat Deep Cleaning";
-        session.state = "CLEANING_FLAT_STATUS";
-        return [config.flatStatusMessage[session.data.lang]];
+        chosen = "Flat Deep Cleaning";
+        nextState = "CLEANING_FLAT_STATUS";
+        nextMessage = config.flatStatusMessage[session.data.lang];
       } else if (body === "2") {
-        session.data.cleaningServiceType = "Bathroom Cleaning";
-        session.state = "CLEANING_BATHROOM_TYPE";
-        return [config.bathroomTypeMessage[session.data.lang]];
+        chosen = "Bathroom Cleaning";
+        nextState = "CLEANING_BATHROOM_TYPE";
+        nextMessage = config.bathroomTypeMessage[session.data.lang];
       } else if (body === "3") {
-        session.data.cleaningServiceType = "Mini Service Package";
-        session.state = "CLEANING_MINI_SERVICE";
-        return [config.miniServiceMessage[session.data.lang]];
+        chosen = "Mini Service Package";
+        nextState = "CLEANING_MINI_SERVICE";
+        nextMessage = config.miniServiceMessage[session.data.lang];
       } else if (body === "4") {
-        session.data.cleaningServiceType = "Villa / Bungalow / Row House";
-        session.state = "CLEANING_VILLA_SQFT";
-        return [config.villaSqftMessage[session.data.lang]];
+        chosen = "Villa / Bungalow / Row House";
+        nextState = "CLEANING_VILLA_SQFT";
+        nextMessage = config.villaSqftMessage[session.data.lang];
       } else {
         return [config.cleaningServiceMessage[session.data.lang]];
       }
+
+      session.data.cleaningServiceType = chosen;
+      session.state = nextState;
+
+      // Save lead immediately (fire-and-forget) so abandoned cleaning flows
+      // still leave a record for follow-up.
+      const bid = `CB${Date.now().toString().slice(-5)}`;
+      session.data.cleaningBookingId = bid;
+      (async () => {
+        try {
+          await sheets.appendCleaningBooking({
+            bookingId: bid,
+            customerName: session.data.contactName,
+            whatsappNumber: session.data.whatsappNumber,
+            serviceType: chosen,
+            details: "",
+            location: "",
+            preferredDate: "",
+            estimatedPrice: "",
+            status: "New Lead",
+            source: "WhatsApp Bot",
+            language: session.data.lang,
+          });
+        } catch (e) { console.error("[flow] cleaning lead save err:", e.message); }
+      })();
+
+      return [nextMessage];
     }
 
     case "CLEANING_VILLA_SQFT": {
@@ -570,6 +600,11 @@ async function processState(session, body, senderId, msg) {
         return finishCleaning(session, senderId);
       } else if (body === "2") {
         const lang = session.data.lang || "en";
+        // Mark the lead as explicitly cancelled (not just abandoned)
+        if (session.data.cleaningBookingId) {
+          sheets.updateCleaningBooking(session.data.cleaningBookingId, { status: "Cancelled" })
+            .catch(e => console.error('[flow] cleaning cancel update err:', e.message));
+        }
         clearSession(senderId);
         return [config.cancelMessage[lang]];
       } else {
@@ -963,24 +998,36 @@ async function processState(session, body, senderId, msg) {
 
 function finishCleaning(session, senderId) {
   const d = session.data;
-  
-  // Save cleaning request to Google Sheets (fire-and-forget)
+
+  // Upgrade the existing 'New Lead' row to 'Confirmed' with full details.
+  // If for some reason the lead row wasn't created (rare), fall back to a
+  // fresh append so we don't lose the booking.
   (async () => {
     try {
-      // Create a unique booking ID for cleaning
-      const bid = `CB${Date.now().toString().slice(-5)}`;
-      await sheets.appendCleaningBooking({
-        bookingId: bid,
-        customerName: d.contactName,
-        whatsappNumber: d.whatsappNumber,
-        serviceType: d.cleaningServiceType,
-        details: d.cleaningDetails || "N/A",
-        location: d.cleaningLocation,
-        preferredDate: d.cleaningDate,
-        estimatedPrice: d.cleaningPrice,
-        language: d.lang,
-      });
-    } catch (e) { console.error("[flow] cleaning booking write err:", e.message); }
+      if (d.cleaningBookingId) {
+        await sheets.updateCleaningBooking(d.cleaningBookingId, {
+          details: d.cleaningDetails || "N/A",
+          location: d.cleaningLocation,
+          preferredDate: d.cleaningDate,
+          estimatedPrice: d.cleaningPrice,
+          status: "Confirmed",
+        });
+      } else {
+        const bid = `CB${Date.now().toString().slice(-5)}`;
+        await sheets.appendCleaningBooking({
+          bookingId: bid,
+          customerName: d.contactName,
+          whatsappNumber: d.whatsappNumber,
+          serviceType: d.cleaningServiceType,
+          details: d.cleaningDetails || "N/A",
+          location: d.cleaningLocation,
+          preferredDate: d.cleaningDate,
+          estimatedPrice: d.cleaningPrice,
+          status: "Confirmed",
+          language: d.lang,
+        });
+      }
+    } catch (e) { console.error("[flow] cleaning booking finalize err:", e.message); }
   })();
 
   const msg = config.cleaningThanksMessage[session.data.lang];
