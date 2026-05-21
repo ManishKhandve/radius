@@ -284,24 +284,31 @@ async function bootstrap() {
   });
 
   sock.ev.on('messages.upsert', async ({ messages, type }) => {
+    console.log('[wa] upsert type:', type, 'count:', messages.length);
     if (type !== 'notify') return;
     for (const rawMsg of messages) {
       try {
         const rk = rawMsg.key || {};
-        if (rk.fromMe) continue;
-        if (!rawMsg.message) continue;
+        console.log('[skip?] remoteJid:', rk.remoteJid, 'id:', rk.id, 'senderPn:', rk.senderPn, 'fromMe:', rk.fromMe, 'hasMsg:', !!rawMsg.message);
+        if (rk.fromMe) { console.log('[skip] fromMe'); continue; }
+        if (!rawMsg.message) { console.log('[skip] no rawMsg.message (protocol/undecryptable)'); continue; }
         let jid = rk.remoteJid;
-        if (!jid || jid.endsWith('@g.us')) continue;
-        // Translate @lid → phone with cached mapping (Baileys doesn't always give us senderPn)
+        if (!jid) { console.log('[skip] no remoteJid'); continue; }
+        if (jid.endsWith('@g.us')) { console.log('[skip] group message'); continue; }
+        // Translate @lid → phone. Cache the mapping when senderPn is provided,
+        // and reuse the cached mapping when later @lid messages omit senderPn.
         if (jid.endsWith('@lid')) {
           if (rk.senderPn) {
             lidToPhone.set(jid, rk.senderPn);
+            console.log('[xlate] @lid', jid, '→', rk.senderPn, '(cached)');
             jid = rk.senderPn;
           } else if (lidToPhone.has(jid)) {
-            jid = lidToPhone.get(jid);
+            const cached = lidToPhone.get(jid);
+            console.log('[xlate] @lid', jid, '→', cached, '(from cache)');
+            jid = cached;
           }
         }
-        if (alreadyProcessed(rk.id)) continue;
+        if (alreadyProcessed(rk.id)) { console.log('[skip] alreadyProcessed id:', rk.id); continue; }
 
         // @lid fallback: if we still have an @lid jid (no senderPn ever seen)
         // and there's an unconsumed admin invite, transfer the invite to this
@@ -321,6 +328,8 @@ async function bootstrap() {
         if (msgType === 'conversation')             body = msgContent.conversation || '';
         else if (msgType === 'extendedTextMessage') body = msgContent.extendedTextMessage?.text || '';
         else if (msgType === 'imageMessage')        body = msgContent.imageMessage?.caption || '';
+
+        console.log('[wa] from:', jid, 'body:', JSON.stringify(body).slice(0, 30));
 
         const liveSock = sock;
         const userJid  = jid;
@@ -344,31 +353,34 @@ async function bootstrap() {
         };
 
         runQueued(userJid, async () => {
-          const t0 = Date.now();
+          const before = flow.sessions?.get?.(userJid);
+          console.log('[task] start jid:', userJid, 'body:', JSON.stringify(body).slice(0, 30), 'state:', before?.state || 'NEW');
           try {
+            // Fire-and-forget typing indicator — never await, never block
+            liveSock.sendPresenceUpdate('composing', userJid).catch(() => {});
             const replies = await flow.handleMessage(wrappedMsg);
-            console.log('[task]', userJid, 'body:', JSON.stringify(body).slice(0, 20), 'flow took', Date.now() - t0, 'ms, replies:', replies.length);
-
-            // Fire all sendMessage calls without awaiting — Baileys queues them
-            // internally in order. The queue task finishes immediately so the
-            // next user message can start processing right away.
+            const after = flow.sessions?.get?.(userJid);
+            console.log('[task] flow returned', replies.length, 'replies; state →', after?.state || 'CLEARED');
             for (const reply of replies) {
               if (typeof reply === 'object' && reply._adminAlert) {
-                liveSock.sendMessage(ownerJid, { text: reply._adminAlert })
-                  .then(storeMessage)
-                  .catch(e => console.error('[task] adminAlert send failed:', e.message));
+                try {
+                  storeMessage(await liveSock.sendMessage(ownerJid, { text: reply._adminAlert }));
+                  console.log('[task] sent adminAlert to', ownerJid);
+                } catch (e) { console.error('[task] adminAlert send failed:', e.message); }
                 continue;
               }
               if (typeof reply === 'string') {
-                liveSock.sendMessage(userJid, { text: reply })
-                  .then(storeMessage)
-                  .catch(e => console.error('[task] reply send failed:', e.message));
+                try {
+                  storeMessage(await liveSock.sendMessage(userJid, { text: reply }));
+                  console.log('[task] sent reply to', userJid, '(' + reply.length + ' chars)');
+                } catch (e) { console.error('[task] reply send failed:', e.message); }
               }
             }
+            liveSock.sendPresenceUpdate('paused', userJid).catch(() => {});
           } catch (err) {
-            console.error('[task] handler error for', userJid, ':', err.message);
-            liveSock.sendMessage(userJid, { text: config.errorMessage }).catch(() => {});
-            flow.clearSession(userJid);
+            console.error('[task] handler error for', userJid, ':', err.message, err.stack);
+            try { storeMessage(await liveSock.sendMessage(userJid, { text: config.errorMessage }));
+                  flow.clearSession(userJid); } catch (_) {}
           }
         });
       } catch (err) {
