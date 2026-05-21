@@ -48,7 +48,11 @@ const languageMessage = `👋 Welcome to CLEANLY Services
 Please choose your preferred language:
 1️⃣ English
 2️⃣ मराठी
-3️⃣ हिंदी`;
+3️⃣ हिंदी
+
+🔴 Please note: replies may take 5-6 seconds.
+🔴 कृपया ध्यान दें: जवाब आने में 5-6 सेकंड लग सकते हैं।
+🔴 कृपया लक्षात ठेवा: उत्तर येण्यास 5-6 सेकंद लागू शकतात.`;
 
 const mainMenuMessage = {
   en: `Main menu
@@ -984,7 +988,11 @@ Cooking, Cleaning, Babysitting, Caretaking & more
 🏠 *Home Deep Cleaning*
 Flats, Bathrooms, Villas — Pune & PCMC ✅
 
-Reply *1* to explore our services.`;
+Reply *1* to explore our services.
+
+🔴 Please note: replies may take 5-6 seconds.
+🔴 कृपया ध्यान दें: जवाब आने में 5-6 सेकंड लग सकते हैं।
+🔴 कृपया लक्षात ठेवा: उत्तर येण्यास 5-6 सेकंद लागू शकतात.`;
 
 const cancelMessage = {
   en: "❌ Booking cancelled. No worries!\n\n🔁 To start again, type:\n*clean* — for cleaning\n*maid* — for maid service",
