@@ -263,9 +263,9 @@ const customAreaPromptMessage = {
 };
 
 const customAreaConfirmMessage = (area, lang) => {
-  if (lang === "hi") return `🔍 ठीक है! हम *${area}* में आपके लिए सही मेड खोजेंगे।\n\nहमारी टीम जल्द ही आपसे संपर्क करेगी। 📞`;
-  if (lang === "mr") return `🔍 ठीक आहे! आम्ही *${area}* मध्ये तुमच्यासाठी योग्य मेड शोधू.\n\nआमची टीम लवकरच तुमच्याशी संपर्क करेल. 📞`;
-  return `🔍 Got it! We'll find a maid for you in *${area}*.\n\nOur team will contact you shortly. 📞`;
+  if (lang === "hi") return `🔍 ठीक है! हम *${area}* में आपके लिए सही मेड खोजेंगे।\n\nहमारी टीम जल्द ही आपसे संपर्क करेगी। 📞\n\n🔁 *कोई और सेवा चाहिए?*\n*clean* टाइप करें — क्लीनिंग के लिए\n*maid* टाइप करें — मेड सर्विस के लिए`;
+  if (lang === "mr") return `🔍 ठीक आहे! आम्ही *${area}* मध्ये तुमच्यासाठी योग्य मेड शोधू.\n\nआमची टीम लवकरच तुमच्याशी संपर्क करेल. 📞\n\n🔁 *दुसरी सेवा हवी आहे?*\n*clean* टाइप करा — क्लीनिंगसाठी\n*maid* टाइप करा — मेड सर्विससाठी`;
+  return `🔍 Got it! We'll find a maid for you in *${area}*.\n\nOur team will contact you shortly. 📞\n\n🔁 *Need another service?*\nType *clean* — for cleaning\nType *maid* — for maid service`;
 };
 
 const collectFlatMessage = {
