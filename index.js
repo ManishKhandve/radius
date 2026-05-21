@@ -82,6 +82,11 @@ function runQueued(jid, task) {
 // the oldest pending invite so the user gets recognized.
 const pendingInvites = new Map(); // jid -> timestamp
 
+// Persistent @lid → phone mapping. Baileys provides senderPn on some
+// messages but not all. We cache it so subsequent @lid-only messages
+// from the same source resolve to the same session/invite key.
+const lidToPhone = new Map();     // @lid jid → @s.whatsapp.net jid
+
 function toJid(phone) {
   return phone.replace(/[^0-9]/g, '') + '@s.whatsapp.net';
 }
@@ -290,15 +295,24 @@ async function bootstrap() {
         let jid = rk.remoteJid;
         if (!jid) { console.log('[skip] no remoteJid'); continue; }
         if (jid.endsWith('@g.us')) { console.log('[skip] group message'); continue; }
-        if (jid.endsWith('@lid') && rk.senderPn) {
-          console.log('[xlate] @lid', jid, '→', rk.senderPn);
-          jid = rk.senderPn;
+        // Translate @lid → phone. Cache the mapping when senderPn is provided,
+        // and reuse the cached mapping when later @lid messages omit senderPn.
+        if (jid.endsWith('@lid')) {
+          if (rk.senderPn) {
+            lidToPhone.set(jid, rk.senderPn);
+            console.log('[xlate] @lid', jid, '→', rk.senderPn, '(cached)');
+            jid = rk.senderPn;
+          } else if (lidToPhone.has(jid)) {
+            const cached = lidToPhone.get(jid);
+            console.log('[xlate] @lid', jid, '→', cached, '(from cache)');
+            jid = cached;
+          }
         }
         if (alreadyProcessed(rk.id)) { console.log('[skip] alreadyProcessed id:', rk.id); continue; }
 
-        // @lid fallback: if we still have an @lid jid (no senderPn) and there's
-        // an unconsumed admin invite, transfer the invite to this @lid so the
-        // bot recognises the user.
+        // @lid fallback: if we still have an @lid jid (no senderPn ever seen)
+        // and there's an unconsumed admin invite, transfer the invite to this
+        // @lid so the bot recognises the user.
         if (jid.endsWith('@lid') && !await isInvited(jid) && pendingInvites.size > 0) {
           const [oldestJid] = [...pendingInvites.entries()].sort((a, b) => a[1] - b[1])[0];
           console.log('[wa] @lid fallback — transferring invite from', oldestJid, 'to', jid);
