@@ -9,7 +9,7 @@ require('dotenv').config();
 
 // ─── Business Details ────────────────────────────────────────
 const businessName     = process.env.BUSINESS_NAME || "CLEANLY Services";
-const contactNumber    = process.env.CONTACT_NUMBER || "+91 8767572043";                       
+const contactNumber    = process.env.CONTACT_NUMBER || "+91 9975233763";                       
 
 // ─── Session ─────────────────────────────────────────────────
 const sessionTimeoutMs = 15 * 60 * 1000; // 15 minutes
