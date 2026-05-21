@@ -134,7 +134,7 @@ async function handleMessage(msg) {
   if (getSession(senderId) !== null) {
     const lang = session.data.lang || "en";
     const callOption = lang === "hi" ? `\n\n0️⃣ कस्टम प्रश्नों के लिए, कॉल करें: ${config.contactNumber}` : 
-                       lang === "mr" ? `\n\n0️⃣ सानुकूल प्रश्नांसाठी, कॉल करा: ${config.contactNumber}` : 
+                       lang === "mr" ? `\n\n0️⃣ अधिक माहितीसाठी, कॉल करा: ${config.contactNumber}` : 
                        `\n\n0️⃣ For custom questions, Call us: ${config.contactNumber}`;
                        
     for (let i = responses.length - 1; i >= 0; i--) {
