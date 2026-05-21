@@ -1123,7 +1123,7 @@ function adminCleaningAlert(data) {
 🏠 Location : ${data.cleaningLocation || 'N/A'}
 📅 Date     : ${data.cleaningDate || 'N/A'}
 
-➡️ Please confirm slots with the customer.`;
+➡️ @service team, plz confirm slot with the customer.`;
 }
 
 const cleaningConfirmMessage = (data, lang) => {
