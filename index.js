@@ -36,6 +36,34 @@ function storeMessage(result) {
   }
 }
 
+// Safe dedup — only drops genuine Baileys retries (same valid id seen twice).
+// Messages without an id are processed normally (we don't have anything to dedup on).
+const processedMsgIds = new Set();
+function alreadyProcessed(id) {
+  if (!id) return false;
+  if (processedMsgIds.has(id)) return true;
+  processedMsgIds.add(id);
+  if (processedMsgIds.size > 1000) processedMsgIds.delete(processedMsgIds.values().next().value);
+  return false;
+}
+
+// Per-user queue — each user's messages process strictly in order.
+// Different users run in parallel. No message is dropped.
+const userQueues = new Map();
+function runQueued(jid, task) {
+  const existing = userQueues.get(jid);
+  if (existing) { existing.push(task); return; }
+  const queue = [task];
+  userQueues.set(jid, queue);
+  (async () => {
+    while (queue.length > 0) {
+      try { await queue[0](); } catch (e) { console.error('[queue]', jid, 'task error:', e.message); }
+      queue.shift();
+    }
+    userQueues.delete(jid);
+  })();
+}
+
 function toJid(phone) {
   return phone.replace(/[^0-9]/g, '') + '@s.whatsapp.net';
 }
@@ -236,18 +264,14 @@ async function bootstrap() {
     if (type !== 'notify') return;
     for (const rawMsg of messages) {
       try {
-        console.log('[wa] msg from:', rawMsg.key.remoteJid, 'fromMe:', rawMsg.key.fromMe, 'hasMsg:', !!rawMsg.message);
         if (rawMsg.key.fromMe) continue;
+        if (!rawMsg.message) continue;                       // skip protocol/undecryptable BEFORE dedup
         let jid = rawMsg.key.remoteJid;
         if (!jid || jid.endsWith('@g.us')) continue;
-        // Translate @lid to actual phone number if available
-        if (jid.endsWith('@lid') && rawMsg.key.senderPn) {
+        if (jid.endsWith('@lid') && rawMsg.key.senderPn) {   // translate @lid → phone number
           jid = rawMsg.key.senderPn;
         }
-        if (!rawMsg.message) {
-          console.warn('[wa] Skipping undecryptable message from', jid);
-          continue;
-        }
+        if (alreadyProcessed(rawMsg.key.id)) continue;       // dedup only real text messages
 
         const msgContent = rawMsg.message || {};
         const msgType    = Object.keys(msgContent)[0] || '';
@@ -256,14 +280,17 @@ async function bootstrap() {
         else if (msgType === 'extendedTextMessage') body = msgContent.extendedTextMessage?.text || '';
         else if (msgType === 'imageMessage')        body = msgContent.imageMessage?.caption || '';
 
+        console.log('[wa] from:', jid, 'body:', JSON.stringify(body).slice(0, 30));
+
         const liveSock = sock;
+        const userJid  = jid;
         const wrappedMsg = {
-          from: jid, body,
+          from: userJid, body,
           type: msgType === 'imageMessage' ? 'image' : 'chat',
           getContact: async () => ({
             pushname: rawMsg.pushName || '',
             name:     rawMsg.pushName || '',
-            id: { _serialized: jid },
+            id: { _serialized: userJid },
           }),
           downloadMedia: async () => {
             try {
@@ -273,23 +300,32 @@ async function bootstrap() {
               return { data: buf.toString('base64'), mimetype: msgContent.imageMessage?.mimetype || 'image/jpeg' };
             } catch { return null; }
           },
-          reply: async (text) => { storeMessage(await liveSock.sendMessage(jid, { text })); },
+          reply: async (text) => { storeMessage(await liveSock.sendMessage(userJid, { text })); },
         };
 
-        const replies = await flow.handleMessage(wrappedMsg);
-        for (const reply of replies) {
-          if (typeof reply === 'object' && reply._adminAlert) {
-            try { storeMessage(await liveSock.sendMessage(ownerJid, { text: reply._adminAlert })); } catch (_) {}
-            continue;
+        runQueued(userJid, async () => {
+          try {
+            // Show "typing…" so the user knows the bot is working during the 3-4s WhatsApp lag
+            try { await liveSock.sendPresenceUpdate('composing', userJid); } catch (_) {}
+            const replies = await flow.handleMessage(wrappedMsg);
+            for (const reply of replies) {
+              if (typeof reply === 'object' && reply._adminAlert) {
+                try { storeMessage(await liveSock.sendMessage(ownerJid, { text: reply._adminAlert })); } catch (_) {}
+                continue;
+              }
+              if (typeof reply === 'string') {
+                try { storeMessage(await liveSock.sendMessage(userJid, { text: reply })); } catch (_) {}
+              }
+            }
+            try { await liveSock.sendPresenceUpdate('paused', userJid); } catch (_) {}
+          } catch (err) {
+            console.error('[wa] Handler error for', userJid, ':', err.message);
+            try { storeMessage(await liveSock.sendMessage(userJid, { text: config.errorMessage }));
+                  flow.clearSession(userJid); } catch (_) {}
           }
-          if (typeof reply === 'string') {
-            try { storeMessage(await liveSock.sendMessage(jid, { text: reply })); } catch (_) {}
-          }
-        }
+        });
       } catch (err) {
-        console.error('[wa] Handler error:', err.message);
-        try { storeMessage(await sock.sendMessage(rawMsg.key.remoteJid, { text: config.errorMessage }));
-              flow.clearSession(rawMsg.key.remoteJid); } catch (_) {}
+        console.error('[wa] Outer handler error:', err.message);
       }
     }
   });
