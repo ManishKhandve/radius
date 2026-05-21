@@ -355,9 +355,16 @@ async function bootstrap() {
         runQueued(userJid, async () => {
           const before = flow.sessions?.get?.(userJid);
           console.log('[task] start jid:', userJid, 'body:', JSON.stringify(body).slice(0, 30), 'state:', before?.state || 'NEW');
-          try {
-            // Fire-and-forget typing indicator — never await, never block
+
+          // Start typing indicator and refresh every 4s — WhatsApp auto-clears
+          // 'composing' after ~10s of inactivity, so we heartbeat until the
+          // first reply is actually sent (sending a message dismisses typing).
+          liveSock.sendPresenceUpdate('composing', userJid).catch(() => {});
+          const heartbeat = setInterval(() => {
             liveSock.sendPresenceUpdate('composing', userJid).catch(() => {});
+          }, 4000);
+
+          try {
             const replies = await flow.handleMessage(wrappedMsg);
             const after = flow.sessions?.get?.(userJid);
             console.log('[task] flow returned', replies.length, 'replies; state →', after?.state || 'CLEARED');
@@ -376,11 +383,12 @@ async function bootstrap() {
                 } catch (e) { console.error('[task] reply send failed:', e.message); }
               }
             }
-            liveSock.sendPresenceUpdate('paused', userJid).catch(() => {});
           } catch (err) {
             console.error('[task] handler error for', userJid, ':', err.message, err.stack);
             try { storeMessage(await liveSock.sendMessage(userJid, { text: config.errorMessage }));
                   flow.clearSession(userJid); } catch (_) {}
+          } finally {
+            clearInterval(heartbeat);
           }
         });
       } catch (err) {
