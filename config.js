@@ -260,17 +260,17 @@ const collectFlatMessage = {
 };
 
 const collectDateMessage = {
-  en: `📅 When would you like her trial date?
+  en: `📅 When would you like to interview the maids?
 
-Please enter your preferred trial date.
+Please enter your preferred interview date.
 (Example: 20 May or 20/05/2025)`,
-  hi: `📅 ट्रायल डेट कब चाहिए?
+  hi: `📅 मेड का इंटरव्यू कब लेना चाहेंगे?
 
-पसंदीदा ट्रायल डेट बताएं।
+पसंदीदा इंटरव्यू डेट बताएं।
 (उदाहरण: 20 May या 20/05/2025)`,
-  mr: `📅 ट्रायल डेट कधी हवी आहे?
+  mr: `📅 मेडचा इंटरव्ह्यू कधी घ्यायचा आहे?
 
-पसंदीची ट्रायल डेट सांगा.
+पसंदीची इंटरव्ह्यू तारीख सांगा.
 (उदाहरण: 20 May किंवा 20/05/2025)`
 };
 
@@ -1077,7 +1077,7 @@ function confirmMessage(data, lang = "en") {
 💰 बजट         : ${data.budget}
 👩 मेड चुनी    : ${data.maidChoice}
 🏠 पता          : ${address}
-📅 ट्रायल डेट  : ${data.startDate}
+📅 इंटरव्यू डेट : ${data.startDate}
 📦 प्लान        : ${plan}
 
 *1* रिप्लाई करें — कन्फर्म ✅
@@ -1091,7 +1091,7 @@ function confirmMessage(data, lang = "en") {
 💰 बजट          : ${data.budget}
 👩 मेड निवडली   : ${data.maidChoice}
 🏠 पत्ता         : ${address}
-📅 ट्रायल डेट   : ${data.startDate}
+📅 इंटरव्ह्यू डेट: ${data.startDate}
 📦 प्लान         : ${plan}
 
 *1* रिप्लाय करा — कन्फर्म ✅
@@ -1105,7 +1105,7 @@ function confirmMessage(data, lang = "en") {
 💰 Budget     : ${data.budget}
 👩 Maid Chosen: ${data.maidChoice}
 🏠 Address    : ${address}
-📅 Trial Date : ${data.startDate}
+📅 Interview Date : ${data.startDate}
 📦 Plan       : ${plan}
 
 Reply *1* to Confirm ✅
