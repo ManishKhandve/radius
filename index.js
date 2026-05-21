@@ -5,7 +5,7 @@
 
 const { default: makeWASocket, DisconnectReason, downloadMediaMessage,
         fetchLatestBaileysVersion, Browsers, useMultiFileAuthState } = require('@whiskeysockets/baileys');
-const { addInvite } = require('./invite-store');
+const { addInvite, isInvited } = require('./invite-store');
 require('dotenv').config();
 const express = require('express');
 const QRCode  = require('qrcode');
@@ -64,6 +64,11 @@ function runQueued(jid, task) {
   })();
 }
 
+// Tracks JIDs the admin has invited but who haven't replied yet.
+// When an @lid message arrives without senderPn, we associate it with
+// the oldest pending invite so the user gets recognized.
+const pendingInvites = new Map(); // jid -> timestamp
+
 function toJid(phone) {
   return phone.replace(/[^0-9]/g, '') + '@s.whatsapp.net';
 }
@@ -111,6 +116,7 @@ app.get('/send', async (req, res) => {
   const jid = toJid(to);
   try {
     await addInvite(jid);
+    pendingInvites.set(jid, Date.now());
     storeMessage(await sock.sendMessage(jid, { text: config.adminIntroMessage }));
     res.send(`✅ Sent to ${jid}`);
   } catch (e) { res.status(500).send(e.message); }
@@ -273,6 +279,18 @@ async function bootstrap() {
         }
         if (alreadyProcessed(rawMsg.key.id)) continue;       // dedup only real text messages
 
+        // @lid fallback: if we still have an @lid jid (no senderPn) and there's
+        // an unconsumed admin invite, transfer the invite to this @lid so the
+        // bot recognises the user.
+        if (jid.endsWith('@lid') && !await isInvited(jid) && pendingInvites.size > 0) {
+          const [oldestJid] = [...pendingInvites.entries()].sort((a, b) => a[1] - b[1])[0];
+          console.log('[wa] @lid fallback — transferring invite from', oldestJid, 'to', jid);
+          await addInvite(jid);
+          pendingInvites.delete(oldestJid);
+        } else if (pendingInvites.has(jid)) {
+          pendingInvites.delete(jid);
+        }
+
         const msgContent = rawMsg.message || {};
         const msgType    = Object.keys(msgContent)[0] || '';
         let body = '';
@@ -305,8 +323,8 @@ async function bootstrap() {
 
         runQueued(userJid, async () => {
           try {
-            // Show "typing…" so the user knows the bot is working during the 3-4s WhatsApp lag
-            try { await liveSock.sendPresenceUpdate('composing', userJid); } catch (_) {}
+            // Fire-and-forget typing indicator — never await, never block
+            liveSock.sendPresenceUpdate('composing', userJid).catch(() => {});
             const replies = await flow.handleMessage(wrappedMsg);
             for (const reply of replies) {
               if (typeof reply === 'object' && reply._adminAlert) {
@@ -317,7 +335,7 @@ async function bootstrap() {
                 try { storeMessage(await liveSock.sendMessage(userJid, { text: reply })); } catch (_) {}
               }
             }
-            try { await liveSock.sendPresenceUpdate('paused', userJid); } catch (_) {}
+            liveSock.sendPresenceUpdate('paused', userJid).catch(() => {});
           } catch (err) {
             console.error('[wa] Handler error for', userJid, ':', err.message);
             try { storeMessage(await liveSock.sendMessage(userJid, { text: config.errorMessage }));
