@@ -619,6 +619,11 @@ async function processState(session, body, senderId, msg) {
     case "MAID_AREA": {
       const idx = parseInt(body) - 1;
       const areas = session.data.maidCity === "Pune" ? config.puneAreas : config.pcmcAreas;
+      // Custom-area option is one past the regular area list
+      if (idx === areas.length) {
+        session.state = "MAID_CUSTOM_AREA";
+        return [config.customAreaPromptMessage[session.data.lang || "en"]];
+      }
       if (isNaN(idx) || idx < 0 || idx >= areas.length) {
         return [config.getAreaMessage(session.data.maidCity, session.data.lang)];
       }
@@ -721,6 +726,51 @@ async function processState(session, body, senderId, msg) {
           ? "मेड शोधताना चूक झाली. सपोर्टसाठी फोन करा."
           : "Something went wrong while finding maids. Please contact support."];
       }
+    }
+
+    case "MAID_CUSTOM_AREA": {
+      const lang = session.data.lang || "en";
+      const trimmed = body.trim();
+      if (trimmed.length < 2) {
+        return [config.customAreaPromptMessage[lang]];
+      }
+      session.data.maidArea = trimmed;
+      session.data.maidCity = session.data.maidCity || "Custom";
+
+      // Save lead with the custom area (fire-and-forget)
+      (async () => {
+        try {
+          const cid = await sheets.generateCustomerId();
+          session.data.customerId = cid;
+          await sheets.appendCustomer({
+            customerId: cid,
+            name: session.data.contactName,
+            whatsappNumber: session.data.whatsappNumber,
+            workType: session.data.workType,
+            timing: session.data.timing,
+            budget: session.data.budget,
+            status: "New Lead (Custom Area)",
+            source: "WhatsApp Bot",
+            city: session.data.maidCity,
+            area: trimmed,
+            language: session.data.lang,
+          });
+        } catch (e) { console.error("[flow] custom-area lead save err:", e.message); }
+      })();
+
+      // Alert admin so service team can follow up manually
+      const adminAlert = `🔔 *NEW LEAD — Custom Area (out of coverage)*\n\n` +
+        `👤 Customer : ${session.data.contactName}\n` +
+        `📞 WhatsApp : ${session.data.whatsappNumber}\n` +
+        `🧹 Work     : ${session.data.workType}\n` +
+        `⏰ Timing   : ${session.data.timing}\n` +
+        `💰 Budget   : ${session.data.budget}\n` +
+        `📍 Area     : ${trimmed}\n\n` +
+        `➡️ @service team, please reach out — area is outside the standard list.`;
+
+      const reply = config.customAreaConfirmMessage(trimmed, lang);
+      clearSession(senderId);
+      return [reply, { _adminAlert: adminAlert }];
     }
 
     case "MAID_CHOICE": {

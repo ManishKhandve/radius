@@ -237,7 +237,13 @@ const getAreaMessage = (city, lang) => {
   areas.forEach((area, index) => {
     text += `${numToEmoji(index + 1)} ${area}\n`;
   });
-  
+  // Append a "Custom" option as the last numbered choice
+  const customIdx = areas.length + 1;
+  const customLabel = lang === "hi" ? "अन्य (अपना एरिया लिखें)"
+    : lang === "mr" ? "इतर (तुमचा एरिया लिहा)"
+    : "Other (type your area)";
+  text += `${numToEmoji(customIdx)} ${customLabel}\n`;
+
   if (lang === "hi") {
     text += `\n*👉 अपने एरिया का नंबर रिप्लाई करें।*`;
     return `📍 अपना एरिया चुनें:\n\n${text}`;
@@ -248,6 +254,18 @@ const getAreaMessage = (city, lang) => {
     text += `\n*👉 Reply with the number of your area.*`;
     return `📍 Please select your area:\n\n${text}`;
   }
+};
+
+const customAreaPromptMessage = {
+  en: `📍 Please type your area / location.\n(Example: Sinhgad Road, Pimple Saudagar, etc.)`,
+  hi: `📍 अपना एरिया / लोकेशन लिखें।\n(उदाहरण: Sinhgad Road, Pimple Saudagar, आदि)`,
+  mr: `📍 तुमचा एरिया / लोकेशन लिहा.\n(उदाहरण: Sinhgad Road, Pimple Saudagar, इ.)`,
+};
+
+const customAreaConfirmMessage = (area, lang) => {
+  if (lang === "hi") return `🔍 ठीक है! हम *${area}* में आपके लिए सही मेड खोजेंगे।\n\nहमारी टीम जल्द ही आपसे संपर्क करेगी। 📞`;
+  if (lang === "mr") return `🔍 ठीक आहे! आम्ही *${area}* मध्ये तुमच्यासाठी योग्य मेड शोधू.\n\nआमची टीम लवकरच तुमच्याशी संपर्क करेल. 📞`;
+  return `🔍 Got it! We'll find a maid for you in *${area}*.\n\nOur team will contact you shortly. 📞`;
 };
 
 const collectFlatMessage = {
@@ -1330,6 +1348,8 @@ module.exports = {
   pcmcAreas,
   pcmcAreaCoordinates,
   getAreaMessage,
+  customAreaPromptMessage,
+  customAreaConfirmMessage,
   maidPlanMessage,
   maidPlans,
   getMaidPlanOptions,
