@@ -463,54 +463,57 @@ async function processState(session, body, senderId, msg) {
     }
 
     case "CLEANING_MINI_SERVICE": {
-      // Parse input like "6-2, 3-1, 7-3" (service-quantity pairs)
-      if (body.length < 1) {
-        return [config.miniServiceMessage[session.data.lang]];
-      }
-      
+      // Parse input like "6-2, 3-1, 7-3" (service-quantity pairs).
+      // Accumulates across messages until ₹2000 minimum is reached.
+      const lang = session.data.lang || "en";
+      if (body.length < 1) return [config.miniServiceMessage[lang]];
+
+      // Initialise the per-session cart
+      if (!session.data.miniCart) session.data.miniCart = { items: [], total: 0 };
+      const cart = session.data.miniCart;
+
       try {
-        const items = body.split(',').map(item => item.trim());
-        let totalPrice = 0;
-        let serviceDetails = [];
-        
-        for (const item of items) {
+        const newItems = body.split(',').map(s => s.trim()).filter(Boolean);
+        for (const item of newItems) {
           const [serviceNum, qty] = item.split('-').map(s => s.trim());
           const quantity = parseInt(qty) || 1;
-          
           const service = config.miniServiceItems[serviceNum];
           if (!service) {
-            const msg = session.data.lang === "hi"
+            const msg = lang === "hi"
               ? `⚠️ गलत सर्विस नंबर: ${serviceNum}. फिर से कोशिश करें.`
-              : session.data.lang === "mr"
+              : lang === "mr"
               ? `⚠️ चुकीचा सर्विस नंबर: ${serviceNum}. पुन्हा प्रयत्न करा.`
               : `⚠️ Invalid service number: ${serviceNum}. Please try again.`;
             return [msg];
           }
-          
           const itemTotal = service.price * quantity;
-          totalPrice += itemTotal;
-          serviceDetails.push(`${service.name} x${quantity} = ₹${itemTotal}`);
+          cart.items.push(`${service.name} x${quantity} = ₹${itemTotal}`);
+          cart.total += itemTotal;
         }
-        
-        // Check minimum order value
-        if (totalPrice < 2000) {
-          const msg = session.data.lang === "hi"
-            ? `⚠️ न्यूनतम ऑर्डर ₹2000 है। आपका कुल: ₹${totalPrice}। और सर्विसेज़ जोड़ें।`
-            : session.data.lang === "mr"
-            ? `⚠️ किमान ऑर्डर ₹2000 आहे. तुमचा एकूण: ₹${totalPrice}. आणखी सर्विसेस जोडा.`
-            : `⚠️ Minimum order value is ₹2000. Your total: ₹${totalPrice}. Please add more services.`;
+
+        // Below minimum — keep collecting, show current cart
+        if (cart.total < 2000) {
+          const remaining = 2000 - cart.total;
+          const cartLines = cart.items.map(s => `• ${s}`).join('\n');
+          const msg = lang === "hi"
+            ? `✅ अभी तक जोड़ा गया:\n${cartLines}\n\n💰 अभी का कुल: ₹${cart.total}\n⚠️ न्यूनतम ऑर्डर ₹2000 — और ₹${remaining} की सर्विसेज़ जोड़ें।`
+            : lang === "mr"
+            ? `✅ आत्तापर्यंत जोडले:\n${cartLines}\n\n💰 सध्याचा एकूण: ₹${cart.total}\n⚠️ किमान ऑर्डर ₹2000 — आणखी ₹${remaining} च्या सर्विसेस जोडा.`
+            : `✅ Added so far:\n${cartLines}\n\n💰 Current total: ₹${cart.total}\n⚠️ Minimum order ₹2000 — please add ₹${remaining} more in services.`;
           return [msg];
         }
-        
-        session.data.cleaningDetails = "Mini Services: " + serviceDetails.join(', ');
-        session.data.cleaningPrice = `₹${totalPrice}`;
+
+        // Minimum met — finalise
+        session.data.cleaningDetails = "Mini Services: " + cart.items.join(', ');
+        session.data.cleaningPrice = `₹${cart.total}`;
+        delete session.data.miniCart;
         session.state = "COLLECT_FLAT";
-        return [config.cleaningAddressMessage[session.data.lang || "en"]];
-        
+        return [config.cleaningAddressMessage[lang]];
+
       } catch (err) {
-        const msg = session.data.lang === "hi"
+        const msg = lang === "hi"
           ? "⚠️ फॉर्मेट गलत है। उदाहरण: 6-2, 3-1, 7-3"
-          : session.data.lang === "mr"
+          : lang === "mr"
           ? "⚠️ फॉर्मेट चुकीचे आहे. उदाहरण: 6-2, 3-1, 7-3"
           : "⚠️ Invalid format. Example: 6-2, 3-1, 7-3";
         return [msg];
