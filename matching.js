@@ -51,57 +51,48 @@ function getZone(distance) {
 }
 
 /**
- * Fetch top 3 maids based on the customer's coordinates
+ * Fetch top 3 maids based on the customer's coordinates.
+ *
+ * Filtering is purely by availability: status === "Interested".
+ * Work type is intentionally not used to filter — the customer's
+ * area should drive the match, and the admin can route the right
+ * maid for the right job manually.
+ *
+ * @param {number} customerLat
+ * @param {number} customerLng
+ * @param {string} [_workType] — accepted for API compatibility, ignored
  */
-async function getTopMaids(customerLat, customerLng, workType) {
+async function getTopMaids(customerLat, customerLng, _workType) {
   if (!supabase) {
     throw new Error("Supabase credentials missing. Please set SUPABASE_URL and SUPABASE_KEY.");
   }
-
   if (!customerLat || !customerLng) {
     throw new Error("Customer location coordinates are missing.");
   }
 
-  // Only show maids with status "Interested" + filter by work type.
-  // Fallback: also include maids tagged with the generic "Maid" service
-  // type (catch-all in the data) so customers always see candidates even
-  // when the data isn't perfectly tagged.
-  let query = supabase.from('maids').select('*').eq('status', 'Interested');
-  if (workType) {
-    query = query.or(`service_type.ilike.%${workType}%,service_type.ilike.Maid`);
-  }
-
-  const { data: maids, error } = await query;
+  const { data: maids, error } = await supabase
+    .from('maids')
+    .select('*')
+    .eq('status', 'Interested');
 
   if (error) {
     console.error("Supabase Error:", error);
     throw new Error("Failed to fetch maids from database.");
   }
-
-  if (!maids || maids.length === 0) {
-    return [];
-  }
+  if (!maids || maids.length === 0) return [];
 
   const maidsWithDistance = [];
-
   for (const maid of maids) {
-    // Skip maids with missing coordinates
     if (!maid.latitude || !maid.longitude) continue;
-
-    // Skip maids with coordinates outside Maharashtra
     if (!isInMaharashtra(maid.latitude, maid.longitude)) continue;
 
     const distance = getDistanceFromLatLonInKm(customerLat, customerLng, maid.latitude, maid.longitude);
     const zone = getZone(distance);
-    // Specific service match ranks above generic "Maid" fallback
-    const serviceMatch = workType && maid.service_type
-      && maid.service_type.toLowerCase().includes(workType.toLowerCase()) ? 0 : 1;
-    maidsWithDistance.push({ ...maid, distance, zone, serviceMatch });
+    maidsWithDistance.push({ ...maid, distance, zone });
   }
 
-  // Sort: specific service match first, then zone (P1→P4), then exact distance
+  // Sort: zone (P1→P4) first, then exact distance within zone.
   maidsWithDistance.sort((a, b) => {
-    if (a.serviceMatch !== b.serviceMatch) return a.serviceMatch - b.serviceMatch;
     if (a.zone.level !== b.zone.level) return a.zone.level - b.zone.level;
     return a.distance - b.distance;
   });

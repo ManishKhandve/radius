@@ -42,14 +42,8 @@ const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_KEY
     let result = '';
     let distance = null;
 
-    const svc = (m.service_type || '').toLowerCase();
-    const specificMatch = svc.includes(workType.toLowerCase());
-    const genericMatch  = svc === 'maid';
-
     if (m.status !== 'Interested') {
       result = `❌ status="${m.status}" (need "Interested")`;
-    } else if (!specificMatch && !genericMatch) {
-      result = `❌ service "${m.service_type || 'none'}" doesn't match "${workType}" or "Maid"`;
     } else if (!m.latitude || !m.longitude) {
       result = `❌ missing lat/lng`;
     } else if (m.latitude < 15.6 || m.latitude > 22.1 || m.longitude < 72.6 || m.longitude > 80.9) {
@@ -64,9 +58,8 @@ const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_KEY
         else if (distance <= 3) zone = 'P2 🔵';
         else if (distance <= 6) zone = 'P3 🟠';
         else zone = 'P4 🔴';
-        const tag = specificMatch ? 'SPECIFIC' : 'GENERIC';
-        result = `✅ ${distance.toFixed(2)}km — ${zone} [${tag}]`;
-        topCandidates.push({ ...m, distance, zone, specificMatch });
+        result = `✅ ${distance.toFixed(2)}km — ${zone}`;
+        topCandidates.push({ ...m, distance, zone });
       }
     }
 
@@ -77,18 +70,14 @@ const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_KEY
   }
 
   console.log('─'.repeat(110));
-  // Specific matches first, then by distance — same sort as matching.js
-  topCandidates.sort((a, b) => {
-    if (a.specificMatch !== b.specificMatch) return a.specificMatch ? -1 : 1;
-    return a.distance - b.distance;
-  });
-  console.log(`\n🏆 Top 3 that WOULD be shown to the customer (specific match first, then distance):\n`);
+  // Sort purely by distance (and zone level) — work type doesn't filter anything now.
+  topCandidates.sort((a, b) => a.distance - b.distance);
+  console.log(`\n🏆 Top 3 that WOULD be shown to the customer (sorted by distance):\n`);
   if (topCandidates.length === 0) {
-    console.log('   (none — no matching maids within 8km)');
+    console.log('   (none — no Interested maids within 8km)');
   } else {
     topCandidates.slice(0, 3).forEach((m, i) => {
-      const tag = m.specificMatch ? 'SPECIFIC' : 'GENERIC';
-      console.log(`   ${i + 1}. M${m.id} — ${m.name} — ${m.distance.toFixed(2)}km ${m.zone} [${tag}] — service: ${m.service_type}`);
+      console.log(`   ${i + 1}. M${m.id} — ${m.name} — ${m.distance.toFixed(2)}km ${m.zone} — service: ${m.service_type}`);
     });
   }
   console.log();
