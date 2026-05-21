@@ -353,30 +353,31 @@ async function bootstrap() {
         };
 
         runQueued(userJid, async () => {
-          const t0 = Date.now();
+          const before = flow.sessions?.get?.(userJid);
+          console.log('[task] start jid:', userJid, 'body:', JSON.stringify(body).slice(0, 30), 'state:', before?.state || 'NEW');
           try {
             const replies = await flow.handleMessage(wrappedMsg);
-            console.log('[task]', userJid, 'body:', JSON.stringify(body).slice(0, 20), 'flow:', Date.now() - t0, 'ms, replies:', replies.length);
-
-            // Fire-and-forget — Baileys keeps internal send order; the queue
-            // task finishes immediately so the next user message can start.
+            const after = flow.sessions?.get?.(userJid);
+            console.log('[task] flow returned', replies.length, 'replies; state →', after?.state || 'CLEARED');
             for (const reply of replies) {
               if (typeof reply === 'object' && reply._adminAlert) {
-                liveSock.sendMessage(ownerJid, { text: reply._adminAlert })
-                  .then(storeMessage)
-                  .catch(e => console.error('[task] adminAlert send failed:', e.message));
+                try {
+                  storeMessage(await liveSock.sendMessage(ownerJid, { text: reply._adminAlert }));
+                  console.log('[task] sent adminAlert to', ownerJid);
+                } catch (e) { console.error('[task] adminAlert send failed:', e.message); }
                 continue;
               }
               if (typeof reply === 'string') {
-                liveSock.sendMessage(userJid, { text: reply })
-                  .then(storeMessage)
-                  .catch(e => console.error('[task] reply send failed:', e.message));
+                try {
+                  storeMessage(await liveSock.sendMessage(userJid, { text: reply }));
+                  console.log('[task] sent reply to', userJid, '(' + reply.length + ' chars)');
+                } catch (e) { console.error('[task] reply send failed:', e.message); }
               }
             }
           } catch (err) {
-            console.error('[task] handler error for', userJid, ':', err.message);
-            liveSock.sendMessage(userJid, { text: config.errorMessage }).catch(() => {});
-            flow.clearSession(userJid);
+            console.error('[task] handler error for', userJid, ':', err.message, err.stack);
+            try { storeMessage(await liveSock.sendMessage(userJid, { text: config.errorMessage }));
+                  flow.clearSession(userJid); } catch (_) {}
           }
         });
       } catch (err) {
