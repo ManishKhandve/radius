@@ -283,14 +283,18 @@ async function bootstrap() {
     if (type !== 'notify') return;
     for (const rawMsg of messages) {
       try {
-        if (rawMsg.key.fromMe) continue;
-        if (!rawMsg.message) continue;                       // skip protocol/undecryptable BEFORE dedup
-        let jid = rawMsg.key.remoteJid;
-        if (!jid || jid.endsWith('@g.us')) continue;
-        if (jid.endsWith('@lid') && rawMsg.key.senderPn) {   // translate @lid → phone number
-          jid = rawMsg.key.senderPn;
+        const rk = rawMsg.key || {};
+        console.log('[skip?] remoteJid:', rk.remoteJid, 'id:', rk.id, 'senderPn:', rk.senderPn, 'fromMe:', rk.fromMe, 'hasMsg:', !!rawMsg.message);
+        if (rk.fromMe) { console.log('[skip] fromMe'); continue; }
+        if (!rawMsg.message) { console.log('[skip] no rawMsg.message (protocol/undecryptable)'); continue; }
+        let jid = rk.remoteJid;
+        if (!jid) { console.log('[skip] no remoteJid'); continue; }
+        if (jid.endsWith('@g.us')) { console.log('[skip] group message'); continue; }
+        if (jid.endsWith('@lid') && rk.senderPn) {
+          console.log('[xlate] @lid', jid, '→', rk.senderPn);
+          jid = rk.senderPn;
         }
-        if (alreadyProcessed(rawMsg.key.id)) continue;       // dedup only real text messages
+        if (alreadyProcessed(rk.id)) { console.log('[skip] alreadyProcessed id:', rk.id); continue; }
 
         // @lid fallback: if we still have an @lid jid (no senderPn) and there's
         // an unconsumed admin invite, transfer the invite to this @lid so the
