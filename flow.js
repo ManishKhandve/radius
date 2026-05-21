@@ -137,8 +137,8 @@ async function processState(session, body, senderId, msg) {
     case "MAIN_MENU": {
       if (body === "1") {
         session.data.serviceCategory = "cleaning";
-        session.state = "CLEANING_SERVICE_TYPE";
-        return [config.cleaningServiceMessage[session.data.lang]];
+        session.state = "CLEANING_NAME";
+        return [config.cleaningNameMessage[session.data.lang]];
       } else if (body === "2") {
         session.data.serviceCategory = "maid";
         session.state = "WORK_TYPE";
@@ -146,6 +146,16 @@ async function processState(session, body, senderId, msg) {
       } else {
         return [config.mainMenuMessage[session.data.lang]];
       }
+    }
+
+    case "CLEANING_NAME": {
+      const trimmed = body.trim();
+      if (trimmed.length < 2) {
+        return [config.cleaningNameMessage[session.data.lang]];
+      }
+      session.data.contactName = trimmed;
+      session.state = "CLEANING_SERVICE_TYPE";
+      return [config.cleaningServiceMessage[session.data.lang]];
     }
 
     // ==========================================

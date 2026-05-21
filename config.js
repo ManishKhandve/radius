@@ -683,6 +683,12 @@ const cleaningAddressMessage = {
 (उदाहरण: Flat 4B, Sunrise Society, Baner, Pune)`
 };
 
+const cleaningNameMessage = {
+  en: `👤 May I have your name, please?`,
+  hi: `👤 कृपया अपना नाम बताएं।`,
+  mr: `👤 कृपया तुमचे नाव सांगा.`
+};
+
 const cleaningAddonsMessage = {
   en: `✨ *Select Add-ons:*
 
@@ -1113,6 +1119,7 @@ module.exports = {
   miniServiceItems,
   miniServiceMessage,
   cleaningAddressMessage,
+  cleaningNameMessage,
   cleaningAddonsMessage,
   cleaningAddonsSofaMessage,
   cleaningDateMessage,
