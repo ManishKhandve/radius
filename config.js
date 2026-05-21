@@ -36,6 +36,44 @@ const budgets = {
   "4": "₹20,000 – ₹30,000 (10+ education + experience)"
 };
 
+// Budget ranges depend on the timing the customer picked. Higher timing → higher salary band.
+const budgetsByTiming = {
+  "Part Time (1-3 hrs)": {
+    "1": "₹4,000 – ₹6,000",
+    "2": "₹6,000 – ₹10,000",
+    "3": "₹10,000 – ₹20,000",
+  },
+  "Full Time (8 hrs)": {
+    "1": "₹15,000 – ₹20,000",
+    "2": "₹20,000 – ₹25,000",
+    "3": "₹25,000 – ₹30,000",
+  },
+  "Full Time (10 hrs)": {
+    "1": "₹18,000 – ₹20,000",
+    "2": "₹20,000 – ₹30,000",
+  },
+  "Full Time (24 hrs)": {
+    "1": "₹20,000 – ₹30,000",
+  },
+};
+
+function getBudgetOptions(timing) {
+  return budgetsByTiming[timing] || budgets;
+}
+
+function getBudgetMessage(timing, lang) {
+  const opts = getBudgetOptions(timing);
+  const lines = Object.entries(opts)
+    .map(([k, v]) => `${k}️⃣ ${v}`)
+    .join('\n');
+  const headers = {
+    en: `💰 What is your monthly budget for the maid's salary?\n_(Salary is based on skill and experience)_\n\n`,
+    hi: `💰 मेड की सैलरी का मंथली बजट क्या है?\n_(सैलरी स्किल और अनुभव के हिसाब से तय होती है)_\n\n`,
+    mr: `💰 मेडच्या पगाराचे मंथली बजट किती आहे?\n_(पगार स्किल आणि अनुभवानुसार ठरतो)_\n\n`,
+  };
+  return (headers[lang] || headers.en) + lines;
+}
+
 const langs = {
   "1": "en",
   "2": "mr",
@@ -1124,6 +1162,9 @@ module.exports = {
   workTypeMessage,
   timingMessage,
   budgetMessage,
+  budgetsByTiming,
+  getBudgetOptions,
+  getBudgetMessage,
   collectFlatMessage,
   collectDateMessage,
   cleaningServiceMessage,

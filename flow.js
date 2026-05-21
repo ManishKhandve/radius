@@ -590,11 +590,12 @@ async function processState(session, body, senderId, msg) {
       if (!v) return [config.timingMessage[session.data.lang]];
       session.data.timing = v;
       session.state = "BUDGET";
-      return [config.budgetMessage[session.data.lang]];
+      return [config.getBudgetMessage(v, session.data.lang)];
     }
     case "BUDGET": {
-      const v = config.budgets[body];
-      if (!v) return [config.budgetMessage[session.data.lang]];
+      const opts = config.getBudgetOptions(session.data.timing);
+      const v = opts[body];
+      if (!v) return [config.getBudgetMessage(session.data.timing, session.data.lang)];
       session.data.budget = v;
       session.state = "MAID_CITY";
       return [config.maidCityMessage[session.data.lang]];
