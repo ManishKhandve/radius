@@ -60,45 +60,18 @@ function sheetId() {
 // ─── ID Generators ───────────────────────────────────────────
 
 /**
- * Generates next Customer ID (C001, C002, …) based on existing rows.
+ * Returns a unique Customer ID instantly — no Sheets API call on the
+ * critical path. Format: C + last 7 digits of timestamp.
  */
 async function generateCustomerId() {
-  try {
-    const sheets = await getClient();
-    const res = await sheets.spreadsheets.values.get({
-      spreadsheetId: sheetId(),
-      range: `${SHEET_CUSTOMERS}!A:A`,
-    });
-
-    const rows = res.data.values || [];
-    // Subtract 1 for the header row
-    const nextNum = rows.length; // rows includes header, so length = last index + 1
-    return `C${String(nextNum).padStart(3, "0")}`;
-  } catch (err) {
-    console.error("[sheets] generateCustomerId error:", err.message);
-    // Fallback — timestamp-based
-    return `C${Date.now().toString().slice(-5)}`;
-  }
+  return `C${Date.now().toString().slice(-7)}`;
 }
 
 /**
- * Generates next Booking ID (B001, B002, …) based on existing rows.
+ * Returns a unique Booking ID instantly. Format: B + last 7 digits of timestamp.
  */
 async function generateBookingId() {
-  try {
-    const sheets = await getClient();
-    const res = await sheets.spreadsheets.values.get({
-      spreadsheetId: sheetId(),
-      range: `${SHEET_BOOKINGS}!A:A`,
-    });
-
-    const rows = res.data.values || [];
-    const nextNum = rows.length;
-    return `B${String(nextNum).padStart(3, "0")}`;
-  } catch (err) {
-    console.error("[sheets] generateBookingId error:", err.message);
-    return `B${Date.now().toString().slice(-5)}`;
-  }
+  return `B${Date.now().toString().slice(-7)}`;
 }
 
 // ─── Append Functions ────────────────────────────────────────
