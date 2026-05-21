@@ -58,47 +58,49 @@ function sheetId() {
 }
 
 // ─── ID Generators ───────────────────────────────────────────
+//
+// IDs stay sequential (C001, B001, …) but we only hit the Sheets API
+// once per ID type on the first call (or after a TTL refresh).
+// Subsequent calls increment an in-memory counter — instant.
 
-/**
- * Generates next Customer ID (C001, C002, …) based on existing rows.
- */
-async function generateCustomerId() {
-  try {
-    const sheets = await getClient();
-    const res = await sheets.spreadsheets.values.get({
-      spreadsheetId: sheetId(),
-      range: `${SHEET_CUSTOMERS}!A:A`,
-    });
+const ID_REFRESH_MS = 30 * 60 * 1000; // 30-minute safety re-read
+const counters = {
+  customer: { value: null, fetchedAt: 0 },
+  booking:  { value: null, fetchedAt: 0 },
+};
 
-    const rows = res.data.values || [];
-    // Subtract 1 for the header row
-    const nextNum = rows.length; // rows includes header, so length = last index + 1
-    return `C${String(nextNum).padStart(3, "0")}`;
-  } catch (err) {
-    console.error("[sheets] generateCustomerId error:", err.message);
-    // Fallback — timestamp-based
-    return `C${Date.now().toString().slice(-5)}`;
-  }
+async function readRowCount(sheetName) {
+  const sheets = await getClient();
+  const res = await sheets.spreadsheets.values.get({
+    spreadsheetId: sheetId(),
+    range: `${sheetName}!A:A`,
+  });
+  return (res.data.values || []).length;
 }
 
-/**
- * Generates next Booking ID (B001, B002, …) based on existing rows.
- */
-async function generateBookingId() {
-  try {
-    const sheets = await getClient();
-    const res = await sheets.spreadsheets.values.get({
-      spreadsheetId: sheetId(),
-      range: `${SHEET_BOOKINGS}!A:A`,
-    });
-
-    const rows = res.data.values || [];
-    const nextNum = rows.length;
-    return `B${String(nextNum).padStart(3, "0")}`;
-  } catch (err) {
-    console.error("[sheets] generateBookingId error:", err.message);
-    return `B${Date.now().toString().slice(-5)}`;
+async function nextId(prefix, counterKey, sheetName) {
+  const c = counters[counterKey];
+  const stale = c.value === null || Date.now() - c.fetchedAt > ID_REFRESH_MS;
+  if (stale) {
+    try {
+      c.value = await readRowCount(sheetName);
+      c.fetchedAt = Date.now();
+    } catch (err) {
+      console.error(`[sheets] readRowCount(${sheetName}) failed:`, err.message);
+      // Fall back to a timestamp-based id so the booking still works
+      return `${prefix}${Date.now().toString().slice(-5)}`;
+    }
   }
+  c.value += 1;
+  return `${prefix}${String(c.value).padStart(3, "0")}`;
+}
+
+async function generateCustomerId() {
+  return nextId("C", "customer", SHEET_CUSTOMERS);
+}
+
+async function generateBookingId() {
+  return nextId("B", "booking", SHEET_BOOKINGS);
 }
 
 // ─── Append Functions ────────────────────────────────────────
