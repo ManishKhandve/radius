@@ -17,6 +17,19 @@ const sheets  = require('./sheets');
 process.on('uncaughtException',  (err) => console.error('[crash] Uncaught exception:', err.message));
 process.on('unhandledRejection', (r)   => console.error('[crash] Unhandled rejection:', r?.message || r));
 
+// Silence libsignal's verbose internal key-rotation chatter that drowns out our real logs
+const _origLog = console.log;
+console.log = (...args) => {
+  const first = args[0];
+  if (typeof first === 'string' && (
+    first.startsWith('Closing session') ||
+    first.startsWith('Removing old closed session') ||
+    first.startsWith('Closing open session') ||
+    first.startsWith('Removing closed session')
+  )) return;
+  _origLog.apply(console, args);
+};
+
 const app  = express();
 app.use(express.json());
 const PORT = process.env.PORT || 3000;
