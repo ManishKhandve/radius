@@ -360,12 +360,10 @@ async function bootstrap() {
         runQueued(userJid, async () => {
           const before = flow.sessions?.get?.(userJid);
           console.log('[task] start jid:', userJid, 'body:', JSON.stringify(body).slice(0, 30), 'state:', before?.state || 'NEW');
-          console.time(`[PERF] Total processing time for ${userJid}`);
           try {
             const replies = await flow.handleMessage(wrappedMsg);
             const after = flow.sessions?.get?.(userJid);
             console.log('[task] flow returned', replies.length, 'replies; state →', after?.state || 'CLEARED');
-            console.time(`[PERF] Sending ${replies.length} replies`);
             for (const reply of replies) {
               if (typeof reply === 'object' && reply._adminAlert) {
                 try {
@@ -381,11 +379,8 @@ async function bootstrap() {
                 } catch (e) { console.error('[task] reply send failed:', e.message); }
               }
             }
-            console.timeEnd(`[PERF] Sending ${replies.length} replies`);
-            console.timeEnd(`[PERF] Total processing time for ${userJid}`);
           } catch (err) {
             console.error('[task] handler error for', userJid, ':', err.message, err.stack);
-            console.timeEnd(`[PERF] Total processing time for ${userJid}`);
             try { storeMessage(await liveSock.sendMessage(userJid, { text: config.errorMessage }));
                   flow.clearSession(userJid); } catch (_) {}
           }
