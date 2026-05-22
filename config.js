@@ -946,61 +946,61 @@ const planBlocks = {
 • Identity & document verification
 • Experience and skill screening
 • Service agreement assistance
-• 1 free replacement within 1 month`,
+• *1 free replacement within 1 month*`,
     hi: `*पार्ट-टाइम स्टैंडर्ड — ₹6,000*
 • एक बार की प्लेसमेंट फीस
 • घर पर मेड का इंटरव्यू
 • आईडी और डॉक्युमेंट वेरिफिकेशन
 • अनुभव और स्किल की जांच
 • सर्विस एग्रीमेंट में मदद
-• 1 महीने में 1 फ्री रिप्लेसमेंट`,
+• *1 महीने में 1 फ्री रिप्लेसमेंट*`,
     mr: `*पार्ट-टाइम स्टँडर्ड — ₹6,000*
 • एक वेळची प्लेसमेंट फी
 • घरी मेडचा इंटरव्ह्यू
 • आयडी आणि डॉक्युमेंट व्हेरिफिकेशन
 • अनुभव आणि स्किल तपासणी
 • सर्विस एग्रीमेंट मध्ये मदत
-• 1 महिन्यात 1 फ्री रिप्लेसमेंट`,
+• *1 महिन्यात 1 फ्री रिप्लेसमेंट*`,
   },
   partTimeVerified: {
     en: `*Part-Time Verified — ₹12,000*
 • One-time placement fee
 • All services in Standard Plan
-• Police verification initiated (records & basic checks)
+• *Police verification initiated (records & basic checks)*
 • Experience and skill screening
-• 2 free replacements within 6 months`,
+• *2 free replacements within 6 months*`,
     hi: `*पार्ट-टाइम वेरिफाइड — ₹12,000*
 • एक बार की प्लेसमेंट फीस
 • स्टैंडर्ड प्लान की सभी सेवाएं
-• पुलिस वेरिफिकेशन (रिकॉर्ड और बेसिक चेक)
+• *पुलिस वेरिफिकेशन (रिकॉर्ड और बेसिक चेक)*
 • अनुभव और स्किल की जांच
-• 6 महीने में 2 फ्री रिप्लेसमेंट`,
+• *6 महीने में 2 फ्री रिप्लेसमेंट*`,
     mr: `*पार्ट-टाइम व्हेरिफाइड — ₹12,000*
 • एक वेळची प्लेसमेंट फी
 • स्टँडर्ड प्लानच्या सर्व सेवा
-• पोलिस व्हेरिफिकेशन (रेकॉर्ड आणि बेसिक चेक)
+• *पोलिस व्हेरिफिकेशन (रेकॉर्ड आणि बेसिक चेक)*
 • अनुभव आणि स्किल तपासणी
-• 6 महिन्यांत 2 फ्री रिप्लेसमेंट`,
+• *6 महिन्यांत 2 फ्री रिप्लेसमेंट*`,
   },
   fullTimeVerified: {
     en: `*Full-Time Verified — 1 Month Salary*
 • One-time fee (1 month salary)
 • All services in Standard Plan
-• Police verification initiated (records & basic checks)
+• *Police verification initiated (records & basic checks)*
 • Experience and skill screening
-• 2 free replacements within 6 months`,
+• *2 free replacements within 6 months*`,
     hi: `*फुल-टाइम वेरिफाइड — 1 महीने की सैलरी*
 • एक बार की फीस (1 महीने की सैलरी)
 • स्टैंडर्ड प्लान की सभी सेवाएं
-• पुलिस वेरिफिकेशन (रिकॉर्ड और बेसिक चेक)
+• *पुलिस वेरिफिकेशन (रिकॉर्ड और बेसिक चेक)*
 • अनुभव और स्किल की जांच
-• 6 महीने में 2 फ्री रिप्लेसमेंट`,
+• *6 महीने में 2 फ्री रिप्लेसमेंट*`,
     mr: `*फुल-टाइम व्हेरिफाइड — 1 महिन्याचा पगार*
 • एक वेळची फी (1 महिन्याचा पगार)
 • स्टँडर्ड प्लानच्या सर्व सेवा
-• पोलिस व्हेरिफिकेशन (रेकॉर्ड आणि बेसिक चेक)
+• *पोलिस व्हेरिफिकेशन (रेकॉर्ड आणि बेसिक चेक)*
 • अनुभव आणि स्किल तपासणी
-• 6 महिन्यांत 2 फ्री रिप्लेसमेंट`,
+• *6 महिन्यांत 2 फ्री रिप्लेसमेंट*`,
   },
 };
 
