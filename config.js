@@ -63,8 +63,20 @@ function getBudgetOptions(timing) {
 
 function getBudgetMessage(timing, lang) {
   const opts = getBudgetOptions(timing);
+  const premiumNote = {
+    en: '\n   • 10+ education\n   • 5+ years experience',
+    hi: '\n   • 10+ शिक्षा\n   • 5+ साल अनुभव',
+    mr: '\n   • 10+ शिक्षण\n   • 5+ वर्ष अनुभव',
+  };
   const lines = Object.entries(opts)
-    .map(([k, v]) => `${k}️⃣ ${v}`)
+    .map(([k, v]) => {
+      let line = `${k}️⃣ ${v}`;
+      // Highest-tier salary brackets require formal education + experience
+      if (v.includes('₹20,000 – ₹30,000') || v.includes('₹25,000 – ₹30,000')) {
+        line += premiumNote[lang] || premiumNote.en;
+      }
+      return line;
+    })
     .join('\n');
   const headers = {
     en: `💰 What is your monthly budget for the maid's salary?\n_(Salary is based on skill and experience)_\n\n`,
