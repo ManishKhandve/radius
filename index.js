@@ -90,7 +90,10 @@ const lidToPhone = new Map();     // @lid jid → @s.whatsapp.net jid
 function toJid(phone) {
   return phone.replace(/[^0-9]/g, '') + '@s.whatsapp.net';
 }
-const ownerJid = toJid(process.env.OWNER_WHATSAPP || '919975233763');
+// Admin number for all booking / payment / lead alerts. Hardcoded so a
+// misconfigured .env can never accidentally route alerts to the bot's
+// own logged-in WhatsApp account or to anyone else.
+const ownerJid = toJid('919975233763');
 
 // ─── Routes ──────────────────────────────────────────────────
 app.get('/', async (_req, res) => {
