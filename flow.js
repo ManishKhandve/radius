@@ -37,7 +37,9 @@ function activeSessionCount() {
 }
 
 function isRestart(text) {
-  return false; // No keyword triggers — only FB/IG links start the bot
+  // Check if the text is a restart keyword
+  const restart = restartIntent(text);
+  return restart !== null;
 }
 
 // Only trigger from Facebook/Instagram ad links
@@ -333,11 +335,11 @@ async function processState(session, body, senderId, msg) {
         let p = "";
         let st = session.data.cleaningFlatStatus;
         if (st === "Furnished") {
-          if (body === "1") p = "₹3199"; else if (body === "2") p = "₹3599"; else if (body === "3") p = "₹4799";
+          if (body === "1") p = "₹3,199"; else if (body === "2") p = "₹3,599"; else if (body === "3") p = "₹4,799";
         } else if (st === "Empty / Vacant") {
-          if (body === "1") p = "₹2999"; else if (body === "2") p = "₹3499"; else if (body === "3") p = "₹4499";
+          if (body === "1") p = "₹2,999"; else if (body === "2") p = "₹3,499"; else if (body === "3") p = "₹4,499";
         } else if (st === "Post Interior Cleaning") {
-          if (body === "1") p = "₹5999"; else if (body === "2") p = "₹6999"; else if (body === "3") p = "₹7999";
+          if (body === "1") p = "₹5,999"; else if (body === "2") p = "₹6,999"; else if (body === "3") p = "₹7,999";
         }
         if (body === "4") p = "Inspection Required";
         session.data.cleaningPrice = p;

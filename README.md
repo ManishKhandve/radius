@@ -251,6 +251,61 @@ chat flow/
 
 ---
 
+## Testing
+
+This project includes a comprehensive Playwright test suite with **92 automated tests**.
+
+### Quick Start
+
+```bash
+# Install dependencies
+npm install
+
+# Install Playwright browsers
+npx playwright install
+
+# Run all tests
+npm test
+
+# View test summary
+npm run test:summary
+
+# Interactive testing
+npm run test:ui
+```
+
+### Test Coverage
+
+- ✅ **API Endpoints** (12 tests)
+- ✅ **Conversation Flows** (35 tests)
+- ✅ **Module Tests** (15 tests)
+- ✅ **Integration Tests** (20 tests)
+- ✅ **Performance Tests** (10 tests)
+
+### Documentation
+
+- **Quick Setup**: `TEST_SETUP.md`
+- **Testing Guide**: `TESTING.md`
+- **Command Reference**: `TEST_COMMANDS.md`
+- **Complete Guide**: `COMPLETE_TEST_GUIDE.md`
+- **Implementation Summary**: `TEST_IMPLEMENTATION_SUMMARY.md`
+
+### Test Commands
+
+```bash
+npm test                    # Run all tests
+npm run test:ui            # Interactive UI
+npm run test:api           # API tests only
+npm run test:flow          # Flow tests only
+npm run test:integration   # Integration tests
+npm run test:performance   # Performance tests
+npm run test:report        # View HTML report
+```
+
+For detailed testing information, see `COMPLETE_TEST_GUIDE.md`.
+
+---
+
 ## License
 
 ISC

@@ -1,6 +1,35 @@
+# Dependencies
 node_modules/
-.wwebjs_auth/
-.wwebjs_cache/
-.cache/
-credentials.json
+
+# Environment variables
 .env
+
+# WhatsApp authentication
+.wwebjs_auth/
+auth/
+
+# Google credentials
+credentials.json
+
+# Logs
+*.log
+npm-debug.log*
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Playwright
+test-results/
+playwright-report/
+playwright/.cache/
+
+# Build outputs
+dist/
+build/
