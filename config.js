@@ -1211,9 +1211,6 @@ const paymentMessage = {
 👉 Tap to pay:
 upi://pay?pa=${upiId}&pn=Cleanly&am=1000&cu=INR
 
-UPI ID: ${upiId}
-Amount: ₹1000
-
 After paying, please share the payment screenshot here for verification.`,
 
   hi: `💰 कृपया ₹1000 बुकिंग अमाउंट जमा करें।
@@ -1221,18 +1218,12 @@ After paying, please share the payment screenshot here for verification.`,
 👉 पेमेंट के लिए नीचे टैप करें:
 upi://pay?pa=${upiId}&pn=Cleanly&am=1000&cu=INR
 
-UPI ID: ${upiId}
-राशि: ₹1000
-
 पेमेंट के बाद वेरिफिकेशन के लिए स्क्रीनशॉट यहाँ भेजें।`,
 
   mr: `💰 कृपया ₹1000 बुकिंग रक्कम भरा.
 
 👉 पेमेंटसाठी खाली टॅप करा:
 upi://pay?pa=${upiId}&pn=Cleanly&am=1000&cu=INR
-
-UPI ID: ${upiId}
-रक्कम: ₹1000
 
 पेमेंटनंतर व्हेरिफिकेशनसाठी स्क्रीनशॉट इथे पाठवा.`
 };
