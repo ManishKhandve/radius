@@ -62,6 +62,7 @@ function restartIntent(text) {
 }
 
 async function handleMessage(msg) {
+  console.time(`[PERF] handleMessage-${msg.from}`);
   const senderId = msg.from;
   const body = (msg.body || "").trim();
 
@@ -147,6 +148,7 @@ async function handleMessage(msg) {
     }
   }
   
+  console.timeEnd(`[PERF] handleMessage-${senderId}`);
   return responses;
 }
 
