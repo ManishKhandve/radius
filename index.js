@@ -230,8 +230,22 @@ async function bootstrap() {
   if (isBootstrapping) return;
   isBootstrapping = true;
 
-  // Auth stored locally — sessions, pre-keys, creds all persist on disk
-  const { state, saveCreds } = await useMultiFileAuthState('./auth');
+  // Auth storage: Supabase Storage on ephemeral hosts (Render free),
+  // local filesystem otherwise. Toggle with USE_SUPABASE_AUTH=true.
+  let state, saveCreds;
+  if (process.env.USE_SUPABASE_AUTH === 'true' && process.env.SUPABASE_URL && process.env.SUPABASE_KEY) {
+    console.log('[wa] Using Supabase Storage for auth (ephemeral-host mode)');
+    const { createClient } = require('@supabase/supabase-js');
+    const ws = require('ws');
+    const supabaseAuth = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_KEY, {
+      realtime: { transport: ws },
+    });
+    const { useSupabaseAuthState } = require('./supabase-store');
+    ({ state, saveCreds } = await useSupabaseAuthState(supabaseAuth));
+  } else {
+    console.log('[wa] Using local filesystem (./auth) for auth');
+    ({ state, saveCreds } = await useMultiFileAuthState('./auth'));
+  }
   const logger = pino({ level: 'silent' });
 
   const { version, isLatest } = await fetchLatestBaileysVersion();
