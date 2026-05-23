@@ -122,6 +122,26 @@ async function handleMessage(msg) {
     return [config.languageMessage];
   }
 
+  // MAID_CHOICE special "0" — customer didn't like any maid shown.
+  // Alert admin to follow up manually + tell customer team will reach out.
+  if (body === "0" && session.state === "MAID_CHOICE") {
+    const lang = session.data.lang || "en";
+    const d = session.data;
+    const adminAlert = config.adminMaidsRejectedAlert({
+      customerName: d.contactName,
+      phone: d.whatsappNumber,
+      customerId: d.customerId,
+      workType: d.workType,
+      timing: d.timing,
+      budget: d.budget,
+      city: d.maidCity,
+      area: d.maidArea,
+      availableMaids: d.availableMaids,
+    });
+    clearSession(senderId);
+    return [config.maidsRejectedMessage(lang), { _adminAlert: adminAlert }];
+  }
+
   // GLOBAL HANDLER FOR "0" - Talk to Support
   if (body === "0") {
     const lang = session.data.lang || "en";

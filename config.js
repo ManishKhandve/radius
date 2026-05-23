@@ -278,6 +278,30 @@ const customAreaPromptMessage = {
   mr: `📍 तुमचा एरिया / लोकेशन लिहा.\n(उदाहरण: Sinhgad Road, Pimple Saudagar, इ.)`,
 };
 
+const maidsRejectedMessage = (lang) => {
+  if (lang === "hi") return `🔍 कोई बात नहीं! हम आपके लिए और बेहतर मेड खोजेंगे।\n\nहमारी टीम जल्द ही आपसे संपर्क करेगी। 📞\n\n🔁 *कोई और सेवा चाहिए?*\n*clean* टाइप करें — क्लीनिंग के लिए\n*maid* टाइप करें — मेड सर्विस के लिए`;
+  if (lang === "mr") return `🔍 काळजी नको! आम्ही तुमच्यासाठी आणखी चांगल्या मेड शोधू.\n\nआमची टीम लवकरच तुमच्याशी संपर्क करेल. 📞\n\n🔁 *दुसरी सेवा हवी आहे?*\n*clean* टाइप करा — क्लीनिंगसाठी\n*maid* टाइप करा — मेड सर्विससाठी`;
+  return `🔍 No problem! We'll find better maids for you.\n\nOur team will contact you shortly. 📞\n\n🔁 *Need another service?*\nType *clean* — for cleaning\nType *maid* — for maid service`;
+};
+
+const adminMaidsRejectedAlert = (data) => {
+  const shown = (data.availableMaids || []).map(m => `M${m.id} ${m.name}`).join(', ') || 'none';
+  return `🔔 *MAIDS REJECTED — Manual Follow-up Needed*
+
+👤 Customer : ${data.customerName}
+📞 WhatsApp : ${data.phone}
+🆔 Lead ID  : ${data.customerId || 'N/A'}
+🧹 Work     : ${data.workType}
+⏰ Timing   : ${data.timing}
+💰 Budget   : ${data.budget}
+🏙️ City     : ${data.city}
+📍 Area     : ${data.area}
+
+❌ Customer didn't like any of these maids: ${shown}
+
+➡️ @service team, please call and find better options.`;
+};
+
 const customAreaConfirmMessage = (area, lang) => {
   if (lang === "hi") return `🔍 ठीक है! हम *${area}* में आपके लिए सही मेड खोजेंगे।\n\nहमारी टीम जल्द ही आपसे संपर्क करेगी। 📞\n\n🔁 *कोई और सेवा चाहिए?*\n*clean* टाइप करें — क्लीनिंग के लिए\n*maid* टाइप करें — मेड सर्विस के लिए`;
   if (lang === "mr") return `🔍 ठीक आहे! आम्ही *${area}* मध्ये तुमच्यासाठी योग्य मेड शोधू.\n\nआमची टीम लवकरच तुमच्याशी संपर्क करेल. 📞\n\n🔁 *दुसरी सेवा हवी आहे?*\n*clean* टाइप करा — क्लीनिंगसाठी\n*maid* टाइप करा — मेड सर्विससाठी`;
@@ -1357,6 +1381,8 @@ module.exports = {
   getAreaMessage,
   customAreaPromptMessage,
   customAreaConfirmMessage,
+  maidsRejectedMessage,
+  adminMaidsRejectedAlert,
   maidPlanMessage,
   maidPlans,
   getMaidPlanOptions,
