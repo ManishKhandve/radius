@@ -65,15 +65,32 @@ function isRestart(text) {
   return restart !== null;
 }
 
-// Only trigger from Facebook/Instagram ad links
+// Trigger from Facebook/Instagram ad links OR common inquiry phrases.
+// Phrases here cover what Meta auto-prefills in Click-to-WhatsApp ads,
+// what customers paste from wa.me?text= links, and common natural
+// language openings ('know more', 'interested', etc.).
 function isAdMessage(text) {
-  const lower = text.toLowerCase();
-  return (
+  const lower = text.toLowerCase().trim();
+
+  // URL-based (FB / IG ad clicks)
+  if (
     lower.includes("facebook.com") ||
     lower.includes("fb.me") ||
     lower.includes("instagram.com") ||
     lower.includes("ig.me")
-  );
+  ) return true;
+
+  // Natural-language inquiry phrases
+  const inquiryPhrases = [
+    'know more', 'want to know', 'tell me more',
+    'more details', 'more information', 'more info',
+    'interested', 'i am interested', "i'm interested",
+    'want to book', 'book service', 'book cleaning', 'book maid',
+    'about service', 'about services', 'know about',
+    'जानकारी', 'और जानें',
+    'अधिक माहिती', 'माहिती हवी', 'जाणून',
+  ];
+  return inquiryPhrases.some(p => lower.includes(p));
 }
 
 // Restart shortcuts shown to users at the end of a flow.
