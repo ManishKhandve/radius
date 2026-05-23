@@ -32,6 +32,29 @@ function clearSession(senderId) {
   sessions.delete(senderId);
 }
 
+// Move an in-memory session + remembered language from one identity key to
+// another. Used when Baileys finally tells us the senderPn for an @lid jid
+// after we've already created the session under @lid (because senderPn
+// wasn't in the first message). Also rewrites the whatsappNumber stored
+// in session.data so downstream sheet writes use the real phone number.
+function migrateIdentity(fromId, toId) {
+  if (!fromId || !toId || fromId === toId) return;
+  const s = sessions.get(fromId);
+  if (s) {
+    if (s.data && s.data.whatsappNumber === fromId.split('@')[0]) {
+      s.data.whatsappNumber = toId.split('@')[0];
+    }
+    sessions.set(toId, s);
+    sessions.delete(fromId);
+    console.log('[flow] migrated session', fromId, '→', toId);
+  }
+  const lang = userLanguages.get(fromId);
+  if (lang !== undefined) {
+    userLanguages.set(toId, lang);
+    userLanguages.delete(fromId);
+  }
+}
+
 function activeSessionCount() {
   return sessions.size;
 }
@@ -592,7 +615,8 @@ async function processState(session, body, senderId, msg) {
     case "COLLECT_FLAT": {
       const isCleaning = session.data.serviceCategory === "cleaning";
       const lang = session.data.lang || "en";
-      if (body.length <= 3) {
+      // Need at least 3 chars so things like 'B-1' or 'A/3' are accepted.
+      if (body.length < 3) {
         return [isCleaning ? config.cleaningAddressMessage[lang] : config.collectFlatMessage[lang]];
       }
       
@@ -1084,4 +1108,4 @@ function finishCleaning(session, senderId) {
   return [msg, { _adminAlert: adminAlert }];
 }
 
-module.exports = { handleMessage, activeSessionCount, clearSession, sessions };
+module.exports = { handleMessage, activeSessionCount, clearSession, sessions, migrateIdentity };

@@ -310,22 +310,34 @@ async function bootstrap() {
         const rk = rawMsg.key || {};
         console.log('[skip?] remoteJid:', rk.remoteJid, 'id:', rk.id, 'senderPn:', rk.senderPn, 'fromMe:', rk.fromMe, 'hasMsg:', !!rawMsg.message);
         if (rk.fromMe) { console.log('[skip] fromMe'); continue; }
+
+        // Cache @lid → senderPn mapping BEFORE skipping protocol/undecryptable
+        // messages. Many @lid protocol packets carry senderPn even when their
+        // body is empty — capturing them lets us route the next real text msg
+        // correctly. If we already have a session under @lid (because an
+        // earlier message arrived without senderPn), migrate it to the phone
+        // jid so handleMessage finds it on the next reply.
+        const rawJid = rk.remoteJid;
+        if (rawJid && rawJid.endsWith('@lid') && rk.senderPn) {
+          if (!lidToPhone.has(rawJid)) {
+            console.log('[xlate] @lid', rawJid, '→', rk.senderPn, '(new mapping)');
+            try { flow.migrateIdentity?.(rawJid, rk.senderPn); } catch (_) {}
+          }
+          lidToPhone.set(rawJid, rk.senderPn);
+        }
+
         if (!rawMsg.message) { console.log('[skip] no rawMsg.message (protocol/undecryptable)'); continue; }
         let jid = rk.remoteJid;
         if (!jid) { console.log('[skip] no remoteJid'); continue; }
         if (jid.endsWith('@g.us')) { console.log('[skip] group message'); continue; }
-        // Translate @lid → phone. Cache the mapping when senderPn is provided,
-        // and reuse the cached mapping when later @lid messages omit senderPn.
-        if (jid.endsWith('@lid')) {
-          if (rk.senderPn) {
-            lidToPhone.set(jid, rk.senderPn);
-            console.log('[xlate] @lid', jid, '→', rk.senderPn, '(cached)');
-            jid = rk.senderPn;
-          } else if (lidToPhone.has(jid)) {
-            const cached = lidToPhone.get(jid);
-            console.log('[xlate] @lid', jid, '→', cached, '(from cache)');
-            jid = cached;
-          }
+
+        // Apply the @lid → phone translation. By this point the cache is
+        // populated even if THIS message has no senderPn (a previous protocol
+        // message would have populated it).
+        if (jid.endsWith('@lid') && lidToPhone.has(jid)) {
+          const cached = lidToPhone.get(jid);
+          console.log('[xlate] @lid', jid, '→', cached);
+          jid = cached;
         }
         if (alreadyProcessed(rk.id)) { console.log('[skip] alreadyProcessed id:', rk.id); continue; }
 
