@@ -493,9 +493,9 @@ const flatDeepCleaningPriceMessage = (status, bhk, lang) => {
   let addOnsMr = "";
 
   if (status === "Furnished" || status === "Post Interior Cleaning") {
-    addOnsEn = `\n\n✨ *Available Add-ons:*\n• Kitchen internal cleaning: ₹450\n• Sofa cleaning: ₹150/seat\n\nReply *1* to continue without add-ons\nReply *2* to select add-ons\nReply *3* to cancel`;
-    addOnsHi = `\n\n✨ *उपलब्ध ऐड-ऑन:*\n• किचन इंटरनल क्लीनिंग: ₹450\n• सोफा क्लीनिंग: ₹150/सीट\n\n*1* रिप्लाई करें — ऐड-ऑन के बिना आगे बढ़ें\n*2* रिप्लाई करें — ऐड-ऑन चुनें\n*3* रिप्लाई करें — कैंसिल`;
-    addOnsMr = `\n\n✨ *उपलब्ध ऐड-ऑन:*\n• किचन इंटरनल क्लीनिंग: ₹450\n• सोफा क्लीनिंग: ₹150/सीट\n\n*1* रिप्लाय करा — ऐड-ऑनशिवाय पुढे चला\n*2* रिप्लाय करा — ऐड-ऑन निवडा\n*3* रिप्लाय करा — कैंसल`;
+    addOnsEn = `\n\n✨ *Available Add-ons:*\n• Kitchen Internal: ₹450  • Sofa: ₹150/seat\n• Chimney: ₹399  • Microwave: ₹199\n• Fridge: ₹399  • Mattress: ₹499\n\nReply *1* to continue without add-ons\nReply *2* to select add-ons\nReply *3* to cancel`;
+    addOnsHi = `\n\n✨ *उपलब्ध ऐड-ऑन:*\n• किचन इंटरनल: ₹450  • सोफा: ₹150/सीट\n• चिमनी: ₹399  • माइक्रोवेव: ₹199\n• फ्रिज: ₹399  • मैट्रेस: ₹499\n\n*1* रिप्लाई करें — ऐड-ऑन के बिना आगे बढ़ें\n*2* रिप्लाई करें — ऐड-ऑन चुनें\n*3* रिप्लाई करें — कैंसिल`;
+    addOnsMr = `\n\n✨ *उपलब्ध ऐड-ऑन:*\n• किचन इंटरनल: ₹450  • सोफा: ₹150/सीट\n• चिमणी: ₹399  • मायक्रोवेव्ह: ₹199\n• फ्रिज: ₹399  • मॅट्रेस: ₹499\n\n*1* रिप्लाय करा — ऐड-ऑनशिवाय पुढे चला\n*2* रिप्लाय करा — ऐड-ऑन निवडा\n*3* रिप्लाय करा — कैंसल`;
   } else {
     addOnsEn = `\n\nReply *1* to proceed with booking\nReply *2* to cancel`;
     addOnsHi = `\n\nबुकिंग के लिए *1* रिप्लाई करें\nकैंसिल के लिए *2* रिप्लाई करें`;
@@ -789,31 +789,54 @@ const cleaningNameMessage = {
   mr: `👤 कृपया तुमचे नाव सांगा.`
 };
 
+// Add-on catalogue. Sofa is special — priced per seat, prompts for count.
+const cleaningAddons = {
+  "1": { key: "kitchen",   name: "Kitchen Internal Cleaning", price: 450 },
+  "2": { key: "sofa",      name: "Sofa Cleaning",             price: 150, perSeat: true },
+  "3": { key: "chimney",   name: "Chimney Cleaning",          price: 399 },
+  "4": { key: "microwave", name: "Microwave Cleaning",        price: 199 },
+  "5": { key: "fridge",    name: "Fridge Cleaning",           price: 399 },
+  "6": { key: "mattress",  name: "Mattress Cleaning",         price: 499 },
+};
+const ADDON_SKIP_OPTION = "7"; // "Continue without add-ons"
+
 const cleaningAddonsMessage = {
   en: `✨ *Select Add-ons:*
 
 1️⃣ Kitchen Internal Cleaning — ₹450
 2️⃣ Sofa Cleaning — ₹150/seat
-3️⃣ Kitchen + Sofa (both)
-4️⃣ No add-ons, continue
+3️⃣ Chimney Cleaning — ₹399
+4️⃣ Microwave Cleaning — ₹199
+5️⃣ Fridge Cleaning — ₹399
+6️⃣ Mattress Cleaning — ₹499
+7️⃣ Continue without add-ons
 
-👉 Reply with your choice.`,
+👉 Reply with numbers separated by comma (e.g. 1,3,5)
+   Or just one number (e.g. 4)`,
   hi: `✨ *ऐड-ऑन चुनें:*
 
 1️⃣ किचन इंटरनल क्लीनिंग — ₹450
 2️⃣ सोफा क्लीनिंग — ₹150/सीट
-3️⃣ किचन + सोफा (दोनों)
-4️⃣ कोई ऐड-ऑन नहीं, आगे बढ़ें
+3️⃣ चिमनी क्लीनिंग — ₹399
+4️⃣ माइक्रोवेव क्लीनिंग — ₹199
+5️⃣ फ्रिज क्लीनिंग — ₹399
+6️⃣ मैट्रेस क्लीनिंग — ₹499
+7️⃣ बिना ऐड-ऑन के आगे बढ़ें
 
-👉 अपनी पसंद रिप्लाई करें।`,
+👉 कॉमा से अलग करके नंबर भेजें (जैसे 1,3,5)
+   या सिर्फ एक नंबर (जैसे 4)`,
   mr: `✨ *ऐड-ऑन निवडा:*
 
 1️⃣ किचन इंटरनल क्लीनिंग — ₹450
 2️⃣ सोफा क्लीनिंग — ₹150/सीट
-3️⃣ किचन + सोफा (दोन्ही)
-4️⃣ कोणतेही ऐड-ऑन नाही, पुढे चला
+3️⃣ चिमणी क्लीनिंग — ₹399
+4️⃣ मायक्रोवेव्ह क्लीनिंग — ₹199
+5️⃣ फ्रिज क्लीनिंग — ₹399
+6️⃣ मॅट्रेस क्लीनिंग — ₹499
+7️⃣ ऐड-ऑनशिवाय पुढे चला
 
-👉 तुमची निवड रिप्लाय करा.`
+👉 कॉमाने वेगळे करून नंबर पाठवा (उदा. 1,3,5)
+   किंवा फक्त एक नंबर (उदा. 4)`
 };
 
 const cleaningAddonsSofaMessage = {
@@ -1402,6 +1425,8 @@ module.exports = {
   cleaningAddressMessage,
   cleaningNameMessage,
   cleaningAddonsMessage,
+  cleaningAddons,
+  ADDON_SKIP_OPTION,
   cleaningAddonsSofaMessage,
   cleaningDateMessage,
   cleaningCustomDateMessage,

@@ -462,31 +462,49 @@ async function processState(session, body, senderId, msg) {
       const lang = session.data.lang || "en";
       const base = parseInt((session.data.cleaningPrice || "0").replace(/[^0-9]/g, "")) || 0;
 
-      if (body === "1") {
-        // Kitchen only
-        const newTotal = base + 450;
-        session.data.cleaningPrice = `₹${newTotal}`;
-        session.data.cleaningDetails += " + Kitchen Cleaning (₹450)";
-        session.state = "COLLECT_FLAT";
-        return [lang === "hi"
-          ? `✅ किचन क्लीनिंग जोड़ी! नया कुल: ₹${newTotal}\n\n${config.cleaningAddressMessage.hi}`
-          : lang === "mr"
-          ? `✅ किचन क्लीनिंग जोडली! नवीन एकूण: ₹${newTotal}\n\n${config.cleaningAddressMessage.mr}`
-          : `✅ Kitchen cleaning added! New total: ₹${newTotal}\n\n${config.cleaningAddressMessage.en}`];
-      } else if (body === "2") {
-        session.data.addonKitchen = false;
-        session.state = "CLEANING_ADDON_SOFA";
-        return [config.cleaningAddonsSofaMessage[lang]];
-      } else if (body === "3") {
-        session.data.addonKitchen = true;
-        session.state = "CLEANING_ADDON_SOFA";
-        return [config.cleaningAddonsSofaMessage[lang]];
-      } else if (body === "4") {
+      // Parse comma/space-separated selection — accepts e.g. "1,3,5" or "1 3 5" or just "4".
+      const picks = body.replace(/\s+/g, ',').split(',').map(s => s.trim()).filter(Boolean);
+      if (picks.length === 0) return [config.cleaningAddonsMessage[lang]];
+
+      // "Continue without add-ons" — selected alone
+      if (picks.length === 1 && picks[0] === config.ADDON_SKIP_OPTION) {
         session.state = "COLLECT_FLAT";
         return [config.cleaningAddressMessage[lang]];
-      } else {
-        return [config.cleaningAddonsMessage[lang]];
       }
+
+      // Validate every pick is a real add-on number
+      const valid = picks.every(p => config.cleaningAddons[p]);
+      if (!valid) return [config.cleaningAddonsMessage[lang]];
+
+      // Walk the picks: add flat-priced ones to total now; sofa needs a seat-count prompt
+      let addedTotal = 0;
+      const addedLines = [];
+      let needSofaSeats = false;
+      for (const p of picks) {
+        const a = config.cleaningAddons[p];
+        if (a.perSeat) { needSofaSeats = true; continue; }
+        addedTotal += a.price;
+        addedLines.push(`${a.name} (₹${a.price})`);
+      }
+
+      if (needSofaSeats) {
+        // Stash everything else, ask for sofa seat count next
+        session.data.addonPending = { addedTotal, addedLines };
+        session.state = "CLEANING_ADDON_SOFA";
+        return [config.cleaningAddonsSofaMessage[lang]];
+      }
+
+      // No sofa — finalise immediately
+      const newTotal = base + addedTotal;
+      session.data.cleaningPrice = `₹${newTotal}`;
+      session.data.cleaningDetails += ` + Add-ons: ${addedLines.join(' + ')}`;
+      session.state = "COLLECT_FLAT";
+
+      return [lang === "hi"
+        ? `✅ ऐड-ऑन जोड़े गए! नया कुल: ₹${newTotal}\n\n${config.cleaningAddressMessage.hi}`
+        : lang === "mr"
+        ? `✅ ऐड-ऑन जोडले! नवीन एकूण: ₹${newTotal}\n\n${config.cleaningAddressMessage.mr}`
+        : `✅ Add-ons added! New total: ₹${newTotal}\n\n${config.cleaningAddressMessage.en}`];
     }
 
     case "CLEANING_ADDON_SOFA": {
@@ -496,15 +514,14 @@ async function processState(session, body, senderId, msg) {
         return [config.cleaningAddonsSofaMessage[lang]];
       }
       const sofaTotal = seats * 150;
-      const kitchenTotal = session.data.addonKitchen ? 450 : 0;
+      const pending = session.data.addonPending || { addedTotal: 0, addedLines: [] };
       const base = parseInt((session.data.cleaningPrice || "0").replace(/[^0-9]/g, "")) || 0;
-      const newTotal = base + sofaTotal + kitchenTotal;
+      const newTotal = base + sofaTotal + pending.addedTotal;
 
-      let addonLine = `${seats} sofa seat(s) (₹${sofaTotal})`;
-      if (session.data.addonKitchen) addonLine = `Kitchen (₹450) + ` + addonLine;
-
+      const allLines = [`${seats} sofa seat(s) (₹${sofaTotal})`, ...pending.addedLines];
       session.data.cleaningPrice = `₹${newTotal}`;
-      session.data.cleaningDetails += ` + Add-ons: ${addonLine}`;
+      session.data.cleaningDetails += ` + Add-ons: ${allLines.join(' + ')}`;
+      delete session.data.addonPending;
       session.state = "COLLECT_FLAT";
 
       return [lang === "hi"
