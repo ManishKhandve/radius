@@ -946,6 +946,15 @@ async function processState(session, body, senderId, msg) {
               language: d.lang,
               paymentStatus: "Pending",
             });
+            // Backfill the matching CUSTOMERS row with the details that
+            // weren't known at lead-capture time (address, picked maid,
+            // interview date, plan).
+            await sheets.updateCustomerBooking(d.whatsappNumber, {
+              flat: d.flat,
+              maidChoice: d.maidChoice,
+              interviewDate: d.startDate,
+              selectedPlan: d.selectedPlan,
+            });
           } catch (e) { console.error("[flow] booking write err:", e.message); }
         })();
 

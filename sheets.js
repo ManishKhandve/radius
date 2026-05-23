@@ -310,6 +310,50 @@ async function appendCleaningBooking(data) {
 // ─── Update Functions ────────────────────────────────────────
 
 /**
+ * Once a maid booking is confirmed, fill the existing CUSTOMERS row
+ * with the details we now know — address, selected maid, interview
+ * date and plan. These columns are blank when the row is first
+ * appended at MAID_AREA (lead capture). Columns:
+ *   D = flat (address)
+ *   J = assignedMaidId (which maid the customer picked)
+ *   P = interview date (new)
+ *   Q = selected plan (new)
+ */
+async function updateCustomerBooking(whatsappNumber, data) {
+  try {
+    const sheets = await getClient();
+    const res = await sheets.spreadsheets.values.get({
+      spreadsheetId: sheetId(),
+      range: `${SHEET_CUSTOMERS}!C:C`,
+    });
+    const rows = res.data.values || [];
+    let targetRow = -1;
+    for (let i = 1; i < rows.length; i++) {
+      if (rows[i] && rows[i][0] === whatsappNumber) { targetRow = i + 1; break; }
+    }
+    if (targetRow === -1) {
+      console.warn(`[sheets] Customer not found for booking update: ${whatsappNumber}`);
+      return;
+    }
+    await sheets.spreadsheets.values.batchUpdate({
+      spreadsheetId: sheetId(),
+      requestBody: {
+        valueInputOption: "USER_ENTERED",
+        data: [
+          { range: `${SHEET_CUSTOMERS}!D${targetRow}`, values: [[data.flat || ""]] },
+          { range: `${SHEET_CUSTOMERS}!J${targetRow}`, values: [[data.maidChoice || ""]] },
+          { range: `${SHEET_CUSTOMERS}!P${targetRow}`, values: [[data.interviewDate || ""]] },
+          { range: `${SHEET_CUSTOMERS}!Q${targetRow}`, values: [[data.selectedPlan || ""]] },
+        ],
+      },
+    });
+    console.log(`[sheets] Customer booking details updated (row ${targetRow})`);
+  } catch (err) {
+    console.error("[sheets] updateCustomerBooking error:", err.message);
+  }
+}
+
+/**
  * Finds a customer row by WhatsApp number (Column C) and updates the
  * Status column (Column I).
  *
@@ -429,6 +473,7 @@ async function markPaymentVerified(bookingId) {
 module.exports = {
   appendCustomer,
   appendBooking,
+  updateCustomerBooking,
   appendCleaningBooking,
   updateCleaningBooking,
   updateCustomerStatus,
