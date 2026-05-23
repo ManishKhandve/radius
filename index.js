@@ -282,9 +282,14 @@ async function bootstrap() {
       const loggedOut = code === DisconnectReason.loggedOut;
       const replaced  = code === 440;
       if (loggedOut) {
-        console.log('[wa] Logged out — delete ./auth folder and restart to re-scan QR');
+        // WhatsApp told us we're logged out. DO NOT auto-retry (it would
+        // just hit the same dead creds and bounce in a tight loop) and DO
+        // NOT delete the auth folder — leave it intact for the human to
+        // decide. The bot stays idle until you manually re-scan QR:
+        //   cd ~/chatflow && pm2 stop cleanly-bot && rm -rf auth && pm2 start cleanly-bot
+        console.error('[wa] ❌ Logged out by WhatsApp. Bot is now idle — manual action needed to re-link.');
         isBootstrapping = false;
-        setTimeout(() => bootstrap(), 3000);
+        return;
       } else if (replaced) {
         const now = Date.now();
         if (now - replacedAt < 180000) {
