@@ -1,56 +1,61 @@
 // ============================================================
-// index.js — WhatsApp (Baileys) + Express — VPS edition
-// Auth stored locally in ./auth/ — no Supabase needed
+// index.js — CLEANLY bot — WATI edition
+// ============================================================
+// Receives incoming WhatsApp messages via WATI webhook,
+// processes them through flow.js, sends replies via WATI REST API.
 // ============================================================
 
-const { default: makeWASocket, DisconnectReason, downloadMediaMessage,
-        fetchLatestBaileysVersion, Browsers, useMultiFileAuthState } = require('@whiskeysockets/baileys');
-const { addInvite, isInvited } = require('./invite-store');
 require('dotenv').config();
 const express = require('express');
-const QRCode  = require('qrcode');
-const pino    = require('pino');
 const flow    = require('./flow');
 const config  = require('./config');
 const sheets  = require('./sheets');
+const { addInvite, isInvited, uploadReceipt } = require('./invite-store');
 
 process.on('uncaughtException',  (err) => console.error('[crash] Uncaught exception:', err.message));
 process.on('unhandledRejection', (r)   => console.error('[crash] Unhandled rejection:', r?.message || r));
 
-// Silence libsignal's verbose internal key-rotation chatter that drowns out our real logs
-const _origLog = console.log;
-console.log = (...args) => {
-  const first = args[0];
-  if (typeof first === 'string' && (
-    first.startsWith('Closing session') ||
-    first.startsWith('Removing old closed session') ||
-    first.startsWith('Closing open session') ||
-    first.startsWith('Removing closed session')
-  )) return;
-  _origLog.apply(console, args);
-};
-
 const app  = express();
-app.use(express.json());
+app.use(express.json({ limit: '5mb' }));   // WATI sends ~ small payloads, 5mb is generous
 const PORT = process.env.PORT || 3000;
 
-// ─── State ───────────────────────────────────────────────────
-let currentQR      = null;
-let botReady       = false;
-let sock           = null;
-let isBootstrapping = false;
-let replacedAt      = 0;
+// ─── WATI config ─────────────────────────────────────────────
+const WATI_BASE   = process.env.WATI_BASE_URL || 'https://live-mt-server.wati.io/10166417';
+const WATI_TOKEN  = process.env.WATI_TOKEN || '';
+const BOT_NUMBER  = process.env.WATI_BOT_NUMBER || '917385155526';
 
-const sentMessageStore = new Map();
-function storeMessage(result) {
-  if (result?.key?.id && result?.message) {
-    sentMessageStore.set(result.key.id, result.message);
-    if (sentMessageStore.size > 500) sentMessageStore.delete(sentMessageStore.keys().next().value);
+// Admin number for booking/payment/lead alerts — hardcoded so misconfig
+// can never reroute alerts.
+const OWNER_PHONE = '919975233763';
+
+if (!WATI_TOKEN) {
+  console.error('[boot] ❌ WATI_TOKEN env var is missing — outgoing messages will fail');
+}
+console.log('[boot] WATI base:', WATI_BASE, '| bot number:', BOT_NUMBER);
+
+// ─── WATI send helper ───────────────────────────────────────
+// Sends a free-form text message inside an open 24-hr session window.
+// Returns { ok, status, body } so the caller can log failures.
+async function watiSend(phone, text) {
+  if (!phone || !text) return { ok: false, status: 0, body: 'missing phone or text' };
+  const url = `${WATI_BASE}/api/v1/sendSessionMessage/${phone}?messageText=${encodeURIComponent(text)}`;
+  try {
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: { 'Authorization': WATI_TOKEN, 'Content-Type': 'application/json' },
+    });
+    const body = await res.text();
+    if (!res.ok) console.error('[wati] send failed', res.status, body.slice(0, 200));
+    return { ok: res.ok, status: res.status, body };
+  } catch (e) {
+    console.error('[wati] send exception:', e.message);
+    return { ok: false, status: 0, body: e.message };
   }
 }
 
-// Safe dedup — only drops genuine Baileys retries (same valid id seen twice).
-// Messages without an id are processed normally (we don't have anything to dedup on).
+// ─── Dedup ──────────────────────────────────────────────────
+// WATI can deliver the same message twice if its retry policy fires
+// (e.g. our webhook returns slow). Track recent message IDs and skip dupes.
 const processedMsgIds = new Set();
 function alreadyProcessed(id) {
   if (!id) return false;
@@ -60,8 +65,8 @@ function alreadyProcessed(id) {
   return false;
 }
 
-// Per-user queue — each user's messages process strictly in order.
-// Different users run in parallel. No message is dropped.
+// ─── Per-user queue ─────────────────────────────────────────
+// Strictly in-order processing per user. Different users run concurrently.
 const userQueues = new Map();
 function runQueued(jid, task) {
   const existing = userQueues.get(jid);
@@ -77,135 +82,133 @@ function runQueued(jid, task) {
   })();
 }
 
-// Tracks JIDs the admin has invited but who haven't replied yet.
-// When an @lid message arrives without senderPn, we associate it with
-// the oldest pending invite so the user gets recognized.
-const pendingInvites = new Map(); // jid -> timestamp
-
-// Persistent @lid → phone mapping. Baileys provides senderPn on some
-// messages but not all. We cache it so subsequent @lid-only messages
-// from the same source resolve to the same session/invite key.
-const lidToPhone = new Map();     // @lid jid → @s.whatsapp.net jid
-
-function toJid(phone) {
-  return phone.replace(/[^0-9]/g, '') + '@s.whatsapp.net';
+// ─── Build the wrappedMsg flow.js expects ───────────────────
+// flow.handleMessage was written for whatsapp-web.js / Baileys
+// message objects. We give it the same shape from WATI's payload.
+function buildWrappedMsg(phone, text, type, mediaUrl, senderName) {
+  return {
+    from: phone,
+    body: text || '',
+    type: type === 'image' ? 'image' : 'chat',
+    getContact: async () => ({
+      pushname: senderName || '',
+      name:     senderName || '',
+      id: { _serialized: phone },
+    }),
+    downloadMedia: async () => {
+      // Only used in PAYMENT_RECEIPT state. Returns null on failure so
+      // the flow falls back to caption text.
+      if (!mediaUrl) return null;
+      try {
+        const res = await fetch(mediaUrl);
+        if (!res.ok) return null;
+        const buf = Buffer.from(await res.arrayBuffer());
+        const ct = res.headers.get('content-type') || 'image/jpeg';
+        return { data: buf.toString('base64'), mimetype: ct };
+      } catch (e) {
+        console.error('[wati] media download failed:', e.message);
+        return null;
+      }
+    },
+    reply: async (txt) => { await watiSend(phone, txt); },
+  };
 }
-// Admin number for all booking / payment / lead alerts. Hardcoded so a
-// misconfigured .env can never accidentally route alerts to the bot's
-// own logged-in WhatsApp account or to anyone else.
-const ownerJid = toJid('919975233763');
 
-// ─── Routes ──────────────────────────────────────────────────
-app.get('/', async (_req, res) => {
-  const title = config.businessName + ' — WhatsApp Bot';
-  if (botReady) return res.send(statusPage('connected', title));
-  if (currentQR) {
+// ─── WATI webhook — incoming customer messages ──────────────
+app.post('/wati-webhook', async (req, res) => {
+  // ACK first so WATI doesn't retry on slow processing
+  res.status(200).send('OK');
+
+  const evt = req.body || {};
+
+  // We only care about incoming customer messages, not status updates
+  // or echoes of our own sends.
+  const eventType = evt.eventType || evt.type;
+  if (eventType && eventType !== 'message') return;
+  if (evt.owner === true) return;          // skip our own outgoing echo
+
+  // Pull the fields. WATI's payload varies slightly; cover the common cases.
+  const phone     = (evt.waId || evt.whatsappId || evt.phone || '').toString();
+  const msgId     = evt.id || evt.messageId || evt.whatsappMessageId;
+  const msgType   = (evt.type || '').toLowerCase();   // text / image / document / etc.
+  const text      = evt.text || evt.data || evt.caption || '';
+  const mediaUrl  = evt.sourceUrl || evt.mediaUrl || null;
+  const senderName = evt.senderName || '';
+
+  if (!phone) { console.warn('[wati] webhook missing phone'); return; }
+  if (alreadyProcessed(msgId)) { console.log('[wati] dedup', msgId); return; }
+
+  console.log('[wati] from:', phone, 'type:', msgType, 'body:', JSON.stringify(String(text)).slice(0, 30));
+
+  // Hand off to the flow inside the per-user queue
+  runQueued(phone, async () => {
+    const t0 = Date.now();
+    const wrapped = buildWrappedMsg(phone, text, msgType, mediaUrl, senderName);
     try {
-      const qr = await QRCode.toDataURL(currentQR, { width: 300 });
-      return res.send(statusPage('qr', title, qr));
-    } catch { return res.send(statusPage('error', title)); }
-  }
-  return res.send(statusPage('init', title));
+      const replies = await flow.handleMessage(wrapped);
+      console.log('[task]', phone, 'flow:', Date.now() - t0, 'ms, replies:', replies.length);
+      for (const reply of replies) {
+        if (typeof reply === 'object' && reply._adminAlert) {
+          // Admin notification — fire and forget
+          watiSend(OWNER_PHONE, reply._adminAlert)
+            .then(r => r.ok && console.log('[task] adminAlert sent'))
+            .catch(e => console.error('[task] adminAlert send failed:', e.message));
+          continue;
+        }
+        if (typeof reply === 'string') {
+          await watiSend(phone, reply);
+        }
+      }
+    } catch (err) {
+      console.error('[task] handler error for', phone, ':', err.message);
+      watiSend(phone, config.errorMessage).catch(() => {});
+      flow.clearSession(phone);
+    }
+  });
+});
+
+// ─── HTTP endpoints (admin + health) ───────────────────────
+app.get('/', (_req, res) => {
+  res.send(`<!DOCTYPE html><html><head><meta charset="utf-8"><title>${config.businessName} Bot</title>
+<style>body{font-family:system-ui,sans-serif;background:#0a1628;color:#e2e8f0;display:flex;justify-content:center;align-items:center;height:100vh;margin:0}
+.card{text-align:center;background:#1e293b;padding:3rem;border-radius:1rem}
+.dot{display:inline-block;width:14px;height:14px;border-radius:50%;background:#22c55e;margin-right:8px;animation:pulse 2s infinite}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}</style></head>
+<body><div class="card"><h1><span class="dot"></span> Bot is Live (WATI)</h1>
+<p>${config.businessName}</p>
+<p style="font-size:.85rem;color:#94a3b8;margin-top:1rem">Sessions: <span id="s">—</span> · Uptime: <span id="u">—</span>s</p></div>
+<script>setInterval(()=>fetch('/status').then(r=>r.json()).then(d=>{document.getElementById('s').textContent=d.activeSessions;document.getElementById('u').textContent=Math.floor(d.uptime)}),5000)</script>
+</body></html>`);
 });
 
 app.get('/status', (_req, res) => res.json({
-  connected: botReady, activeSessions: flow.activeSessionCount(), uptime: process.uptime()
+  ok: true,
+  activeSessions: flow.activeSessionCount(),
+  uptime: process.uptime(),
+  bot: BOT_NUMBER,
 }));
 
 app.get('/ping', (_req, res) => res.send('pong'));
 
-app.get('/qr', async (_req, res) => {
-  if (botReady)   return res.json({ status: 'connected' });
-  if (!currentQR) return res.json({ status: 'waiting' });
-  try {
-    const qr = await QRCode.toDataURL(currentQR, { width: 300 });
-    res.json({ status: 'qr', qr });
-  } catch { res.json({ status: 'error' }); }
-});
-
+// Admin page — same as before
 app.get('/admin', (req, res) => {
   const { token } = req.query;
   if (!token || token !== process.env.ADMIN_TOKEN) return res.status(401).send('Unauthorized');
-  res.send(adminPage(token));
-});
-
-app.get('/send', async (req, res) => {
-  const { to, token } = req.query;
-  if (!token || token !== process.env.ADMIN_TOKEN) return res.status(401).send('Unauthorized');
-  if (!to) return res.status(400).send('Missing ?to=');
-  if (!sock || !botReady) return res.status(503).send('Bot not ready');
-  const jid = toJid(to);
-  try {
-    await addInvite(jid);
-    pendingInvites.set(jid, Date.now());
-    storeMessage(await sock.sendMessage(jid, { text: config.adminIntroMessage }));
-    res.send(`✅ Sent to ${jid}`);
-  } catch (e) { res.status(500).send(e.message); }
-});
-
-app.post('/verify-payment', async (req, res) => {
-  const { token, phone, bookingId, name, lang } = req.body;
-  if (!token || token !== process.env.ADMIN_TOKEN) return res.status(403).json({ error: 'Unauthorized' });
-  if (!phone || !bookingId) return res.status(400).json({ error: 'Missing fields' });
-  if (!sock || !botReady) return res.status(503).json({ error: 'Bot not ready' });
-  const jid = toJid(phone);
-  try {
-    const msg = config.paymentVerifiedMessage(name || 'there', bookingId, lang || 'en');
-    storeMessage(await sock.sendMessage(jid, { text: msg }));
-    await sheets.markPaymentVerified(bookingId);
-    res.json({ success: true });
-  } catch (e) { res.status(500).json({ error: e.message }); }
-});
-
-// ─── HTML pages ───────────────────────────────────────────────
-function statusPage(mode, title, qr) {
-  if (mode === 'connected') return `<!DOCTYPE html><html><head><meta charset="utf-8"><title>${title}</title>
-<style>body{font-family:system-ui,sans-serif;display:flex;justify-content:center;align-items:center;height:100vh;margin:0;background:#0a1628;color:#e2e8f0}
-.card{text-align:center;background:#1e293b;padding:3rem;border-radius:1rem;box-shadow:0 8px 32px rgba(0,0,0,.4)}
-.dot{display:inline-block;width:14px;height:14px;border-radius:50%;background:#22c55e;margin-right:8px;animation:pulse 2s infinite}
-@keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}</style></head>
-<body><div class="card"><h1><span class="dot"></span> Bot is Live</h1><p>${config.businessName}</p>
-<p style="font-size:.85rem;margin-top:1rem;color:#94a3b8">Sessions: <span id="s">—</span> | Uptime: <span id="u">—</span></p></div>
-<script>setInterval(()=>fetch('/status').then(r=>r.json()).then(d=>{document.getElementById('s').textContent=d.activeSessions;document.getElementById('u').textContent=Math.floor(d.uptime)+'s'}),5000)</script>
-</body></html>`;
-
-  if (mode === 'qr') return `<!DOCTYPE html><html><head><meta charset="utf-8"><title>${title}</title>
-<style>body{font-family:system-ui,sans-serif;display:flex;justify-content:center;align-items:center;height:100vh;margin:0;background:#0a1628;color:#e2e8f0}
-.card{text-align:center;background:#1e293b;padding:2rem;border-radius:1rem;max-width:340px;width:100%}
-img{border-radius:.5rem;margin:.75rem 0;width:260px;height:260px}</style></head>
-<body><div class="card"><h2>📱 Scan to Link WhatsApp</h2>
-<p style="color:#94a3b8;font-size:.82rem;margin:.5rem 0">WhatsApp → Linked Devices → Link a Device</p>
-<img id="qr" src="${qr}"/>
-<p style="color:#64748b;font-size:.75rem" id="hint">Refreshing every 15s — scan immediately</p></div>
-<script>let t=15;setInterval(async()=>{t--;document.getElementById('hint').textContent='Refreshing in '+t+'s';
-if(t<=0){t=15;try{const r=await fetch('/qr');const d=await r.json();
-if(d.status==='connected'){document.querySelector('.card').innerHTML='<h2>✅ Bot is Live!</h2>';}
-else if(d.qr){document.getElementById('qr').src=d.qr;}}catch(e){}}},1000);</script>
-</body></html>`;
-
-  return `<!DOCTYPE html><html><head><meta charset="utf-8"><title>${title}</title><meta http-equiv="refresh" content="10">
-<style>body{font-family:system-ui;display:flex;justify-content:center;align-items:center;height:100vh;margin:0;background:#0a1628;color:#e2e8f0}</style></head>
-<body><div style="text-align:center;background:#1e293b;padding:3rem;border-radius:1rem"><h2>⏳ Starting…</h2>
-<p style="color:#94a3b8">Connecting to WhatsApp. Please wait.</p></div></body></html>`;
-}
-
-function adminPage(token) {
-  return `<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+  res.send(`<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>CLEANLY Admin</title>
 <style>*{box-sizing:border-box;margin:0;padding:0}body{font-family:system-ui;background:#0a1628;color:#e2e8f0;min-height:100vh;display:flex;justify-content:center;align-items:center;padding:1rem}
 .card{background:#1e293b;border-radius:1rem;padding:2rem;width:100%;max-width:420px}
 h2{margin-bottom:1.5rem;font-size:1.2rem}label{display:block;font-size:.85rem;color:#94a3b8;margin-bottom:.4rem}
 input{width:100%;padding:.75rem 1rem;border-radius:.5rem;border:1px solid #334155;background:#0f172a;color:#f1f5f9;font-size:1rem;margin-bottom:1rem;outline:none}
 input:focus{border-color:#38bdf8}button{width:100%;padding:.85rem;border-radius:.5rem;border:none;background:#22c55e;color:#fff;font-size:1rem;font-weight:600;cursor:pointer}
-button:hover{background:#16a34a}button:disabled{background:#334155;cursor:not-allowed}
-.result{margin-top:1rem;padding:.75rem 1rem;border-radius:.5rem;font-size:.9rem;display:none}
+button:hover{background:#16a34a}.result{margin-top:1rem;padding:.75rem 1rem;border-radius:.5rem;font-size:.9rem;display:none}
 .result.ok{background:#14532d;color:#86efac}.result.err{background:#4c0519;color:#fca5a5}
 .hint{font-size:.78rem;color:#64748b;margin-top:-.5rem;margin-bottom:1rem}</style>
 </head><body><div class="card">
 <h2>📤 Send Intro Message</h2>
 <label>Country Code + Number</label>
 <input type="tel" id="phone" placeholder="919876543210" inputmode="numeric"/>
-<p class="hint">Include country code, no + or spaces.</p>
+<p class="hint">Customer must have messaged the bot within the last 24 hours.</p>
 <button id="btn" onclick="send()">Send Message</button>
 <div class="result" id="result"></div>
 </div>
@@ -222,210 +225,34 @@ async function send(){
   document.getElementById('phone').value='';
 }
 document.getElementById('phone').addEventListener('keydown',e=>{if(e.key==='Enter')send();});
-</script></body></html>`;
-}
-
-// ─── Bootstrap ────────────────────────────────────────────────
-async function bootstrap() {
-  if (isBootstrapping) return;
-  isBootstrapping = true;
-
-  // Auth storage: Supabase Storage on ephemeral hosts (Render free),
-  // local filesystem otherwise. Toggle with USE_SUPABASE_AUTH=true.
-  let state, saveCreds;
-  if (process.env.USE_SUPABASE_AUTH === 'true' && process.env.SUPABASE_URL && process.env.SUPABASE_KEY) {
-    console.log('[wa] Using Supabase Storage for auth (ephemeral-host mode)');
-    const { createClient } = require('@supabase/supabase-js');
-    const ws = require('ws');
-    const supabaseAuth = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_KEY, {
-      realtime: { transport: ws },
-    });
-    const { useSupabaseAuthState } = require('./supabase-store');
-    ({ state, saveCreds } = await useSupabaseAuthState(supabaseAuth));
-  } else {
-    console.log('[wa] Using local filesystem (./auth) for auth');
-    ({ state, saveCreds } = await useMultiFileAuthState('./auth'));
-  }
-  const logger = pino({ level: 'silent' });
-
-  const { version, isLatest } = await fetchLatestBaileysVersion();
-  console.log(`[wa] version ${version.join('.')}, isLatest: ${isLatest}`);
-
-  sock = makeWASocket({
-    version,
-    auth: state,
-    printQRInTerminal: true,   // also shows QR in terminal as fallback
-    logger,
-    browser: Browsers.ubuntu('Chrome'),
-    generateHighQualityLinkPreview: false,
-    markOnlineOnConnect: true,
-    syncFullHistory: false,
-    connectTimeoutMs: 60000,
-    defaultQueryTimeoutMs: 60000,
-    keepAliveIntervalMs: 30000,
-    getMessage: async (key) => sentMessageStore.get(key.id),
-  });
-
-  sock.ev.on('creds.update', saveCreds);
-
-  sock.ev.on('connection.update', ({ connection, lastDisconnect, qr }) => {
-    if (qr) { currentQR = qr; console.log('[wa] QR ready — open http://SERVER_IP:3000'); }
-    if (connection === 'open') {
-      botReady = true; currentQR = null; isBootstrapping = false;
-      console.log('[wa] ✅ WhatsApp connected and ready!');
-      // Pre-fetch the Sheets row counts so the FIRST booking is instant
-      sheets.warmCounters().catch(e => console.warn('[boot] warmCounters failed:', e.message));
-    }
-    if (connection === 'close') {
-      botReady = false;
-      const code     = lastDisconnect?.error?.output?.statusCode;
-      const loggedOut = code === DisconnectReason.loggedOut;
-      const replaced  = code === 440;
-      if (loggedOut) {
-        // WhatsApp told us we're logged out. DO NOT auto-retry (it would
-        // just hit the same dead creds and bounce in a tight loop) and DO
-        // NOT delete the auth folder — leave it intact for the human to
-        // decide. The bot stays idle until you manually re-scan QR:
-        //   cd ~/chatflow && pm2 stop cleanly-bot && rm -rf auth && pm2 start cleanly-bot
-        console.error('[wa] ❌ Logged out by WhatsApp. Bot is now idle — manual action needed to re-link.');
-        isBootstrapping = false;
-        return;
-      } else if (replaced) {
-        const now = Date.now();
-        if (now - replacedAt < 180000) {
-          console.warn('[wa] 440 again within 3 min — skipping reconnect');
-        } else {
-          replacedAt = now; isBootstrapping = false;
-          console.log('[wa] Connection replaced — reconnecting in 60s...');
-          setTimeout(() => bootstrap(), 60000);
-        }
-      } else {
-        console.warn('[wa] Disconnected code:', code, '— reconnecting in 5s...');
-        isBootstrapping = false;
-        setTimeout(() => bootstrap(), 5000);
-      }
-    }
-  });
-
-  sock.ev.on('messages.upsert', async ({ messages, type }) => {
-    console.log('[wa] upsert type:', type, 'count:', messages.length);
-    if (type !== 'notify') return;
-    for (const rawMsg of messages) {
-      try {
-        const rk = rawMsg.key || {};
-        console.log('[skip?] remoteJid:', rk.remoteJid, 'id:', rk.id, 'senderPn:', rk.senderPn, 'fromMe:', rk.fromMe, 'hasMsg:', !!rawMsg.message);
-        if (rk.fromMe) { console.log('[skip] fromMe'); continue; }
-
-        // Cache @lid → senderPn mapping BEFORE skipping protocol/undecryptable
-        // messages. Many @lid protocol packets carry senderPn even when their
-        // body is empty — capturing them lets us route the next real text msg
-        // correctly. If we already have a session under @lid (because an
-        // earlier message arrived without senderPn), migrate it to the phone
-        // jid so handleMessage finds it on the next reply.
-        const rawJid = rk.remoteJid;
-        if (rawJid && rawJid.endsWith('@lid') && rk.senderPn) {
-          if (!lidToPhone.has(rawJid)) {
-            console.log('[xlate] @lid', rawJid, '→', rk.senderPn, '(new mapping)');
-            try { flow.migrateIdentity?.(rawJid, rk.senderPn); } catch (_) {}
-          }
-          lidToPhone.set(rawJid, rk.senderPn);
-        }
-
-        if (!rawMsg.message) { console.log('[skip] no rawMsg.message (protocol/undecryptable)'); continue; }
-        let jid = rk.remoteJid;
-        if (!jid) { console.log('[skip] no remoteJid'); continue; }
-        if (jid.endsWith('@g.us')) { console.log('[skip] group message'); continue; }
-
-        // Apply the @lid → phone translation. By this point the cache is
-        // populated even if THIS message has no senderPn (a previous protocol
-        // message would have populated it).
-        if (jid.endsWith('@lid') && lidToPhone.has(jid)) {
-          const cached = lidToPhone.get(jid);
-          console.log('[xlate] @lid', jid, '→', cached);
-          jid = cached;
-        }
-        if (alreadyProcessed(rk.id)) { console.log('[skip] alreadyProcessed id:', rk.id); continue; }
-
-        // @lid fallback: if we still have an @lid jid (no senderPn ever seen)
-        // and there's an unconsumed admin invite, transfer the invite to this
-        // @lid so the bot recognises the user.
-        if (jid.endsWith('@lid') && !await isInvited(jid) && pendingInvites.size > 0) {
-          const [oldestJid] = [...pendingInvites.entries()].sort((a, b) => a[1] - b[1])[0];
-          console.log('[wa] @lid fallback — transferring invite from', oldestJid, 'to', jid);
-          await addInvite(jid);
-          pendingInvites.delete(oldestJid);
-        } else if (pendingInvites.has(jid)) {
-          pendingInvites.delete(jid);
-        }
-
-        const msgContent = rawMsg.message || {};
-        const msgType    = Object.keys(msgContent)[0] || '';
-        let body = '';
-        if (msgType === 'conversation')             body = msgContent.conversation || '';
-        else if (msgType === 'extendedTextMessage') body = msgContent.extendedTextMessage?.text || '';
-        else if (msgType === 'imageMessage')        body = msgContent.imageMessage?.caption || '';
-
-        console.log('[wa] from:', jid, 'body:', JSON.stringify(body).slice(0, 30));
-
-        const liveSock = sock;
-        const userJid  = jid;
-        const wrappedMsg = {
-          from: userJid, body,
-          type: msgType === 'imageMessage' ? 'image' : 'chat',
-          getContact: async () => ({
-            pushname: rawMsg.pushName || '',
-            name:     rawMsg.pushName || '',
-            id: { _serialized: userJid },
-          }),
-          downloadMedia: async () => {
-            try {
-              const buf = await downloadMediaMessage(rawMsg, 'buffer', {}, {
-                logger, reuploadRequest: liveSock.updateMediaMessage,
-              });
-              return { data: buf.toString('base64'), mimetype: msgContent.imageMessage?.mimetype || 'image/jpeg' };
-            } catch { return null; }
-          },
-          reply: async (text) => { storeMessage(await liveSock.sendMessage(userJid, { text })); },
-        };
-
-        runQueued(userJid, async () => {
-          const before = flow.sessions?.get?.(userJid);
-          console.log('[task] start jid:', userJid, 'body:', JSON.stringify(body).slice(0, 30), 'state:', before?.state || 'NEW');
-          try {
-            const replies = await flow.handleMessage(wrappedMsg);
-            const after = flow.sessions?.get?.(userJid);
-            console.log('[task] flow returned', replies.length, 'replies; state →', after?.state || 'CLEARED');
-            for (const reply of replies) {
-              if (typeof reply === 'object' && reply._adminAlert) {
-                try {
-                  storeMessage(await liveSock.sendMessage(ownerJid, { text: reply._adminAlert }));
-                  console.log('[task] sent adminAlert to', ownerJid);
-                } catch (e) { console.error('[task] adminAlert send failed:', e.message); }
-                continue;
-              }
-              if (typeof reply === 'string') {
-                try {
-                  storeMessage(await liveSock.sendMessage(userJid, { text: reply }));
-                  console.log('[task] sent reply to', userJid, '(' + reply.length + ' chars)');
-                } catch (e) { console.error('[task] reply send failed:', e.message); }
-              }
-            }
-          } catch (err) {
-            console.error('[task] handler error for', userJid, ':', err.message, err.stack);
-            try { storeMessage(await liveSock.sendMessage(userJid, { text: config.errorMessage }));
-                  flow.clearSession(userJid); } catch (_) {}
-          }
-        });
-      } catch (err) {
-        console.error('[wa] Outer handler error:', err.message);
-      }
-    }
-  });
-}
-
-// ─── Start ────────────────────────────────────────────────────
-app.listen(PORT, () => console.log(`[server] http://localhost:${PORT}`));
-bootstrap().catch(err => {
-  console.error('[boot] Failed:', err.message);
-  setTimeout(() => bootstrap(), 10000);
+</script></body></html>`);
 });
+
+app.get('/send', async (req, res) => {
+  const { to, token } = req.query;
+  if (!token || token !== process.env.ADMIN_TOKEN) return res.status(401).send('Unauthorized');
+  if (!to) return res.status(400).send('Missing ?to=');
+  const phone = String(to).replace(/[^0-9]/g, '');
+  try {
+    await addInvite(phone);
+    const r = await watiSend(phone, config.adminIntroMessage);
+    if (!r.ok) return res.status(500).send(`Send failed: ${r.body}`);
+    res.send(`✅ Sent to ${phone}`);
+  } catch (e) { res.status(500).send(e.message); }
+});
+
+app.post('/verify-payment', async (req, res) => {
+  const { token, phone, bookingId, name, lang } = req.body;
+  if (!token || token !== process.env.ADMIN_TOKEN) return res.status(403).json({ error: 'Unauthorized' });
+  if (!phone || !bookingId) return res.status(400).json({ error: 'Missing fields' });
+  try {
+    const msg = config.paymentVerifiedMessage(name || 'there', bookingId, lang || 'en');
+    const r = await watiSend(String(phone).replace(/[^0-9]/g, ''), msg);
+    if (!r.ok) return res.status(500).json({ error: 'Send failed', detail: r.body });
+    await sheets.markPaymentVerified(bookingId);
+    res.json({ success: true });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// ─── Start ──────────────────────────────────────────────────
+app.listen(PORT, () => console.log(`[server] WATI bot ready on :${PORT}`));
