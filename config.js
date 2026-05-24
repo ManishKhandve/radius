@@ -104,9 +104,9 @@ Please choose your preferred language:
 👉 नंबर रिप्लाई करें (जैसे 1, 2 या 3)
 👉 नंबर रिप्लाय करा (उदा. 1, 2 किंवा 3)
 
-🔴 Please note: replies may take 5-6 seconds.
-🔴 कृपया ध्यान दें: जवाब आने में 5-6 सेकंड लग सकते हैं।
-🔴 कृपया लक्षात ठेवा: उत्तर येण्यास 5-6 सेकंद लागू शकतात.`;
+🔴 Please note: replies may take 2-3 seconds.
+🔴 कृपया ध्यान दें: जवाब आने में 2-3 सेकंड लग सकते हैं।
+🔴 कृपया लक्षात ठेवा: उत्तर येण्यास 2-3 सेकंद लागू शकतात.`;
 
 const mainMenuMessage = {
   en: `Main menu
@@ -1253,9 +1253,9 @@ Flats, Bathrooms, Villas — Pune & PCMC ✅
 
 Reply *1* to explore our services.
 
-🔴 Please note: replies may take 5-6 seconds.
-🔴 कृपया ध्यान दें: जवाब आने में 5-6 सेकंड लग सकते हैं।
-🔴 कृपया लक्षात ठेवा: उत्तर येण्यास 5-6 सेकंद लागू शकतात.`;
+🔴 Please note: replies may take 2-3 seconds.
+🔴 कृपया ध्यान दें: जवाब आने में 2-3 सेकंड लग सकते हैं।
+🔴 कृपया लक्षात ठेवा: उत्तर येण्यास 2-3 सेकंद लागू शकतात.`;
 
 const cancelMessage = {
   en: "❌ Booking cancelled. No worries!\n\n🔁 To start again, type:\n*clean* — for cleaning\n*maid* — for maid service",
