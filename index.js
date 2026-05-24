@@ -104,11 +104,17 @@ function buildWrappedMsg(phone, text, type, mediaUrl, senderName) {
     }),
     downloadMedia: async () => {
       // Only used in PAYMENT_RECEIPT state. Returns null on failure so
-      // the flow falls back to caption text.
+      // the flow falls back to caption text. WATI's own media URLs need
+      // the Bearer token; pass it as Authorization for those.
       if (!mediaUrl) return null;
       try {
-        const res = await fetch(mediaUrl);
-        if (!res.ok) return null;
+        const headers = {};
+        if (mediaUrl.includes('wati.io')) headers['Authorization'] = WATI_TOKEN;
+        const res = await fetch(mediaUrl, { headers });
+        if (!res.ok) {
+          console.error('[wati] media download HTTP', res.status, 'for', mediaUrl.slice(0, 80));
+          return null;
+        }
         const buf = Buffer.from(await res.arrayBuffer());
         const ct = res.headers.get('content-type') || 'image/jpeg';
         return { data: buf.toString('base64'), mimetype: ct };
@@ -138,9 +144,20 @@ app.post('/wati-webhook', async (req, res) => {
   const phone     = (evt.waId || evt.whatsappId || evt.phone || '').toString();
   const msgId     = evt.id || evt.messageId || evt.whatsappMessageId;
   const msgType   = (evt.type || '').toLowerCase();   // text / image / document / etc.
-  const text      = evt.text || evt.data || evt.caption || '';
-  const mediaUrl  = evt.sourceUrl || evt.mediaUrl || null;
   const senderName = evt.senderName || '';
+
+  // For text messages, text is in `text`/`data`. For media messages, WATI
+  // puts the URL in `text`/`data` and the actual caption in `caption`.
+  // Extract both correctly based on type.
+  let text, mediaUrl;
+  const isMedia = ['image', 'document', 'video', 'audio'].includes(msgType);
+  if (isMedia) {
+    mediaUrl = evt.sourceUrl || evt.mediaUrl || evt.text || evt.data || null;
+    text     = evt.caption || '';
+  } else {
+    text     = evt.text || evt.data || evt.caption || '';
+    mediaUrl = null;
+  }
 
   if (!phone) { console.warn('[wati] webhook missing phone'); return; }
   if (alreadyProcessed(msgId)) { console.log('[wati] dedup', msgId); return; }
