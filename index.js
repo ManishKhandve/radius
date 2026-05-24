@@ -21,8 +21,15 @@ const PORT = process.env.PORT || 3000;
 
 // ─── WATI config ─────────────────────────────────────────────
 const WATI_BASE   = process.env.WATI_BASE_URL || 'https://live-mt-server.wati.io/10166417';
-const WATI_TOKEN  = process.env.WATI_TOKEN || '';
+let   WATI_TOKEN  = process.env.WATI_TOKEN || '';
 const BOT_NUMBER  = process.env.WATI_BOT_NUMBER || '917385155526';
+
+// Defensive: WATI requires `Bearer <jwt>` in the Authorization header.
+// Auto-prepend if env var was set without it.
+if (WATI_TOKEN && !WATI_TOKEN.toLowerCase().startsWith('bearer ')) {
+  WATI_TOKEN = 'Bearer ' + WATI_TOKEN;
+  console.log('[boot] WATI_TOKEN was missing "Bearer " prefix — added automatically');
+}
 
 // Admin number for booking/payment/lead alerts — hardcoded so misconfig
 // can never reroute alerts.
