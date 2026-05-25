@@ -306,6 +306,29 @@ const maidToBeAssignedLabel = {
   mr: "टीमद्वारे नियुक्त केली जाईल",
 };
 
+// Combined acknowledgement + flat-prompt shown when a customer picks
+// a custom area. They go straight into booking (no proceed/wait choice).
+const customAreaProceedMessage = (area, lang) => {
+  if (lang === "hi") return `✅ बढ़िया! हम *${area}* में आपके लिए सही मेड ढूंढ कर भेजेंगे।
+
+आइए बुकिंग पूरा करें:
+
+🏠 अपना *फ्लैट नंबर और एरिया/सोसायटी का नाम* बताएं।
+(उदाहरण: Flat 4B, Cidco N-6)`;
+  if (lang === "mr") return `✅ छान! आम्ही *${area}* मध्ये तुमच्यासाठी योग्य मेड शोधून पाठवू.
+
+चला बुकिंग पूर्ण करूया:
+
+🏠 तुमचा *फ्लॅट नंबर आणि एरिया/सोसायटी चे नाव* सांगा.
+(उदाहरण: Flat 4B, Cidco N-6)`;
+  return `✅ Great! We'll find the right maid for you in *${area}*.
+
+Let's complete your booking:
+
+🏠 Please share your *flat number and area/society name*.
+(Example: Flat 4B, Cidco N-6)`;
+};
+
 const maidsRejectedMessage = (lang) => {
   if (lang === "hi") return `🔍 कोई बात नहीं! हम आपके लिए और बेहतर मेड खोजेंगे।\n\nहमारी टीम जल्द ही आपसे संपर्क करेगी। 📞\n\n🔁 *कोई और सेवा चाहिए?*\n*clean* टाइप करें — क्लीनिंग के लिए\n*maid* टाइप करें — मेड सर्विस के लिए`;
   if (lang === "mr") return `🔍 काळजी नको! आम्ही तुमच्यासाठी आणखी चांगल्या मेड शोधू.\n\nआमची टीम लवकरच तुमच्याशी संपर्क करेल. 📞\n\n🔁 *दुसरी सेवा हवी आहे?*\n*clean* टाइप करा — क्लीनिंगसाठी\n*maid* टाइप करा — मेड सर्विससाठी`;
@@ -1436,6 +1459,7 @@ module.exports = {
   adminMaidsRejectedAlert,
   maidNoMatchOfferMessage,
   maidToBeAssignedLabel,
+  customAreaProceedMessage,
   maidPlanMessage,
   maidPlans,
   getMaidPlanOptions,

@@ -859,11 +859,14 @@ async function processState(session, body, senderId, msg) {
         } catch (e) { console.error("[flow] custom-area lead save err:", e.message); }
       })();
 
-      // Custom area can't be matched by geo, so offer to proceed with
-      // booking — team finds the maid post-booking.
-      session.data.availableMaids = [];
-      session.state = "MAID_NO_MATCH_OFFER";
-      return [config.maidNoMatchOfferMessage[lang]];
+      // Custom area: the customer has already invested effort typing
+      // their location. Skip the proceed/wait choice — go straight
+      // into the booking flow. Team assigns the maid post-booking.
+      session.data.maidChoice = config.maidToBeAssignedLabel[lang] || config.maidToBeAssignedLabel.en;
+      session.data.maidChoiceIds = "PENDING_ASSIGNMENT";
+      session.data.selectedMaids = ["PENDING"];
+      session.state = "COLLECT_FLAT";
+      return [config.customAreaProceedMessage(trimmed, lang)];
     }
 
     case "MAID_NO_MATCH_OFFER": {
