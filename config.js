@@ -555,7 +555,12 @@ const flatDeepCleaningPriceMessage = (status, bhk, lang) => {
   let addOnsHi = "";
   let addOnsMr = "";
 
-  if (status === "Furnished" || status === "Post Interior Cleaning") {
+  // Add-ons are only offered when there's a known base price.
+  // For 4 BHK ("Inspection Required") the price isn't determined yet,
+  // so we can't sum a percent over an unknown base — show plain
+  // proceed/cancel only.
+  const canOfferAddons = (status === "Furnished" || status === "Post Interior Cleaning") && bhk !== "4";
+  if (canOfferAddons) {
     addOnsEn = `\n\n✨ *Available Add-ons:*\n• Kitchen Internal: ₹450  • Sofa: ₹150/seat\n• Chimney: ₹399  • Microwave: ₹199\n• Fridge: ₹399  • Mattress: ₹499\n\nReply *1* to continue without add-ons\nReply *2* to select add-ons\nReply *3* to cancel`;
     addOnsHi = `\n\n✨ *उपलब्ध ऐड-ऑन:*\n• किचन इंटरनल: ₹450  • सोफा: ₹150/सीट\n• चिमनी: ₹399  • माइक्रोवेव: ₹199\n• फ्रिज: ₹399  • मैट्रेस: ₹499\n\n*1* रिप्लाई करें — ऐड-ऑन के बिना आगे बढ़ें\n*2* रिप्लाई करें — ऐड-ऑन चुनें\n*3* रिप्लाई करें — कैंसिल`;
     addOnsMr = `\n\n✨ *उपलब्ध ऐड-ऑन:*\n• किचन इंटरनल: ₹450  • सोफा: ₹150/सीट\n• चिमणी: ₹399  • मायक्रोवेव्ह: ₹199\n• फ्रिज: ₹399  • मॅट्रेस: ₹499\n\n*1* रिप्लाय करा — ऐड-ऑनशिवाय पुढे चला\n*2* रिप्लाय करा — ऐड-ऑन निवडा\n*3* रिप्लाय करा — कैंसल`;
@@ -974,16 +979,20 @@ const maidPlanMessage = {
 
 2️⃣ *Part-Time Verified — ₹12,000*
 • One-time placement fee
-• All services in Standard Plan
-• Police verification initiated (records & basic checks)
+• Maid interviews at your home
+• Identity & document verification
 • Experience and skill screening
+• Service agreement assistance
+• Police verification initiated (records & basic checks)
 • 2 free replacements within 6 months
 
 3️⃣ *Full-Time Verified — 1 Month Salary*
 • One-time fee (1 month salary)
-• All services in Standard Plan
-• Police verification initiated (records & basic checks)
+• Maid interviews at your home
+• Identity & document verification
 • Experience and skill screening
+• Service agreement assistance
+• Police verification initiated (records & basic checks)
 • 2 free replacements within 6 months
 
 👉 Reply with *1*, *2*, or *3* to select your plan.
@@ -1005,16 +1014,20 @@ const maidPlanMessage = {
 
 2️⃣ *पार्ट-टाइम वेरिफाइड — ₹12,000*
 • एक बार की प्लेसमेंट फीस
-• स्टैंडर्ड प्लान की सभी सेवाएं
-• पुलिस वेरिफिकेशन (रिकॉर्ड और बेसिक चेक)
+• घर पर मेड का इंटरव्यू
+• आईडी और डॉक्युमेंट वेरिफिकेशन
 • अनुभव और स्किल की जांच
+• सर्विस एग्रीमेंट में मदद
+• पुलिस वेरिफिकेशन (रिकॉर्ड और बेसिक चेक)
 • 6 महीने में 2 फ्री रिप्लेसमेंट
 
 3️⃣ *फुल-टाइम वेरिफाइड — 1 महीने की सैलरी*
 • एक बार की फीस (1 महीने की सैलरी)
-• स्टैंडर्ड प्लान की सभी सेवाएं
-• पुलिस वेरिफिकेशन (रिकॉर्ड और बेसिक चेक)
+• घर पर मेड का इंटरव्यू
+• आईडी और डॉक्युमेंट वेरिफिकेशन
 • अनुभव और स्किल की जांच
+• सर्विस एग्रीमेंट में मदद
+• पुलिस वेरिफिकेशन (रिकॉर्ड और बेसिक चेक)
 • 6 महीने में 2 फ्री रिप्लेसमेंट
 
 👉 प्लान चुनने के लिए *1*, *2*, या *3* रिप्लाई करें।
@@ -1036,16 +1049,20 @@ const maidPlanMessage = {
 
 2️⃣ *पार्ट-टाइम व्हेरिफाइड — ₹12,000*
 • एक वेळची प्लेसमेंट फी
-• स्टँडर्ड प्लानच्या सर्व सेवा
-• पोलिस व्हेरिफिकेशन (रेकॉर्ड आणि बेसिक चेक)
+• घरी मेडचा इंटरव्ह्यू
+• आयडी आणि डॉक्युमेंट व्हेरिफिकेशन
 • अनुभव आणि स्किल तपासणी
+• सर्विस एग्रीमेंट मध्ये मदत
+• पोलिस व्हेरिफिकेशन (रेकॉर्ड आणि बेसिक चेक)
 • 6 महिन्यांत 2 फ्री रिप्लेसमेंट
 
 3️⃣ *फुल-टाइम व्हेरिफाइड — 1 महिन्याचा पगार*
 • एक वेळची फी (1 महिन्याचा पगार)
-• स्टँडर्ड प्लानच्या सर्व सेवा
-• पोलिस व्हेरिफिकेशन (रेकॉर्ड आणि बेसिक चेक)
+• घरी मेडचा इंटरव्ह्यू
+• आयडी आणि डॉक्युमेंट व्हेरिफिकेशन
 • अनुभव आणि स्किल तपासणी
+• सर्विस एग्रीमेंट मध्ये मदत
+• पोलिस व्हेरिफिकेशन (रेकॉर्ड आणि बेसिक चेक)
 • 6 महिन्यांत 2 फ्री रिप्लेसमेंट
 
 👉 प्लान निवडण्यासाठी *1*, *2*, किंवा *3* रिप्लाय करा.
