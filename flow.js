@@ -59,6 +59,70 @@ function activeSessionCount() {
   return sessions.size;
 }
 
+// ─── Progressive save ────────────────────────────────────────
+// Writes whatever we know about the customer to Sheets after every state
+// transition. Drop-offs mid-flow still leave a retargetable lead row.
+//
+// CUSTOMERS sheet is the master lead table for both flows.
+// CLEANING_BOOKINGS is also patched (in parallel) once we've created a
+// cleaning booking row.
+//
+// Fire-and-forget: never blocks the customer reply.
+function saveProgress(session) {
+  if (!session || !session.data || !session.data.whatsappNumber) return;
+  const d = session.data;
+
+  // Build the CUSTOMERS-row payload. Only include fields with values —
+  // upsertCustomerByPhone skips empty values so cells aren't blanked.
+  const fields = {};
+  if (d.contactName)   fields.name     = d.contactName;
+  if (d.lang)          fields.language = d.lang;
+  if (d.flat)          fields.flat     = d.flat;
+
+  if (d.serviceCategory === 'cleaning') {
+    fields.status = d.cleaningServiceType
+      ? `Cleaning: ${d.cleaningServiceType}`
+      : 'Cleaning Flow Started';
+    if (d.cleaningDetails) fields.notes = d.cleaningDetails;
+    if (d.cleaningLocation && !fields.flat) fields.flat = d.cleaningLocation;
+  } else if (d.serviceCategory === 'maid') {
+    if (d.workType)      fields.workType      = d.workType;
+    if (d.timing)        fields.timing        = d.timing;
+    if (d.budget)        fields.budget        = d.budget;
+    if (d.maidCity)      fields.city          = d.maidCity;
+    if (d.maidArea)      fields.area          = d.maidArea;
+    if (d.maidChoice)    fields.maidChoice    = d.maidChoice;
+    if (d.startDate)     fields.interviewDate = d.startDate;
+    if (d.selectedPlan)  fields.selectedPlan  = d.selectedPlan;
+    fields.status = d.workType ? `Maid: ${d.workType}` : 'Maid Flow Started';
+  } else if (d.lang) {
+    fields.status = 'Language Selected';
+  } else {
+    fields.status = 'Bot Contact';
+  }
+
+  sheets.upsertCustomerByPhone(d.whatsappNumber, fields)
+    .then(cid => { if (cid && !d.customerId) d.customerId = cid; })
+    .catch(e => console.error('[flow] saveProgress (CUSTOMERS) err:', e.message));
+
+  // Also patch the CLEANING_BOOKINGS row once one exists for this session.
+  if (d.cleaningBookingId) {
+    const cleaningFields = {};
+    if (d.contactName)         cleaningFields.customerName   = d.contactName;
+    if (d.whatsappNumber)      cleaningFields.whatsappNumber = d.whatsappNumber;
+    if (d.cleaningServiceType) cleaningFields.serviceType    = d.cleaningServiceType;
+    if (d.cleaningDetails)     cleaningFields.details        = d.cleaningDetails;
+    if (d.cleaningLocation)    cleaningFields.location       = d.cleaningLocation;
+    if (d.cleaningDate)        cleaningFields.preferredDate  = d.cleaningDate;
+    if (d.cleaningPrice)       cleaningFields.estimatedPrice = d.cleaningPrice;
+    if (d.lang)                cleaningFields.language       = d.lang;
+    if (Object.keys(cleaningFields).length > 0) {
+      sheets.updateCleaningBookingFields(d.cleaningBookingId, cleaningFields)
+        .catch(e => console.error('[flow] saveProgress (CLEANING) err:', e.message));
+    }
+  }
+}
+
 function isRestart(text) {
   // Check if the text is a restart keyword
   const restart = restartIntent(text);
@@ -101,14 +165,56 @@ function restartIntent(text) {
   return null;
 }
 
+// "restart" keyword: clears the current session in any state and
+// re-opens the main menu (skipping language pick if we remember it).
+// Accepts a few common variants in EN/HI/MR.
+const RESTART_KEYWORDS = new Set([
+  'restart', 'reset', 'start over', 'start again',
+  'रिस्टार्ट', 'रीस्टार्ट', 'फिर से शुरू', 'दोबारा शुरू',
+  'पुन्हा सुरू', 'रिस्टार्ट करा',
+]);
+function isRestartKeyword(text) {
+  const lower = (text || '').toLowerCase().trim();
+  return RESTART_KEYWORDS.has(lower);
+}
+
 async function handleMessage(msg) {
   const senderId = msg.from;
   const body = (msg.body || "").trim();
 
-  // Images are only accepted in PAYMENT_RECEIPT state
+  // Images are only accepted in PAYMENT_RECEIPT state. Anywhere else
+  // we ignore them — log it so silent drops are visible in debug logs.
   if (msg.type === "image") {
     const existing = sessions.get(senderId);
-    if (!existing || existing.state !== "PAYMENT_RECEIPT") return [];
+    if (!existing || existing.state !== "PAYMENT_RECEIPT") {
+      console.log('[flow] ignored image from', senderId, '(state:', existing?.state || 'none', ')');
+      return [];
+    }
+  }
+
+  // "restart" keyword: always works, in any state. Clear the session and
+  // re-show the main menu (skipping language pick if we remember it).
+  if (isRestartKeyword(body)) {
+    const savedLang = userLanguages.get(senderId);
+    clearSession(senderId);
+    const fresh = createSession(senderId);
+    try {
+      const c = await msg.getContact();
+      fresh.data.contactName = c.pushname || c.name || "there";
+      fresh.data.whatsappNumber = (c.id._serialized || senderId).split('@')[0];
+    } catch {
+      fresh.data.contactName = "there";
+      fresh.data.whatsappNumber = senderId.split('@')[0];
+    }
+    if (savedLang) {
+      fresh.data.lang = savedLang;
+      fresh.state = "MAIN_MENU";
+      saveProgress(fresh);
+      return [config.mainMenuMessage[savedLang]];
+    }
+    fresh.state = "LANGUAGE";
+    saveProgress(fresh);
+    return [config.languageMessage];
   }
 
   // If they want to restart, clear their current session
@@ -146,19 +252,23 @@ async function handleMessage(msg) {
         if (restart === 'cleaning') {
           session.data.serviceCategory = 'cleaning';
           session.state = 'CLEANING_NAME';
+          saveProgress(session);
           return [config.cleaningNameMessage[savedLang]];
         }
         session.data.serviceCategory = 'maid';
         session.state = 'WORK_TYPE';
+        saveProgress(session);
         return [config.workTypeMessage[savedLang]];
       }
       // No remembered language yet — ask, then route into the requested flow
       session.data.directFlow = restart;
       session.state = 'LANGUAGE';
+      saveProgress(session);
       return [config.languageMessage];
     }
 
     session.state = 'LANGUAGE';
+    saveProgress(session);
     return [config.languageMessage];
   }
 
@@ -179,17 +289,26 @@ async function handleMessage(msg) {
   }
 
   let responses = await processState(session, body, senderId, msg);
-  
-  // Append the Call Option if the session is still active (meaning they haven't finished or cancelled)
+
+  // Save whatever we know after every state transition. Fire-and-forget
+  // so customer reply isn't slowed by the Sheets round-trip.
+  if (getSession(senderId) !== null) {
+    saveProgress(session);
+  }
+
+  // Append the Call + Restart hint if the session is still active
+  // (i.e. they haven't finished or cancelled).
   if (getSession(senderId) !== null) {
     const lang = session.data.lang || "en";
-    const callOption = lang === "hi" ? `\n\n0️⃣ कस्टम प्रश्नों के लिए, कॉल करें: ${config.contactNumber}` : 
-                       lang === "mr" ? `\n\n0️⃣ अधिक माहितीसाठी, कॉल करा: ${config.contactNumber}` : 
-                       `\n\n0️⃣ For custom questions, Call us: ${config.contactNumber}`;
-                       
+    const hint = lang === "hi"
+      ? `\n\n0️⃣ कस्टम प्रश्नों के लिए, कॉल करें: ${config.contactNumber}\n🔄 दोबारा शुरू करने के लिए *restart* टाइप करें`
+      : lang === "mr"
+      ? `\n\n0️⃣ अधिक माहितीसाठी, कॉल करा: ${config.contactNumber}\n🔄 पुन्हा सुरू करण्यासाठी *restart* टाइप करा`
+      : `\n\n0️⃣ For custom questions, Call us: ${config.contactNumber}\n🔄 Type *restart* anytime to start over`;
+
     for (let i = responses.length - 1; i >= 0; i--) {
       if (typeof responses[i] === "string" && !responses[i].includes("0️⃣")) {
-        responses[i] += callOption;
+        responses[i] += hint;
         break;
       }
     }
@@ -747,26 +866,8 @@ async function processState(session, body, senderId, msg) {
           : "Sorry, we couldn't find details for this area. Please contact support."];
       }
 
-      // Save lead (fire-and-forget)
-      (async () => {
-        try {
-          const cid = await sheets.generateCustomerId();
-          session.data.customerId = cid;
-          await sheets.appendCustomer({
-            customerId: cid,
-            name: session.data.contactName,
-            whatsappNumber: session.data.whatsappNumber,
-            workType: session.data.workType,
-            timing: session.data.timing,
-            budget: session.data.budget,
-            status: "New Lead",
-            source: "WhatsApp Bot",
-            city: session.data.maidCity,
-            area: session.data.maidArea,
-            language: session.data.lang,
-          });
-        } catch (e) { console.error("[flow] lead save err:", e.message); }
-      })();
+      // (CUSTOMERS row is already being upserted progressively by
+      // saveProgress on each state transition — no separate append needed.)
 
       // Fetch from matching engine
       try {
@@ -837,27 +938,7 @@ async function processState(session, body, senderId, msg) {
       }
       session.data.maidArea = trimmed;
       session.data.maidCity = session.data.maidCity || "Custom";
-
-      // Save lead with the custom area (fire-and-forget)
-      (async () => {
-        try {
-          const cid = await sheets.generateCustomerId();
-          session.data.customerId = cid;
-          await sheets.appendCustomer({
-            customerId: cid,
-            name: session.data.contactName,
-            whatsappNumber: session.data.whatsappNumber,
-            workType: session.data.workType,
-            timing: session.data.timing,
-            budget: session.data.budget,
-            status: "New Lead (Custom Area)",
-            source: "WhatsApp Bot",
-            city: session.data.maidCity,
-            area: trimmed,
-            language: session.data.lang,
-          });
-        } catch (e) { console.error("[flow] custom-area lead save err:", e.message); }
-      })();
+      // CUSTOMERS row gets upserted by saveProgress on the way out.
 
       // Custom area: the customer has already invested effort typing
       // their location. Skip the proceed/wait choice — go straight

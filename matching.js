@@ -51,23 +51,18 @@ function getZone(distance) {
 }
 
 /**
- * Fetch top 3 maids based on customer coordinates AND work type.
+ * Fetch top 3 maids based on the customer's coordinates.
  *
- * Filters:
- *  - status === "Interested"
- *  - service_type matches the requested work type (case-insensitive
- *    substring), OR service_type is the generic "Maid" tag (many
- *    maids in DB are tagged generically — those are also surfaced
- *    so the customer always sees options)
- *  - latitude/longitude present and within Maharashtra bounding box
- *  - within 8km of the customer's area
+ * Filtering is purely by availability: status === "Interested".
+ * Work type is intentionally not used to filter — the customer's
+ * area should drive the match, and the admin can route the right
+ * maid for the right job manually.
  *
- * Ranking:
- *  - Specific service-type match ranks above generic "Maid" fallback
- *  - Then zone (P1 → P4)
- *  - Then exact distance within zone
+ * @param {number} customerLat
+ * @param {number} customerLng
+ * @param {string} [_workType] — accepted for API compatibility, ignored
  */
-async function getTopMaids(customerLat, customerLng, workType) {
+async function getTopMaids(customerLat, customerLng, _workType) {
   if (!supabase) {
     throw new Error("Supabase credentials missing. Please set SUPABASE_URL and SUPABASE_KEY.");
   }
@@ -75,12 +70,10 @@ async function getTopMaids(customerLat, customerLng, workType) {
     throw new Error("Customer location coordinates are missing.");
   }
 
-  let query = supabase.from('maids').select('*').eq('status', 'Interested');
-  if (workType) {
-    // Match either the specific work type OR the generic "Maid" service tag
-    query = query.or(`service_type.ilike.%${workType}%,service_type.ilike.Maid`);
-  }
-  const { data: maids, error } = await query;
+  const { data: maids, error } = await supabase
+    .from('maids')
+    .select('*')
+    .eq('status', 'Interested');
 
   if (error) {
     console.error("Supabase Error:", error);
@@ -95,15 +88,11 @@ async function getTopMaids(customerLat, customerLng, workType) {
 
     const distance = getDistanceFromLatLonInKm(customerLat, customerLng, maid.latitude, maid.longitude);
     const zone = getZone(distance);
-    // 0 = exact match on requested work type, 1 = generic "Maid" tag fallback
-    const serviceMatch = workType && maid.service_type
-      && maid.service_type.toLowerCase().includes(workType.toLowerCase()) ? 0 : 1;
-    maidsWithDistance.push({ ...maid, distance, zone, serviceMatch });
+    maidsWithDistance.push({ ...maid, distance, zone });
   }
 
-  // Sort: specific match first, then zone, then distance
+  // Sort: zone (P1→P4) first, then exact distance within zone.
   maidsWithDistance.sort((a, b) => {
-    if (a.serviceMatch !== b.serviceMatch) return a.serviceMatch - b.serviceMatch;
     if (a.zone.level !== b.zone.level) return a.zone.level - b.zone.level;
     return a.distance - b.distance;
   });

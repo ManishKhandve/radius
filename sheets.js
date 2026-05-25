@@ -354,6 +354,153 @@ async function updateCustomerBooking(whatsappNumber, data) {
 }
 
 /**
+ * Upserts a CUSTOMERS row by WhatsApp number. If the row exists, only
+ * supplied (non-empty) fields are updated. If not, a new row is appended
+ * with a generated customerId. Used to save customer progress
+ * incrementally — call after every state transition so a drop-off still
+ * leaves a usable lead record for retargeting.
+ *
+ * @param {string} whatsappNumber  e.g. "919876543210"
+ * @param {object} fields  any subset of {
+ *   name, flat, workType, timing, budget, status, maidChoice,
+ *   city, area, language, interviewDate, selectedPlan, notes
+ * }
+ * @returns {Promise<string|null>} customerId of the row, or null on error
+ */
+const CUSTOMER_COL_MAP = {
+  name:          'B',
+  flat:          'D',
+  workType:      'E',
+  timing:        'F',
+  budget:        'G',
+  enquiryDate:   'H',
+  status:        'I',
+  maidChoice:    'J',
+  source:        'K',
+  notes:         'L',
+  city:          'M',
+  area:          'N',
+  language:      'O',
+  interviewDate: 'P',
+  selectedPlan:  'Q',
+};
+
+async function upsertCustomerByPhone(whatsappNumber, fields = {}) {
+  if (!whatsappNumber) return null;
+  try {
+    const sheets = await getClient();
+    const res = await sheets.spreadsheets.values.get({
+      spreadsheetId: sheetId(),
+      range: `${SHEET_CUSTOMERS}!A:C`,
+    });
+    const rows = res.data.values || [];
+    let targetRow = -1;
+    let existingCustomerId = null;
+    for (let i = 1; i < rows.length; i++) {
+      const row = rows[i] || [];
+      if (row[2] === whatsappNumber) {
+        targetRow = i + 1;
+        existingCustomerId = row[0] || null;
+        break;
+      }
+    }
+
+    if (targetRow === -1) {
+      // No row yet — append a fresh one with whatever we know so far.
+      const customerId = fields.customerId || await generateCustomerId();
+      await appendCustomer({
+        ...fields,
+        customerId,
+        whatsappNumber,
+        status: fields.status || 'New Lead',
+      });
+      return customerId;
+    }
+
+    // Row exists — patch the columns we have new values for. Skip empty
+    // values so we never overwrite a populated cell with blanks.
+    const updateData = [];
+    for (const [k, v] of Object.entries(fields)) {
+      const col = CUSTOMER_COL_MAP[k];
+      if (col && v !== undefined && v !== null && v !== '') {
+        updateData.push({
+          range: `${SHEET_CUSTOMERS}!${col}${targetRow}`,
+          values: [[v]],
+        });
+      }
+    }
+    if (updateData.length > 0) {
+      await sheets.spreadsheets.values.batchUpdate({
+        spreadsheetId: sheetId(),
+        requestBody: { valueInputOption: 'USER_ENTERED', data: updateData },
+      });
+      console.log(`[sheets] Customer patched (row ${targetRow}): ${Object.keys(fields).filter(k => CUSTOMER_COL_MAP[k]).join(',')}`);
+    }
+    return existingCustomerId;
+  } catch (err) {
+    console.error('[sheets] upsertCustomerByPhone error:', err.message);
+    return null;
+  }
+}
+
+/**
+ * Patch any subset of fields on a CLEANING_BOOKINGS row by bookingId.
+ * Like `updateCleaningBooking` but supports more columns (customerName,
+ * whatsappNumber, language, source, notes) so it can be used for
+ * progressive saves as the customer moves through the flow.
+ */
+const CLEANING_COL_MAP = {
+  bookingId:      'A',
+  customerName:   'B',
+  whatsappNumber: 'C',
+  serviceType:    'D',
+  details:        'E',
+  location:       'F',
+  preferredDate:  'G',
+  bookingDate:    'H',
+  status:         'I',
+  source:         'J',
+  notes:          'K',
+  estimatedPrice: 'L',
+  language:       'M',
+};
+
+async function updateCleaningBookingFields(bookingId, fields = {}) {
+  if (!bookingId) return;
+  try {
+    const sheets = await getClient();
+    const res = await sheets.spreadsheets.values.get({
+      spreadsheetId: sheetId(),
+      range: `${SHEET_CLEANING_BOOKINGS}!A:A`,
+    });
+    const rows = res.data.values || [];
+    let row = -1;
+    for (let i = 1; i < rows.length; i++) {
+      if (rows[i] && rows[i][0] === bookingId) { row = i + 1; break; }
+    }
+    if (row === -1) {
+      console.warn(`[sheets] Cleaning booking not found for patch: ${bookingId}`);
+      return;
+    }
+    const data = [];
+    for (const [k, v] of Object.entries(fields)) {
+      const col = CLEANING_COL_MAP[k];
+      if (col && v !== undefined && v !== null && v !== '') {
+        data.push({ range: `${SHEET_CLEANING_BOOKINGS}!${col}${row}`, values: [[v]] });
+      }
+    }
+    if (data.length === 0) return;
+    await sheets.spreadsheets.values.batchUpdate({
+      spreadsheetId: sheetId(),
+      requestBody: { valueInputOption: 'USER_ENTERED', data },
+    });
+    console.log(`[sheets] Cleaning patched (row ${row}): ${Object.keys(fields).filter(k => CLEANING_COL_MAP[k]).join(',')}`);
+  } catch (err) {
+    console.error('[sheets] updateCleaningBookingFields error:', err.message);
+  }
+}
+
+/**
  * Finds a customer row by WhatsApp number (Column C) and updates the
  * Status column (Column I).
  *
@@ -476,6 +623,8 @@ module.exports = {
   updateCustomerBooking,
   appendCleaningBooking,
   updateCleaningBooking,
+  updateCleaningBookingFields,
+  upsertCustomerByPhone,
   updateCustomerStatus,
   updateBookingPayment,
   markPaymentVerified,

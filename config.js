@@ -1355,7 +1355,27 @@ const cancelMessage = {
   mr: "❌ बुकिंग कैंसिल झाली. काळजी नको!\n\n🔁 पुन्हा सुरू करण्यासाठी टाइप करा:\n*clean* — क्लीनिंगसाठी\n*maid* — मेड सर्विससाठी"
 };
 
-const errorMessage = "⚠️ Something went wrong. Type *hi* to start again.";
+const errorMessage = "⚠️ Something went wrong. Type *restart* to start again.";
+
+// Sent at the 14-minute mark if the customer hasn't replied in their
+// active session (1 minute before the 15-min timeout kicks in).
+const nudgeMessage = {
+  en: `👋 Are you still there?
+
+Reply to continue your booking. Your session will end in 1 minute if there's no activity.
+
+🔄 Type *restart* anytime to start over.`,
+  hi: `👋 क्या आप अभी भी हैं?
+
+बुकिंग जारी रखने के लिए जवाब दें। अगर कोई जवाब नहीं आया तो 1 मिनट में आपकी सेशन बंद हो जाएगी।
+
+🔄 दोबारा शुरू करने के लिए कभी भी *restart* टाइप करें।`,
+  mr: `👋 तुम्ही अजून आहात का?
+
+बुकिंग पुढे चालू ठेवण्यासाठी उत्तर द्या. प्रतिसाद नसल्यास 1 मिनिटात तुमची सेशन संपेल.
+
+🔄 पुन्हा सुरू करण्यासाठी कधीही *restart* टाइप करा.`,
+};
 
 // ─── UPI Payment ─────────────────────────────────────────────
 const upiId = process.env.UPI_ID || "cleanly@upi";
@@ -1533,6 +1553,7 @@ module.exports = {
   adminCleaningAlert,
   cancelMessage,
   errorMessage,
+  nudgeMessage,
   upiId,
   paymentMessage,
   receiptReceivedMessage,

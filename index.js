@@ -42,22 +42,133 @@ console.log('[boot] WATI base:', WATI_BASE, '| bot number:', BOT_NUMBER);
 
 // ─── WATI send helper ───────────────────────────────────────
 // Sends a free-form text message inside an open 24-hr session window.
-// Returns { ok, status, body } so the caller can log failures.
-async function watiSend(phone, text) {
-  if (!phone || !text) return { ok: false, status: 0, body: 'missing phone or text' };
+// Retries on 5xx, 429, and network errors with exponential backoff.
+// 4xx (other than 429) is treated as permanent (bad token, expired
+// 24-hr window, etc.) and skipped to avoid hammering WATI.
+//
+// Returns { ok, status, body } so the caller can react to failures.
+const SEND_TIMEOUT_MS  = 15_000;
+const SEND_MAX_ATTEMPTS = 3;
+
+// Lightweight observability — visible at /status.
+const sendMetrics = { sent: 0, failed: 0, recentFailures: [] };
+function recordFailure(phone, reason, text) {
+  sendMetrics.failed++;
+  sendMetrics.recentFailures.push({
+    at:     new Date().toISOString(),
+    phone,
+    reason: String(reason || '').slice(0, 120),
+    text:   String(text  || '').slice(0, 100),
+  });
+  // Bounded buffer — keep last 50
+  if (sendMetrics.recentFailures.length > 50) sendMetrics.recentFailures.shift();
+}
+
+async function _watiSendOnce(phone, text) {
   const url = `${WATI_BASE}/api/v1/sendSessionMessage/${phone}?messageText=${encodeURIComponent(text)}`;
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), SEND_TIMEOUT_MS);
   try {
     const res = await fetch(url, {
       method: 'POST',
       headers: { 'Authorization': WATI_TOKEN, 'Content-Type': 'application/json' },
+      signal: controller.signal,
     });
     const body = await res.text();
-    if (!res.ok) console.error('[wati] send failed', res.status, body.slice(0, 200));
     return { ok: res.ok, status: res.status, body };
-  } catch (e) {
-    console.error('[wati] send exception:', e.message);
-    return { ok: false, status: 0, body: e.message };
+  } finally {
+    clearTimeout(timer);
   }
+}
+
+async function watiSend(phone, text, opts = {}) {
+  if (!phone || !text) return { ok: false, status: 0, body: 'missing phone or text' };
+
+  const maxAttempts  = opts.maxAttempts ?? SEND_MAX_ATTEMPTS;
+  const isOwnerAlert = opts.isOwnerAlert === true;
+  let lastReason = 'unknown';
+
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    try {
+      const res = await _watiSendOnce(phone, text);
+
+      if (res.ok) {
+        if (attempt > 1) console.log(`[wati] ✓ recovered on attempt ${attempt} to ${phone}`);
+        sendMetrics.sent++;
+        return res;
+      }
+
+      // 4xx (not 429) — permanent error, don't retry.
+      // Common causes: bad token, customer outside 24-hr session window,
+      // invalid phone. None of these fix themselves with a retry.
+      if (res.status >= 400 && res.status < 500 && res.status !== 429) {
+        console.error(`[wati] ✗ send ${res.status} (no retry) to ${phone}: ${res.body.slice(0, 200)}`);
+        recordFailure(phone, `HTTP ${res.status}: ${res.body.slice(0, 80)}`, text);
+        if (!isOwnerAlert) notifyOwnerOfFailure(phone, `HTTP ${res.status}`, text);
+        return res;
+      }
+
+      // 5xx or 429 — retry with backoff.
+      lastReason = `HTTP ${res.status}`;
+      console.warn(`[wati] send ${res.status} (attempt ${attempt}/${maxAttempts}) to ${phone}`);
+    } catch (e) {
+      const aborted = e.name === 'AbortError';
+      lastReason = aborted ? `timeout ${SEND_TIMEOUT_MS}ms` : (e.message || 'fetch exception');
+      console.warn(`[wati] send error (attempt ${attempt}/${maxAttempts}) to ${phone}: ${lastReason}`);
+    }
+
+    if (attempt < maxAttempts) {
+      // 500ms, 1500ms, 4500ms
+      const delay = 500 * Math.pow(3, attempt - 1);
+      await new Promise(r => setTimeout(r, delay));
+    }
+  }
+
+  console.error(`[wati] ✗ send FAILED after ${maxAttempts} attempts to ${phone}: ${lastReason}`);
+  recordFailure(phone, lastReason, text);
+  if (!isOwnerAlert) notifyOwnerOfFailure(phone, lastReason, text);
+  return { ok: false, status: 0, body: lastReason };
+}
+
+// One-shot owner alert when a customer message can't be delivered.
+// Uses a single-attempt send to avoid recursive failure loops.
+function notifyOwnerOfFailure(toPhone, reason, originalText) {
+  const alert = `⚠️ *MESSAGE FAILED — Manual Follow-up*
+
+📞 Customer : ${toPhone}
+❌ Reason   : ${reason}
+📝 Tried to send (first 100 chars):
+${(originalText || '').slice(0, 100)}
+
+The bot couldn't deliver this reply. Please contact the customer manually.`;
+  _watiSendOnce(OWNER_PHONE, alert).catch(() => {});
+}
+
+// ─── Inactivity nudge ───────────────────────────────────────
+// 1 minute before the session times out, send a "are you still there?"
+// prompt so the user has a chance to resume. Re-scheduled on every
+// incoming message; cleared when the session ends.
+const NUDGE_DELAY_MS = Math.max(60_000, (config.sessionTimeoutMs || 15 * 60 * 1000) - 60_000);
+const nudgeTimers = new Map();
+
+function clearNudge(phone) {
+  const t = nudgeTimers.get(phone);
+  if (t) { clearTimeout(t); nudgeTimers.delete(phone); }
+}
+
+function scheduleNudge(phone) {
+  clearNudge(phone);
+  const t = setTimeout(() => {
+    nudgeTimers.delete(phone);
+    const sess = flow.sessions.get(phone);
+    if (!sess) return; // session already ended — nothing to nudge
+    const lang = (sess.data && sess.data.lang) || 'en';
+    const text = (config.nudgeMessage && config.nudgeMessage[lang]) || config.nudgeMessage.en;
+    watiSend(phone, text)
+      .then(r => r.ok && console.log('[nudge] sent to', phone))
+      .catch(e => console.error('[nudge] send failed:', e.message));
+  }, NUDGE_DELAY_MS);
+  nudgeTimers.set(phone, t);
 }
 
 // ─── Dedup ──────────────────────────────────────────────────
@@ -172,21 +283,34 @@ app.post('/wati-webhook', async (req, res) => {
       const replies = await flow.handleMessage(wrapped);
       console.log('[task]', phone, 'flow:', Date.now() - t0, 'ms, replies:', replies.length);
       for (const reply of replies) {
-        if (typeof reply === 'object' && reply._adminAlert) {
-          // Admin notification — fire and forget
-          watiSend(OWNER_PHONE, reply._adminAlert)
-            .then(r => r.ok && console.log('[task] adminAlert sent'))
-            .catch(e => console.error('[task] adminAlert send failed:', e.message));
-          continue;
-        }
-        if (typeof reply === 'string') {
-          await watiSend(phone, reply);
+        try {
+          if (typeof reply === 'object' && reply && reply._adminAlert) {
+            // Admin notification — fire and forget but log outcome
+            watiSend(OWNER_PHONE, reply._adminAlert)
+              .then(r => console.log(r.ok ? '[task] adminAlert sent' : '[task] adminAlert FAILED: ' + r.body.slice(0,80)))
+              .catch(e => console.error('[task] adminAlert send threw:', e.message));
+            continue;
+          }
+          if (typeof reply === 'string' && reply.length > 0) {
+            const r = await watiSend(phone, reply);
+            if (!r.ok) console.warn('[task] reply not delivered to', phone, '— see /status');
+          }
+        } catch (sendErr) {
+          // One bad reply shouldn't abort the rest. Already logged inside watiSend.
+          console.error('[task] reply loop error for', phone, ':', sendErr.message);
         }
       }
+
+      // (Re)schedule the 14-min nudge if the session is still active;
+      // otherwise clear it (flow ended, cancelled, or paid).
+      if (flow.sessions.get(phone)) scheduleNudge(phone);
+      else clearNudge(phone);
     } catch (err) {
-      console.error('[task] handler error for', phone, ':', err.message);
+      console.error('[task] handler error for', phone, ':', err.message, err.stack);
+      // Best-effort error reply; watiSend already retries + alerts owner on failure.
       watiSend(phone, config.errorMessage).catch(() => {});
       flow.clearSession(phone);
+      clearNudge(phone);
     }
   });
 });
@@ -210,6 +334,11 @@ app.get('/status', (_req, res) => res.json({
   activeSessions: flow.activeSessionCount(),
   uptime: process.uptime(),
   bot: BOT_NUMBER,
+  msgs: {
+    sent:   sendMetrics.sent,
+    failed: sendMetrics.failed,
+    recentFailures: sendMetrics.recentFailures.slice(-10),
+  },
 }));
 
 app.get('/ping', (_req, res) => res.send('pong'));
