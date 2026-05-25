@@ -278,6 +278,34 @@ const customAreaPromptMessage = {
   mr: `📍 तुमचा एरिया / लोकेशन लिहा.\n(उदाहरण: Sinhgad Road, Pimple Saudagar, इ.)`,
 };
 
+// Offered when the bot can't immediately match a maid — customer can
+// either proceed with booking (team finds maid afterwards) or wait
+// for a callback.
+const maidNoMatchOfferMessage = {
+  en: `😔 We couldn't find an immediate match for you.
+
+Would you like to:
+1️⃣ *Proceed with booking* — we'll personally find the right maid for you
+2️⃣ *Wait for our team* to call you back`,
+  hi: `😔 हमें अभी आपके लिए सही मेड नहीं मिली।
+
+आप क्या करना चाहेंगे?
+1️⃣ *बुकिंग आगे बढ़ाएं* — हम आपके लिए सही मेड ढूंढ कर भेजेंगे
+2️⃣ *हमारी टीम के कॉल* का इंतजार करें`,
+  mr: `😔 आम्हाला तुमच्यासाठी लगेच योग्य मेड मिळाली नाही.
+
+तुम्हाला काय करायचे आहे?
+1️⃣ *बुकिंग पुढे चालू ठेवा* — आम्ही तुमच्यासाठी योग्य मेड शोधून पाठवू
+2️⃣ *आमच्या टीमच्या कॉल*ची वाट पाहा`,
+};
+
+// Placeholder shown in booking summary / sheets when maid is to be assigned later
+const maidToBeAssignedLabel = {
+  en: "To be assigned by team",
+  hi: "टीम द्वारा असाइन की जाएगी",
+  mr: "टीमद्वारे नियुक्त केली जाईल",
+};
+
 const maidsRejectedMessage = (lang) => {
   if (lang === "hi") return `🔍 कोई बात नहीं! हम आपके लिए और बेहतर मेड खोजेंगे।\n\nहमारी टीम जल्द ही आपसे संपर्क करेगी। 📞\n\n🔁 *कोई और सेवा चाहिए?*\n*clean* टाइप करें — क्लीनिंग के लिए\n*maid* टाइप करें — मेड सर्विस के लिए`;
   if (lang === "mr") return `🔍 काळजी नको! आम्ही तुमच्यासाठी आणखी चांगल्या मेड शोधू.\n\nआमची टीम लवकरच तुमच्याशी संपर्क करेल. 📞\n\n🔁 *दुसरी सेवा हवी आहे?*\n*clean* टाइप करा — क्लीनिंगसाठी\n*maid* टाइप करा — मेड सर्विससाठी`;
@@ -1406,6 +1434,8 @@ module.exports = {
   customAreaConfirmMessage,
   maidsRejectedMessage,
   adminMaidsRejectedAlert,
+  maidNoMatchOfferMessage,
+  maidToBeAssignedLabel,
   maidPlanMessage,
   maidPlans,
   getMaidPlanOptions,

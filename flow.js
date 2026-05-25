@@ -163,23 +163,11 @@ async function handleMessage(msg) {
   }
 
   // MAID_CHOICE special "0" — customer didn't like any maid shown.
-  // Alert admin to follow up manually + tell customer team will reach out.
+  // Offer to proceed with booking anyway (we'll find a maid for them).
   if (body === "0" && session.state === "MAID_CHOICE") {
     const lang = session.data.lang || "en";
-    const d = session.data;
-    const adminAlert = config.adminMaidsRejectedAlert({
-      customerName: d.contactName,
-      phone: d.whatsappNumber,
-      customerId: d.customerId,
-      workType: d.workType,
-      timing: d.timing,
-      budget: d.budget,
-      city: d.maidCity,
-      area: d.maidArea,
-      availableMaids: d.availableMaids,
-    });
-    clearSession(senderId);
-    return [config.maidsRejectedMessage(lang), { _adminAlert: adminAlert }];
+    session.state = "MAID_NO_MATCH_OFFER";
+    return [config.maidNoMatchOfferMessage[lang]];
   }
 
   // GLOBAL HANDLER FOR "0" - Talk to Support
@@ -786,13 +774,11 @@ async function processState(session, body, senderId, msg) {
         const topMaids = await getTopMaids(areaCoords.lat, areaCoords.lng, session.data.workType);
         
         if (topMaids.length === 0) {
-          // If no maids found in 8km
-          const msg = session.data.lang === "hi"
-            ? `हम अभी आपके एरिया में मेड ढूंढ रहे हैं! 🔍\n\nहमें कॉल करें और हम आपके लिए सही मेड खोजने में मदद करेंगे:\n📞 ${config.contactNumber}`
-            : session.data.lang === "mr"
-            ? `आम्ही तुमच्या एरियात मेड शोधत आहोत! 🔍\n\nआम्हाला फोन करा आणि आम्ही तुमच्यासाठी योग्य मेड शोधण्यात मदत करू:\n📞 ${config.contactNumber}`
-            : `We're on it! 🔍\n\nWe'll personally help you find the right maid for your area.\nPlease give us a call and we'll locate one for you:\n📞 ${config.contactNumber}`;
-          return [msg];
+          // No maids within 8km — offer to proceed with booking anyway.
+          // Team finds the maid post-booking.
+          session.state = "MAID_NO_MATCH_OFFER";
+          session.data.availableMaids = []; // for admin alert if user says 2
+          return [config.maidNoMatchOfferMessage[session.data.lang || "en"]];
         }
 
         let resultMsg = session.data.lang === "hi"
@@ -873,19 +859,41 @@ async function processState(session, body, senderId, msg) {
         } catch (e) { console.error("[flow] custom-area lead save err:", e.message); }
       })();
 
-      // Alert admin so service team can follow up manually
-      const adminAlert = `🔔 *NEW LEAD — Custom Area (out of coverage)*\n\n` +
-        `👤 Customer : ${session.data.contactName}\n` +
-        `📞 WhatsApp : ${session.data.whatsappNumber}\n` +
-        `🧹 Work     : ${session.data.workType}\n` +
-        `⏰ Timing   : ${session.data.timing}\n` +
-        `💰 Budget   : ${session.data.budget}\n` +
-        `📍 Area     : ${trimmed}\n\n` +
-        `➡️ @service team, please reach out — area is outside the standard list.`;
+      // Custom area can't be matched by geo, so offer to proceed with
+      // booking — team finds the maid post-booking.
+      session.data.availableMaids = [];
+      session.state = "MAID_NO_MATCH_OFFER";
+      return [config.maidNoMatchOfferMessage[lang]];
+    }
 
-      const reply = config.customAreaConfirmMessage(trimmed, lang);
-      clearSession(senderId);
-      return [reply, { _adminAlert: adminAlert }];
+    case "MAID_NO_MATCH_OFFER": {
+      const lang = session.data.lang || "en";
+      if (body === "1") {
+        // Customer chose to proceed — placeholder maid + continue flow
+        session.data.maidChoice = config.maidToBeAssignedLabel[lang] || config.maidToBeAssignedLabel.en;
+        session.data.maidChoiceIds = "PENDING_ASSIGNMENT";
+        session.data.selectedMaids = ["PENDING"];
+        session.state = "COLLECT_FLAT";
+        return [config.collectFlatMessage[lang]];
+      }
+      if (body === "2") {
+        // Customer chose to wait — admin alert + end
+        const d = session.data;
+        const adminAlert = config.adminMaidsRejectedAlert({
+          customerName: d.contactName,
+          phone: d.whatsappNumber,
+          customerId: d.customerId,
+          workType: d.workType,
+          timing: d.timing,
+          budget: d.budget,
+          city: d.maidCity,
+          area: d.maidArea,
+          availableMaids: d.availableMaids,
+        });
+        clearSession(senderId);
+        return [config.maidsRejectedMessage(lang), { _adminAlert: adminAlert }];
+      }
+      return [config.maidNoMatchOfferMessage[lang]];
     }
 
     case "MAID_CHOICE": {
