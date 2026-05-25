@@ -37,6 +37,8 @@ const budgets = {
 };
 
 // Budget ranges depend on the timing the customer picked. Higher timing → higher salary band.
+// Stored values are kept clean (no bracket text) so session.data.budget and sheet writes
+// stay simple. The qualifier in brackets is added at display time per language.
 const budgetsByTiming = {
   "Part Time (1-3 hrs)": {
     "1": "₹4,000 – ₹6,000",
@@ -54,6 +56,7 @@ const budgetsByTiming = {
   },
   "Full Time (24 hrs)": {
     "1": "₹20,000 – ₹30,000",
+    "2": "₹30,000 – ₹40,000",
   },
 };
 
@@ -61,19 +64,28 @@ function getBudgetOptions(timing) {
   return budgetsByTiming[timing] || budgets;
 }
 
+// Localised qualifier text appended in brackets to premium salary tiers.
+const qualifier10Plus = {
+  en: ' (10+ education + experience)',
+  hi: ' (10+ पढ़ाई + अनुभव)',
+  mr: ' (10+ शिक्षण + अनुभव)',
+};
+const qualifierGraduate = {
+  en: ' (graduate + experience)',
+  hi: ' (ग्रेजुएट + अनुभव)',
+  mr: ' (ग्रॅज्युएट + अनुभव)',
+};
+
 function getBudgetMessage(timing, lang) {
   const opts = getBudgetOptions(timing);
-  const premiumNote = {
-    en: '\n   • 10+ education\n   • 5+ years experience',
-    hi: '\n   • 10+ शिक्षा\n   • 5+ साल अनुभव',
-    mr: '\n   • 10+ शिक्षण\n   • 5+ वर्ष अनुभव',
-  };
   const lines = Object.entries(opts)
     .map(([k, v]) => {
       let line = `${k}️⃣ ${v}`;
-      // Highest-tier salary brackets require formal education + experience
-      if (v.includes('₹20,000 – ₹30,000') || v.includes('₹25,000 – ₹30,000')) {
-        line += premiumNote[lang] || premiumNote.en;
+      // Highest-tier salary brackets get an education/experience qualifier
+      if (v.includes('₹30,000 – ₹40,000')) {
+        line += qualifierGraduate[lang] || qualifierGraduate.en;
+      } else if (v.includes('₹20,000 – ₹30,000') || v.includes('₹25,000 – ₹30,000')) {
+        line += qualifier10Plus[lang] || qualifier10Plus.en;
       }
       return line;
     })
@@ -1079,41 +1091,53 @@ const planBlocks = {
   partTimeVerified: {
     en: `*Part-Time Verified — ₹12,000*
 • One-time placement fee
-• All services in Standard Plan
-• *Police verification initiated (records & basic checks)*
+• Maid interviews at your home
+• Identity & document verification
 • Experience and skill screening
+• Service agreement assistance
+• *Police verification initiated (records & basic checks)*
 • *2 free replacements within 6 months*`,
     hi: `*पार्ट-टाइम वेरिफाइड — ₹12,000*
 • एक बार की प्लेसमेंट फीस
-• स्टैंडर्ड प्लान की सभी सेवाएं
-• *पुलिस वेरिफिकेशन (रिकॉर्ड और बेसिक चेक)*
+• घर पर मेड का इंटरव्यू
+• आईडी और डॉक्युमेंट वेरिफिकेशन
 • अनुभव और स्किल की जांच
+• सर्विस एग्रीमेंट में मदद
+• *पुलिस वेरिफिकेशन (रिकॉर्ड और बेसिक चेक)*
 • *6 महीने में 2 फ्री रिप्लेसमेंट*`,
     mr: `*पार्ट-टाइम व्हेरिफाइड — ₹12,000*
 • एक वेळची प्लेसमेंट फी
-• स्टँडर्ड प्लानच्या सर्व सेवा
-• *पोलिस व्हेरिफिकेशन (रेकॉर्ड आणि बेसिक चेक)*
+• घरी मेडचा इंटरव्ह्यू
+• आयडी आणि डॉक्युमेंट व्हेरिफिकेशन
 • अनुभव आणि स्किल तपासणी
+• सर्विस एग्रीमेंट मध्ये मदत
+• *पोलिस व्हेरिफिकेशन (रेकॉर्ड आणि बेसिक चेक)*
 • *6 महिन्यांत 2 फ्री रिप्लेसमेंट*`,
   },
   fullTimeVerified: {
     en: `*Full-Time Verified — 1 Month Salary*
 • One-time fee (1 month salary)
-• All services in Standard Plan
-• *Police verification initiated (records & basic checks)*
+• Maid interviews at your home
+• Identity & document verification
 • Experience and skill screening
+• Service agreement assistance
+• *Police verification initiated (records & basic checks)*
 • *2 free replacements within 6 months*`,
     hi: `*फुल-टाइम वेरिफाइड — 1 महीने की सैलरी*
 • एक बार की फीस (1 महीने की सैलरी)
-• स्टैंडर्ड प्लान की सभी सेवाएं
-• *पुलिस वेरिफिकेशन (रिकॉर्ड और बेसिक चेक)*
+• घर पर मेड का इंटरव्यू
+• आईडी और डॉक्युमेंट वेरिफिकेशन
 • अनुभव और स्किल की जांच
+• सर्विस एग्रीमेंट में मदद
+• *पुलिस वेरिफिकेशन (रिकॉर्ड और बेसिक चेक)*
 • *6 महीने में 2 फ्री रिप्लेसमेंट*`,
     mr: `*फुल-टाइम व्हेरिफाइड — 1 महिन्याचा पगार*
 • एक वेळची फी (1 महिन्याचा पगार)
-• स्टँडर्ड प्लानच्या सर्व सेवा
-• *पोलिस व्हेरिफिकेशन (रेकॉर्ड आणि बेसिक चेक)*
+• घरी मेडचा इंटरव्ह्यू
+• आयडी आणि डॉक्युमेंट व्हेरिफिकेशन
 • अनुभव आणि स्किल तपासणी
+• सर्विस एग्रीमेंट मध्ये मदत
+• *पोलिस व्हेरिफिकेशन (रेकॉर्ड आणि बेसिक चेक)*
 • *6 महिन्यांत 2 फ्री रिप्लेसमेंट*`,
   },
 };
