@@ -171,6 +171,39 @@ function scheduleNudge(phone) {
   nudgeTimers.set(phone, t);
 }
 
+// ─── Manual intervention pause ──────────────────────────────
+// When the admin takes over a conversation (replies manually via WATI
+// dashboard or anywhere outside the bot), the bot must stop auto-
+// replying to that customer until released.
+//
+// Use POST /takeover?phone=PHONE&hours=N to pause.
+//      POST /release?phone=PHONE to resume.
+const PAUSE_DEFAULT_HOURS = 4;
+const pausedUsers = new Map(); // phone -> { expiresAt, notified }
+
+function pauseUser(phone, hours = PAUSE_DEFAULT_HOURS) {
+  const expiresAt = Date.now() + hours * 60 * 60 * 1000;
+  pausedUsers.set(phone, { expiresAt, notified: false });
+  console.log(`[pause] ${phone} → paused for ${hours}h`);
+}
+
+function resumeUser(phone) {
+  const had = pausedUsers.delete(phone);
+  if (had) console.log(`[pause] ${phone} → resumed`);
+  return had;
+}
+
+function isPaused(phone) {
+  const entry = pausedUsers.get(phone);
+  if (!entry) return false;
+  if (Date.now() > entry.expiresAt) {
+    pausedUsers.delete(phone);
+    console.log(`[pause] ${phone} → auto-released (pause expired)`);
+    return false;
+  }
+  return true;
+}
+
 // ─── Dedup ──────────────────────────────────────────────────
 // WATI can deliver the same message twice if its retry policy fires
 // (e.g. our webhook returns slow). Track recent message IDs and skip dupes.
@@ -272,6 +305,20 @@ app.post('/wati-webhook', async (req, res) => {
 
   if (!phone) { console.warn('[wati] webhook missing phone'); return; }
   if (alreadyProcessed(msgId)) { console.log('[wati] dedup', msgId); return; }
+
+  // If admin has taken over this customer manually, the bot stays silent.
+  // The customer gets a single "an agent will help you" notice the first
+  // time they message while paused, then nothing until /release is hit.
+  if (isPaused(phone)) {
+    const entry = pausedUsers.get(phone);
+    console.log(`[pause] ${phone} → skipping bot reply (agent takeover)`);
+    if (entry && !entry.notified) {
+      entry.notified = true;
+      watiSend(phone, "👤 An agent from our team will reply to you shortly. Thanks for your patience!")
+        .catch(() => {});
+    }
+    return;
+  }
 
   console.log('[wati] from:', phone, 'type:', msgType, 'body:', JSON.stringify(String(text)).slice(0, 30));
 
@@ -392,6 +439,52 @@ app.get('/send', async (req, res) => {
     if (!r.ok) return res.status(500).send(`Send failed: ${r.body}`);
     res.send(`✅ Sent to ${phone}`);
   } catch (e) { res.status(500).send(e.message); }
+});
+
+// ─── Manual intervention endpoints ──────────────────────────
+// /takeover  → bot stops auto-replying to PHONE (default 4h, configurable)
+// /release   → bot resumes auto-replying
+// /paused    → list currently paused conversations
+app.get('/takeover', (req, res) => {
+  const { phone, token, hours } = req.query;
+  if (!token || token !== process.env.ADMIN_TOKEN) return res.status(401).send('Unauthorized');
+  if (!phone) return res.status(400).send('Missing ?phone=');
+  const cleanPhone = String(phone).replace(/[^0-9]/g, '');
+  const durationHours = Math.max(1, Math.min(48, parseInt(hours) || PAUSE_DEFAULT_HOURS));
+  pauseUser(cleanPhone, durationHours);
+  res.json({
+    ok: true,
+    phone: cleanPhone,
+    pausedForHours: durationHours,
+    releasesAt: new Date(Date.now() + durationHours * 60 * 60 * 1000).toISOString(),
+  });
+});
+
+app.get('/release', (req, res) => {
+  const { phone, token } = req.query;
+  if (!token || token !== process.env.ADMIN_TOKEN) return res.status(401).send('Unauthorized');
+  if (!phone) return res.status(400).send('Missing ?phone=');
+  const cleanPhone = String(phone).replace(/[^0-9]/g, '');
+  const wasReleased = resumeUser(cleanPhone);
+  res.json({ ok: true, phone: cleanPhone, wasPaused: wasReleased });
+});
+
+app.get('/paused', (req, res) => {
+  const { token } = req.query;
+  if (!token || token !== process.env.ADMIN_TOKEN) return res.status(401).send('Unauthorized');
+  const now = Date.now();
+  const list = [];
+  for (const [phone, entry] of pausedUsers.entries()) {
+    if (entry.expiresAt > now) {
+      list.push({
+        phone,
+        notified: entry.notified,
+        releasesAt: new Date(entry.expiresAt).toISOString(),
+        minutesLeft: Math.round((entry.expiresAt - now) / 60000),
+      });
+    }
+  }
+  res.json({ ok: true, paused: list, count: list.length });
 });
 
 app.post('/verify-payment', async (req, res) => {

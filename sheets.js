@@ -9,10 +9,10 @@ const { google } = require("googleapis");
 const path = require("path");
 
 // ─── Sheet tab names (must match your Google Sheet) ──────────
-const SHEET_CUSTOMERS = "CUSTOMERS";
+const SHEET_CUSTOMERS = "MAID CUSTOMERS";
 const SHEET_BOOKINGS  = "BOOKINGS";
 const SHEET_MAIDS     = "MAIDS";
-const SHEET_CLEANING_BOOKINGS = "CLEANING_BOOKINGS";
+const SHEET_CLEANING_BOOKINGS = "CLEANING_CUSTOMERS";
 
 // ─── Auth & client singleton ─────────────────────────────────
 let sheetsClient = null;
@@ -127,12 +127,13 @@ async function warmCounters() {
 // ─── Append Functions ────────────────────────────────────────
 
 /**
- * Appends a new row to the CUSTOMERS sheet.
+ * Appends a new row to the MAID CUSTOMERS sheet.
  *
- * @param {object} data
- *   { customerId, name, whatsappNumber, flat, workType, timing,
- *     budget, enquiryDate, status, assignedMaidId, source, notes,
- *     city, area, language }
+ * Column layout (A → O):
+ *   A Customer ID | B Name | C WhatsApp Number | D Work type
+ *   E Timing Preference | F Budget | G City | H Area
+ *   I Flat / address | J selected maid name | K interview date
+ *   L Choosed Plan | M enquiry date | N status | O Feedback (manual)
  */
 async function appendCustomer(data) {
   try {
@@ -145,26 +146,26 @@ async function appendCustomer(data) {
       requestBody: {
         values: [
           [
-            data.customerId       || "",
-            data.name             || "",
-            data.whatsappNumber   || "",
-            data.flat             || "",
-            data.workType         || "",
-            data.timing           || "",
-            data.budget           || "",
-            data.enquiryDate      || new Date().toLocaleDateString("en-IN"),
-            data.status           || "New Lead",
-            data.assignedMaidId   || "",
-            data.source           || "WhatsApp Bot",
-            data.notes            || "",
-            data.city             || "",
-            data.area             || "",
-            data.language         || "en",
+            data.customerId       || "",                                       // A
+            data.name             || "",                                       // B
+            data.whatsappNumber   || "",                                       // C
+            data.workType         || "",                                       // D
+            data.timing           || "",                                       // E
+            data.budget           || "",                                       // F
+            data.city             || "",                                       // G
+            data.area             || "",                                       // H
+            data.flat             || "",                                       // I
+            data.maidChoice       || data.assignedMaidId || "",                // J
+            data.interviewDate    || "",                                       // K
+            data.selectedPlan     || "",                                       // L
+            data.enquiryDate      || new Date().toLocaleDateString("en-IN"),   // M
+            data.status           || "New Lead",                               // N
+            data.feedback         || "",                                       // O
           ],
         ],
       },
     });
-    console.log(`[sheets] Customer appended: ${data.customerId}`);
+    console.log(`[sheets] Maid customer appended: ${data.customerId}`);
   } catch (err) {
     console.error("[sheets] appendCustomer error:", err.message);
     // Do NOT crash — flow continues even if sheet write fails
@@ -174,45 +175,50 @@ async function appendCustomer(data) {
 /**
  * Appends a new row to the BOOKINGS sheet.
  *
- * @param {object} data
- *   { bookingId, customerName, customerWhatsApp, maidName, maidId,
- *     workType, timing, startDate, monthlySalary, flat, bookingDate,
- *     status, commissionPaid, selectedPlan, city, area, language }
+ * Column layout (A → X):
+ *   A Booking ID | B Customer Name | C Customer WhatsApp | D Maid Name
+ *   E Maid ID | F Work Type | G Timing | H Start Date
+ *   I Monthly Salary | J Flat | K Booking Date | L Status
+ *   M Commission Paid | N Follow-up Day 1 | O Follow-up Day 2
+ *   P Follow-up Day 3 | Q Monthly Check-in | R Selected Plan
+ *   S City | T Area | U Language | V Payment Status
+ *   W Receipt URL | X Payment Verified
  */
 async function appendBooking(data) {
   try {
     const sheets = await getClient();
     await sheets.spreadsheets.values.append({
       spreadsheetId: sheetId(),
-      range: `${SHEET_BOOKINGS}!A:W`,
+      range: `${SHEET_BOOKINGS}!A:X`,
       valueInputOption: "USER_ENTERED",
       insertDataOption: "INSERT_ROWS",
       requestBody: {
         values: [
           [
-            data.bookingId          || "",
-            data.customerName       || "",
-            data.customerWhatsApp   || "",
-            data.maidName           || "",
-            data.maidId             || "",
-            data.workType           || "",
-            data.timing             || "",
-            data.startDate          || "",
-            data.monthlySalary      || "",
-            data.flat               || "",
-            data.bookingDate        || new Date().toLocaleDateString("en-IN"),
-            data.status             || "Payment Pending",
-            data.commissionPaid     || "No",
-            "", // Follow-up Day 1
-            "", // Follow-up Day 2
-            "", // Follow-up Day 3
-            "", // Monthly Check-in
-            data.selectedPlan       || "",
-            data.city               || "",
-            data.area               || "",
-            data.language           || "en",
-            data.paymentStatus      || "Pending",  // Column V
-            data.receiptNote        || "",          // Column W
+            data.bookingId          || "",                                              // A
+            data.customerName       || "",                                              // B
+            data.customerWhatsApp   || "",                                              // C
+            data.maidName           || "",                                              // D
+            data.maidId             || "",                                              // E
+            data.workType           || "",                                              // F
+            data.timing             || "",                                              // G
+            data.startDate          || "",                                              // H
+            data.monthlySalary      || "",                                              // I
+            data.flat               || "",                                              // J
+            data.bookingDate        || new Date().toLocaleDateString("en-IN"),          // K
+            data.status             || "Payment Pending",                               // L
+            data.commissionPaid     || "No",                                            // M
+            "",                                                                          // N Follow-up Day 1
+            "",                                                                          // O Follow-up Day 2
+            "",                                                                          // P Follow-up Day 3
+            "",                                                                          // Q Monthly Check-in
+            data.selectedPlan       || "",                                              // R
+            data.city               || "",                                              // S
+            data.area               || "",                                              // T
+            data.language           || "en",                                            // U
+            data.paymentStatus      || "Pending",                                       // V
+            data.receiptNote        || "",                                              // W
+            data.paymentVerified    || "",                                              // X
           ],
         ],
       },
@@ -267,41 +273,41 @@ async function updateBookingPayment(bookingId, receiptNote) {
 }
 
 /**
- * Appends a new row to the CLEANING_BOOKINGS sheet.
+ * Appends a new row to the CLEANING_CUSTOMERS sheet.
  *
- * @param {object} data
- *   { bookingId, customerName, whatsappNumber, serviceType, details, 
- *     location, preferredDate, bookingDate, status, source, estimatedPrice, language }
+ * Column layout (A → L):
+ *   A Booking ID | B Customer Name | C WhatsApp Number | D Service Type
+ *   E Details/Size | F Location | G Preferred Date | H Status
+ *   I Enquiry date | J Source | K Estimated Price | L Feedback (manual)
  */
 async function appendCleaningBooking(data) {
   try {
     const sheets = await getClient();
     await sheets.spreadsheets.values.append({
       spreadsheetId: sheetId(),
-      range: `${SHEET_CLEANING_BOOKINGS}!A:M`,
+      range: `${SHEET_CLEANING_BOOKINGS}!A:L`,
       valueInputOption: "USER_ENTERED",
       insertDataOption: "INSERT_ROWS",
       requestBody: {
         values: [
           [
-            data.bookingId          || "",
-            data.customerName       || "",
-            data.whatsappNumber     || "",
-            data.serviceType        || "",
-            data.details            || "",
-            data.location           || "",
-            data.preferredDate      || "",
-            data.bookingDate        || new Date().toLocaleDateString("en-IN"),
-            data.status             || "New Request",
-            data.source             || "WhatsApp Bot",
-            "", // Notes
-            data.estimatedPrice     || "",
-            data.language           || "en",
+            data.bookingId          || "",                                              // A
+            data.customerName       || "",                                              // B
+            data.whatsappNumber     || "",                                              // C
+            data.serviceType        || "",                                              // D
+            data.details            || "",                                              // E
+            data.location           || "",                                              // F
+            data.preferredDate      || "",                                              // G
+            data.status             || "New Request",                                   // H
+            data.enquiryDate        || data.bookingDate || new Date().toLocaleDateString("en-IN"), // I
+            data.source             || "WhatsApp Bot",                                  // J
+            data.estimatedPrice     || "",                                              // K
+            data.feedback           || "",                                              // L
           ],
         ],
       },
     });
-    console.log(`[sheets] Cleaning Booking appended: ${data.bookingId}`);
+    console.log(`[sheets] Cleaning customer appended: ${data.bookingId}`);
   } catch (err) {
     console.error("[sheets] appendCleaningBooking error:", err.message);
   }
@@ -310,14 +316,13 @@ async function appendCleaningBooking(data) {
 // ─── Update Functions ────────────────────────────────────────
 
 /**
- * Once a maid booking is confirmed, fill the existing CUSTOMERS row
+ * Once a maid booking is confirmed, fill the existing MAID CUSTOMERS row
  * with the details we now know — address, selected maid, interview
- * date and plan. These columns are blank when the row is first
- * appended at MAID_AREA (lead capture). Columns:
- *   D = flat (address)
- *   J = assignedMaidId (which maid the customer picked)
- *   P = interview date (new)
- *   Q = selected plan (new)
+ * date and plan. Columns (per the new layout):
+ *   I = flat (address)
+ *   J = selected maid name
+ *   K = interview date
+ *   L = chosen plan
  */
 async function updateCustomerBooking(whatsappNumber, data) {
   try {
@@ -340,10 +345,10 @@ async function updateCustomerBooking(whatsappNumber, data) {
       requestBody: {
         valueInputOption: "USER_ENTERED",
         data: [
-          { range: `${SHEET_CUSTOMERS}!D${targetRow}`, values: [[data.flat || ""]] },
+          { range: `${SHEET_CUSTOMERS}!I${targetRow}`, values: [[data.flat || ""]] },
           { range: `${SHEET_CUSTOMERS}!J${targetRow}`, values: [[data.maidChoice || ""]] },
-          { range: `${SHEET_CUSTOMERS}!P${targetRow}`, values: [[data.interviewDate || ""]] },
-          { range: `${SHEET_CUSTOMERS}!Q${targetRow}`, values: [[data.selectedPlan || ""]] },
+          { range: `${SHEET_CUSTOMERS}!K${targetRow}`, values: [[data.interviewDate || ""]] },
+          { range: `${SHEET_CUSTOMERS}!L${targetRow}`, values: [[data.selectedPlan || ""]] },
         ],
       },
     });
@@ -367,22 +372,22 @@ async function updateCustomerBooking(whatsappNumber, data) {
  * }
  * @returns {Promise<string|null>} customerId of the row, or null on error
  */
+// Column letters for the MAID CUSTOMERS sheet (matches appendCustomer above).
 const CUSTOMER_COL_MAP = {
   name:          'B',
-  flat:          'D',
-  workType:      'E',
-  timing:        'F',
-  budget:        'G',
-  enquiryDate:   'H',
-  status:        'I',
+  whatsappNumber:'C',
+  workType:      'D',
+  timing:        'E',
+  budget:        'F',
+  city:          'G',
+  area:          'H',
+  flat:          'I',
   maidChoice:    'J',
-  source:        'K',
-  notes:         'L',
-  city:          'M',
-  area:          'N',
-  language:      'O',
-  interviewDate: 'P',
-  selectedPlan:  'Q',
+  interviewDate: 'K',
+  selectedPlan:  'L',
+  enquiryDate:   'M',
+  status:        'N',
+  feedback:      'O',
 };
 
 async function upsertCustomerByPhone(whatsappNumber, fields = {}) {
@@ -449,6 +454,7 @@ async function upsertCustomerByPhone(whatsappNumber, fields = {}) {
  * whatsappNumber, language, source, notes) so it can be used for
  * progressive saves as the customer moves through the flow.
  */
+// Column letters for the CLEANING_CUSTOMERS sheet (matches appendCleaningBooking above).
 const CLEANING_COL_MAP = {
   bookingId:      'A',
   customerName:   'B',
@@ -457,12 +463,11 @@ const CLEANING_COL_MAP = {
   details:        'E',
   location:       'F',
   preferredDate:  'G',
-  bookingDate:    'H',
-  status:         'I',
+  status:         'H',
+  enquiryDate:    'I',
   source:         'J',
-  notes:          'K',
-  estimatedPrice: 'L',
-  language:       'M',
+  estimatedPrice: 'K',
+  feedback:       'L',
 };
 
 async function updateCleaningBookingFields(bookingId, fields = {}) {
@@ -533,10 +538,10 @@ async function updateCustomerStatus(whatsappNumber, status) {
       return;
     }
 
-    // 2. Update column I (Status) for that row
+    // 2. Update column N (Status) for that row
     await sheets.spreadsheets.values.update({
       spreadsheetId: sheetId(),
-      range: `${SHEET_CUSTOMERS}!I${targetRow}`,
+      range: `${SHEET_CUSTOMERS}!N${targetRow}`,
       valueInputOption: "USER_ENTERED",
       requestBody: {
         values: [[status]],
@@ -572,8 +577,8 @@ async function updateCleaningBooking(bookingId, updates = {}) {
     if (updates.details        !== undefined) data.push({ range: `${SHEET_CLEANING_BOOKINGS}!E${row}`, values: [[updates.details]] });
     if (updates.location       !== undefined) data.push({ range: `${SHEET_CLEANING_BOOKINGS}!F${row}`, values: [[updates.location]] });
     if (updates.preferredDate  !== undefined) data.push({ range: `${SHEET_CLEANING_BOOKINGS}!G${row}`, values: [[updates.preferredDate]] });
-    if (updates.status         !== undefined) data.push({ range: `${SHEET_CLEANING_BOOKINGS}!I${row}`, values: [[updates.status]] });
-    if (updates.estimatedPrice !== undefined) data.push({ range: `${SHEET_CLEANING_BOOKINGS}!L${row}`, values: [[updates.estimatedPrice]] });
+    if (updates.status         !== undefined) data.push({ range: `${SHEET_CLEANING_BOOKINGS}!H${row}`, values: [[updates.status]] });
+    if (updates.estimatedPrice !== undefined) data.push({ range: `${SHEET_CLEANING_BOOKINGS}!K${row}`, values: [[updates.estimatedPrice]] });
     if (data.length === 0) return;
 
     await sheets.spreadsheets.values.batchUpdate({
@@ -587,7 +592,9 @@ async function updateCleaningBooking(bookingId, updates = {}) {
 }
 
 /**
- * Marks a booking payment as verified — updates column V to "Payment Verified".
+ * Marks a booking payment as verified.
+ *   V (Payment Status) → "Payment Verified"
+ *   X (Payment Verified) → today's date as the verification timestamp
  */
 async function markPaymentVerified(bookingId) {
   try {
@@ -604,11 +611,16 @@ async function markPaymentVerified(bookingId) {
     }
     if (targetRow === -1) { console.warn(`[sheets] Booking not found for verify: ${bookingId}`); return; }
 
-    await sheets.spreadsheets.values.update({
+    const today = new Date().toLocaleDateString("en-IN");
+    await sheets.spreadsheets.values.batchUpdate({
       spreadsheetId: sheetId(),
-      range: `${SHEET_BOOKINGS}!V${targetRow}`,
-      valueInputOption: "USER_ENTERED",
-      requestBody: { values: [["Payment Verified"]] },
+      requestBody: {
+        valueInputOption: "USER_ENTERED",
+        data: [
+          { range: `${SHEET_BOOKINGS}!V${targetRow}`, values: [["Payment Verified"]] },
+          { range: `${SHEET_BOOKINGS}!X${targetRow}`, values: [[today]] },
+        ],
+      },
     });
     console.log(`[sheets] Payment marked verified: ${bookingId}`);
   } catch (err) {

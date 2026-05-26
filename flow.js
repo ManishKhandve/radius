@@ -72,40 +72,30 @@ function saveProgress(session) {
   if (!session || !session.data || !session.data.whatsappNumber) return;
   const d = session.data;
 
-  // Build the CUSTOMERS-row payload. Only include fields with values —
-  // upsertCustomerByPhone skips empty values so cells aren't blanked.
-  const fields = {};
-  if (d.contactName)   fields.name     = d.contactName;
-  if (d.lang)          fields.language = d.lang;
-  if (d.flat)          fields.flat     = d.flat;
-
-  if (d.serviceCategory === 'cleaning') {
-    fields.status = d.cleaningServiceType
-      ? `Cleaning: ${d.cleaningServiceType}`
-      : 'Cleaning Flow Started';
-    if (d.cleaningDetails) fields.notes = d.cleaningDetails;
-    if (d.cleaningLocation && !fields.flat) fields.flat = d.cleaningLocation;
-  } else if (d.serviceCategory === 'maid') {
+  // MAID CUSTOMERS sheet is for maid leads only. Cleaning customers go
+  // to CLEANING_BOOKINGS (below). Pre-category contacts (just opened
+  // the bot, haven't picked maid/cleaning yet) also stay out of MAID
+  // CUSTOMERS to keep it clean.
+  if (d.serviceCategory === 'maid') {
+    const fields = {};
+    if (d.contactName)   fields.name          = d.contactName;
     if (d.workType)      fields.workType      = d.workType;
     if (d.timing)        fields.timing        = d.timing;
     if (d.budget)        fields.budget        = d.budget;
     if (d.maidCity)      fields.city          = d.maidCity;
     if (d.maidArea)      fields.area          = d.maidArea;
+    if (d.flat)          fields.flat          = d.flat;
     if (d.maidChoice)    fields.maidChoice    = d.maidChoice;
     if (d.startDate)     fields.interviewDate = d.startDate;
     if (d.selectedPlan)  fields.selectedPlan  = d.selectedPlan;
     fields.status = d.workType ? `Maid: ${d.workType}` : 'Maid Flow Started';
-  } else if (d.lang) {
-    fields.status = 'Language Selected';
-  } else {
-    fields.status = 'Bot Contact';
+
+    sheets.upsertCustomerByPhone(d.whatsappNumber, fields)
+      .then(cid => { if (cid && !d.customerId) d.customerId = cid; })
+      .catch(e => console.error('[flow] saveProgress (MAID CUSTOMERS) err:', e.message));
   }
 
-  sheets.upsertCustomerByPhone(d.whatsappNumber, fields)
-    .then(cid => { if (cid && !d.customerId) d.customerId = cid; })
-    .catch(e => console.error('[flow] saveProgress (CUSTOMERS) err:', e.message));
-
-  // Also patch the CLEANING_BOOKINGS row once one exists for this session.
+  // Also patch the CLEANING_CUSTOMERS row once one exists for this session.
   if (d.cleaningBookingId) {
     const cleaningFields = {};
     if (d.contactName)         cleaningFields.customerName   = d.contactName;
@@ -115,7 +105,6 @@ function saveProgress(session) {
     if (d.cleaningLocation)    cleaningFields.location       = d.cleaningLocation;
     if (d.cleaningDate)        cleaningFields.preferredDate  = d.cleaningDate;
     if (d.cleaningPrice)       cleaningFields.estimatedPrice = d.cleaningPrice;
-    if (d.lang)                cleaningFields.language       = d.lang;
     if (Object.keys(cleaningFields).length > 0) {
       sheets.updateCleaningBookingFields(d.cleaningBookingId, cleaningFields)
         .catch(e => console.error('[flow] saveProgress (CLEANING) err:', e.message));
@@ -539,8 +528,8 @@ async function processState(session, body, senderId, msg) {
       else if (body === "3") { count = 4; price = 4500; }
       
       if (count > 0) {
-        session.data.cleaningDetails = `${count} Bathrooms Subscription`;
-        session.data.cleaningPrice = `₹${price}/month`;
+        session.data.cleaningDetails = `${count} Bathrooms 3-Month Subscription`;
+        session.data.cleaningPrice = `₹${price} (3 months, 3 visits)`;
         session.state = "CLEANING_BATHROOM_ACTION";
         return [config.bathroomSubMessage(count, price, session.data.lang)];
       } else {
@@ -1122,33 +1111,30 @@ async function processState(session, body, senderId, msg) {
     case "PAYMENT_RECEIPT": {
       const lang = session.data.lang || "en";
       const isImage = msg && msg.type === "image";
-      const isText  = msg && msg.type === "chat";
 
-      if (!isImage && !isText) {
-        // Wrong message type — nudge them
+      // Screenshot-only policy. Text messages (transaction IDs, "paid"
+      // confirmations, anything else) are rejected — the customer is
+      // nudged to send an actual image of the payment receipt.
+      if (!isImage) {
         const nudge = lang === "hi"
-          ? "📸 कृपया पेमेंट का स्क्रीनशॉट भेजें।"
+          ? "📸 कृपया पेमेंट का *स्क्रीनशॉट (इमेज)* भेजें। टेक्स्ट मैसेज स्वीकार नहीं किए जाते।"
           : lang === "mr"
-          ? "📸 कृपया पेमेंटचा स्क्रीनशॉट पाठवा."
-          : "📸 Please send a screenshot of your payment receipt.";
+          ? "📸 कृपया पेमेंटचा *स्क्रीनशॉट (इमेज)* पाठवा. टेक्स्ट मेसेज स्वीकारले जात नाहीत."
+          : "📸 Please send a *screenshot (image)* of your payment receipt. Text messages are not accepted — only an actual screenshot will be processed.";
         return [nudge];
       }
 
       const caption = (msg.body || "").trim();
       const d = session.data;
 
-      // For images: download from WhatsApp and upload to Supabase Storage
+      // Download the image from WhatsApp and upload to Supabase Storage
       let receiptUrl = "";
-      if (isImage) {
-        try {
-          const media = await msg.downloadMedia();
-          receiptUrl = await uploadReceipt(d.bookingId, media.data, media.mimetype);
-        } catch (e) {
-          console.error("[flow] receipt upload err:", e.message);
-          receiptUrl = caption ? `Upload failed — caption: ${caption}` : "Upload failed — check WhatsApp";
-        }
-      } else {
-        receiptUrl = `Transaction ID: ${caption}`;
+      try {
+        const media = await msg.downloadMedia();
+        receiptUrl = await uploadReceipt(d.bookingId, media.data, media.mimetype);
+      } catch (e) {
+        console.error("[flow] receipt upload err:", e.message);
+        receiptUrl = caption ? `Upload failed — caption: ${caption}` : "Upload failed — check WhatsApp";
       }
 
       // Update payment columns in Sheets

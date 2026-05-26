@@ -614,7 +614,7 @@ const bathroomSubscriptionCountMessage = {
 
 const bathroomSubMessage = (count, price, lang) => {
   const en = `✨ 3-Month Bathroom Subscription Plan (${count} Bathrooms)
-💵 ₹${price}/month
+💵 ₹${price} for 3 months (3 visits total)
 ✅ 3 Visits (1 visit per month for 3 months)
 ✅ Deep cleaning for bathrooms
 ✅ Hard-water stain removal treatment
@@ -628,7 +628,7 @@ Reply:
 2️⃣ Talk to Support`;
 
   const hi = `✨ 3 महीने का बाथरूम सब्सक्रिप्शन प्लान (${count} बाथरूम)
-💵 ₹${price}/महीना
+💵 ₹${price} — 3 महीने के लिए (कुल 3 विजिट)
 ✅ 3 विजिट (हर महीने 1 विजिट, 3 महीने)
 ✅ बाथरूम की डीप क्लीनिंग
 ✅ हार्ड वाटर स्टेन हटाना
@@ -642,7 +642,7 @@ Reply:
 2️⃣ सपोर्ट से बात करें`;
 
   const mr = `✨ 3 महिन्यांचा बाथरूम सब्सक्रिप्शन प्लान (${count} बाथरूम)
-💵 ₹${price}/महिना
+💵 ₹${price} — 3 महिन्यांसाठी (एकूण 3 व्हिजिट)
 ✅ 3 व्हिजिट (दर महिन्याला 1 व्हिजिट, 3 महिने)
 ✅ बाथरूमची डीप क्लीनिंग
 ✅ हार्ड वॉटर स्टेन काढणे
