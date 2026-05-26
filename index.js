@@ -145,10 +145,10 @@ The bot couldn't deliver this reply. Please contact the customer manually.`;
 }
 
 // ─── Inactivity nudge ───────────────────────────────────────
-// 1 minute before the session times out, send a "are you still there?"
+// 10 seconds before the session times out, send a "are you still there?"
 // prompt so the user has a chance to resume. Re-scheduled on every
 // incoming message; cleared when the session ends.
-const NUDGE_DELAY_MS = Math.max(60_000, (config.sessionTimeoutMs || 15 * 60 * 1000) - 60_000);
+const NUDGE_DELAY_MS = Math.max(10_000, (config.sessionTimeoutMs || 15 * 60 * 1000) - 10_000);
 const nudgeTimers = new Map();
 
 function clearNudge(phone) {
