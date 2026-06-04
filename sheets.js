@@ -9,7 +9,9 @@ const { google } = require("googleapis");
 const path = require("path");
 
 // ─── Sheet tab names (must match your Google Sheet) ──────────
-const SHEET_CUSTOMERS = "MAID CUSTOMERS";
+// MAID CUSTOMERS has a space → must be single-quoted in A1 notation,
+// otherwise Sheets returns "Unable to parse range".
+const SHEET_CUSTOMERS = "'MAID CUSTOMERS'";
 const SHEET_BOOKINGS  = "BOOKINGS";
 const SHEET_MAIDS     = "MAIDS";
 const SHEET_CLEANING_BOOKINGS = "CLEANING_CUSTOMERS";
