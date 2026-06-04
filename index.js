@@ -166,6 +166,78 @@ async function watiSendButtons(phone, bodyText, buttons) {
   }
 }
 
+// Meta interactive list message — max 10 rows total (across all
+// sections). Use for choices with 4-10 options where buttons (max 3)
+// won't fit. Row titles ≤ 24 chars, descriptions ≤ 72 chars.
+// sections: [{ title?: string, rows: [{ id, title, description? }] }]
+async function watiSendList(phone, body, buttonLabel, sections, opts = {}) {
+  if (!phone || !Array.isArray(sections) || sections.length === 0) {
+    return { ok: false, status: 0, body: 'missing phone or sections' };
+  }
+  const safeSections = sections.slice(0, 10).map(s => ({
+    title: s.title ? String(s.title).slice(0, 24) : undefined,
+    rows: (s.rows || []).slice(0, 10).map(r => ({
+      id: String(r.id),
+      title: String(r.title).slice(0, 24),
+      description: r.description ? String(r.description).slice(0, 72) : undefined,
+    })),
+  }));
+
+  const url = `${META_GRAPH_BASE}/${META_PHONE_NUMBER_ID}/messages`;
+  const payload = {
+    messaging_product: 'whatsapp',
+    recipient_type:    'individual',
+    to:                phone,
+    type:              'interactive',
+    interactive: {
+      type: 'list',
+      body: { text: String(body).slice(0, 1024) },
+      action: {
+        button:   String(buttonLabel || 'Select').slice(0, 20),
+        sections: safeSections,
+      },
+    },
+  };
+  if (opts.header) payload.interactive.header = { type: 'text', text: String(opts.header).slice(0, 60) };
+  if (opts.footer) payload.interactive.footer = { text: String(opts.footer).slice(0, 60) };
+
+  console.log(`[meta] → send list (${safeSections.reduce((n,s)=>n+s.rows.length,0)} rows) to ${phone}`);
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), SEND_TIMEOUT_MS);
+  try {
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${META_ACCESS_TOKEN}`,
+        'Content-Type':  'application/json',
+      },
+      body: JSON.stringify(payload),
+      signal: controller.signal,
+    });
+    const respBody = await res.text();
+    let metaOk = res.ok;
+    let metaInfo = '';
+    try {
+      const j = JSON.parse(respBody);
+      if (j?.error) { metaOk = false; metaInfo = `${j.error.code || '?'}: ${j.error.message || ''}`; }
+      else if (j?.messages?.[0]?.id) { metaInfo = j.messages[0].id.slice(0, 40); }
+    } catch {}
+    if (res.ok && metaOk) {
+      console.log(`[meta] ✓ list sent to ${phone}${metaInfo ? ' — ' + metaInfo : ''}`);
+      sendMetrics.sent++;
+      return { ok: true, status: res.status, body: respBody };
+    }
+    console.error(`[meta] ✗ list HTTP ${res.status} to ${phone}: ${metaInfo || respBody.slice(0, 200)}`);
+    recordFailure(phone, `list: ${metaInfo || 'HTTP ' + res.status}`, body);
+    return { ok: false, status: res.status, body: respBody };
+  } catch (e) {
+    console.error('[meta] list send exception:', e.message);
+    return { ok: false, status: 0, body: e.message };
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 // Kept the name `watiSend` because it's called from many places (nudge,
 // task loop, takeover, /verify-payment, etc.). Internally now hits the
 // Meta Graph API.
@@ -508,6 +580,14 @@ async function handleMetaMessage(m, senderName) {
           if (typeof reply === 'object' && reply && reply.type === 'buttons') {
             const r = await watiSendButtons(phone, reply.body, reply.buttons);
             if (!r.ok) console.warn('[task] buttons reply not delivered to', phone, '— see /status');
+            continue;
+          }
+          if (typeof reply === 'object' && reply && reply.type === 'list') {
+            const r = await watiSendList(phone, reply.body, reply.buttonLabel, reply.sections, {
+              header: reply.header,
+              footer: reply.footer,
+            });
+            if (!r.ok) console.warn('[task] list reply not delivered to', phone, '— see /status');
             continue;
           }
           if (typeof reply === 'string' && reply.length > 0) {

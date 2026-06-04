@@ -233,6 +233,370 @@ function cleaningConfirmPrompt(data, lang) {
   };
 }
 
+// ─── Phase 2 + 3 prompt helpers ─────────────────────────────
+// Tactic: extract just the question line(s) for the body, let the
+// buttons/list show the options. Falls back gracefully on old WA
+// versions because the body still tells customers what to do.
+
+const T = {
+  en: {
+    work_q:     '🧹 What type of work do you need help with?',
+    timing_q:   '⏰ What timing works best for you?',
+    budget_q:   "💰 What's your monthly budget for the maid's salary?",
+    service_q:  '🏠 Which service are you looking for?',
+    flatStatus_q:'🏠 What is the flat condition?',
+    sub_q:      '🏠 What is the current condition of the flat?',
+    bhk_q:      '🏠 How many BHK is your flat?',
+    bath_type_q:'🛁 How would you like to book?',
+    bath_sub_q: '🛁 How many bathrooms?',
+    bath_one_q: '🧼 How many bathrooms (one-time)?',
+    bath_act_q: 'How would you like to proceed?',
+    villa_q:    '🏡 House condition?',
+    date_q:     '📅 When do you need the service?',
+    cont_q:     'How would you like to proceed?',
+    nomatch_q:  "😔 We couldn't find a maid right away. What next?",
+    plan_q:     '📦 Choose your plan',
+    pune_areas: '📍 Please select your Pune area',
+    pcmc_areas: '📍 Please select your PCMC area',
+    select_btn: 'Select',
+    plan_btn:   'View plans',
+    select_area:'Select area',
+    other:      'Other (type your area)',
+    proceed:    '✅ Proceed booking',
+    wait:       '📞 Wait for call',
+    continue:   'Continue',
+    cancel:     'Cancel',
+    addons:     'Select Add-ons',
+    skip_addons:'Skip Add-ons',
+    booking:    'Book Now',
+    support:    'Talk to Support',
+    today:      'Today',
+    tomorrow:   'Tomorrow',
+    selectDate: 'Select date',
+    sub:        'Subscription',
+    onetime:    'One-Time',
+  },
+  hi: {
+    work_q:     '🧹 कौन से काम की जरूरत है?',
+    timing_q:   '⏰ कितने घंटे काम चाहिए?',
+    budget_q:   '💰 मेड की सैलरी का मंथली बजट?',
+    service_q:  '🏠 कौन सी सर्विस चाहिए?',
+    flatStatus_q:'🏠 फ्लैट कैसा है?',
+    sub_q:      '🏠 फ्लैट की कंडिशन?',
+    bhk_q:      '🏠 कितने BHK?',
+    bath_type_q:'🛁 बुकिंग कैसे करनी है?',
+    bath_sub_q: '🛁 कितने बाथरूम?',
+    bath_one_q: '🧼 कितने बाथरूम (एक बार)?',
+    bath_act_q: 'आगे कैसे बढ़ें?',
+    villa_q:    '🏡 घर की कंडिशन?',
+    date_q:     '📅 सर्विस कब चाहिए?',
+    cont_q:     'आगे कैसे बढ़ें?',
+    nomatch_q:  '😔 अभी सही मेड नहीं मिली। आगे क्या?',
+    plan_q:     '📦 अपना प्लान चुनें',
+    pune_areas: '📍 अपना Pune एरिया चुनें',
+    pcmc_areas: '📍 अपना PCMC एरिया चुनें',
+    select_btn: 'चुनें',
+    plan_btn:   'प्लान देखें',
+    select_area:'एरिया चुनें',
+    other:      'अन्य (एरिया लिखें)',
+    proceed:    '✅ बुकिंग आगे',
+    wait:       '📞 कॉल का इंतजार',
+    continue:   'आगे बढ़ें',
+    cancel:     'कैंसिल',
+    addons:     'ऐड-ऑन चुनें',
+    skip_addons:'बिना ऐड-ऑन',
+    booking:    'बुक करें',
+    support:    'सपोर्ट से बात करें',
+    today:      'आज',
+    tomorrow:   'कल',
+    selectDate: 'तारीख चुनें',
+    sub:        'सब्सक्रिप्शन',
+    onetime:    'एक बार',
+  },
+  mr: {
+    work_q:     '🧹 कोणत्या कामाची गरज आहे?',
+    timing_q:   '⏰ किती वेळ काम हवे आहे?',
+    budget_q:   '💰 मेडच्या पगाराचे मंथली बजट?',
+    service_q:  '🏠 कोणती सर्विस हवी आहे?',
+    flatStatus_q:'🏠 फ्लॅट कसा आहे?',
+    sub_q:      '🏠 फ्लॅटची कंडिशन?',
+    bhk_q:      '🏠 किती BHK?',
+    bath_type_q:'🛁 बुकिंग कशी करायची?',
+    bath_sub_q: '🛁 किती बाथरूम?',
+    bath_one_q: '🧼 किती बाथरूम (एक वेळ)?',
+    bath_act_q: 'पुढे कसे जायचे?',
+    villa_q:    '🏡 घराची कंडिशन?',
+    date_q:     '📅 सर्विस केव्हा हवी?',
+    cont_q:     'पुढे कसे जायचे?',
+    nomatch_q:  '😔 लगेच मेड मिळाली नाही. पुढे काय?',
+    plan_q:     '📦 तुमचा प्लान निवडा',
+    pune_areas: '📍 तुमचा Pune एरिया निवडा',
+    pcmc_areas: '📍 तुमचा PCMC एरिया निवडा',
+    select_btn: 'निवडा',
+    plan_btn:   'प्लान बघा',
+    select_area:'एरिया निवडा',
+    other:      'इतर (एरिया लिहा)',
+    proceed:    '✅ बुकिंग पुढे',
+    wait:       '📞 कॉलची वाट',
+    continue:   'पुढे चला',
+    cancel:     'कैंसल',
+    addons:     'ऐड-ऑन निवडा',
+    skip_addons:'ऐड-ऑनशिवाय',
+    booking:    'बुक करा',
+    support:    'सपोर्टशी बोला',
+    today:      'आज',
+    tomorrow:   'उद्या',
+    selectDate: 'तारीख निवडा',
+    sub:        'सब्सक्रिप्शन',
+    onetime:    'एक वेळ',
+  },
+};
+function t(lang, key) { return (T[lang] || T.en)[key] || T.en[key] || ''; }
+
+function workTypePrompt(lang) {
+  return {
+    type: 'list',
+    body: t(lang, 'work_q'),
+    buttonLabel: t(lang, 'select_btn'),
+    sections: [{
+      rows: [
+        { id: '1', title: lang === 'hi' ? 'खाना बनाना' : lang === 'mr' ? 'स्वयंपाक' : 'Cooking' },
+        { id: '2', title: lang === 'hi' ? 'सफाई'      : lang === 'mr' ? 'साफसफाई'  : 'Cleaning' },
+        { id: '3', title: lang === 'hi' ? 'बच्चों की देखभाल' : lang === 'mr' ? 'मुलांची काळजी' : 'Babysitter' },
+        { id: '4', title: lang === 'hi' ? 'बुजुर्ग देखभाल'    : lang === 'mr' ? 'वृद्धांची काळजी' : 'Caretaker' },
+        { id: '5', title: lang === 'hi' ? 'ऑल राउंडर'         : lang === 'mr' ? 'ऑल राउंडर'        : 'All Rounder' },
+      ],
+    }],
+  };
+}
+
+function timingPrompt(lang) {
+  return {
+    type: 'list',
+    body: t(lang, 'timing_q'),
+    buttonLabel: t(lang, 'select_btn'),
+    sections: [{
+      rows: [
+        { id: '1', title: lang === 'hi' ? 'पार्ट टाइम 1-3h' : lang === 'mr' ? 'पार्ट टाइम 1-3h'  : 'Part Time 1-3h' },
+        { id: '2', title: lang === 'hi' ? 'फुल टाइम 8h'     : lang === 'mr' ? 'फुल टाइम 8h'     : 'Full Time 8h' },
+        { id: '3', title: lang === 'hi' ? 'फुल टाइम 10h'    : lang === 'mr' ? 'फुल टाइम 10h'    : 'Full Time 10h' },
+        { id: '4', title: lang === 'hi' ? 'फुल टाइम 24h'    : lang === 'mr' ? 'फुल टाइम 24h'    : 'Full Time 24h' },
+      ],
+    }],
+  };
+}
+
+function budgetPrompt(timing, lang) {
+  const opts = config.getBudgetOptions(timing);
+  const entries = Object.entries(opts);
+  return {
+    type: 'buttons',
+    body: t(lang, 'budget_q'),
+    buttons: entries.slice(0, 3).map(([id, label]) => ({ id, title: label })),
+  };
+}
+
+function cleaningServicePrompt(lang) {
+  return {
+    type: 'list',
+    body: t(lang, 'service_q'),
+    buttonLabel: t(lang, 'select_btn'),
+    sections: [{
+      rows: [
+        { id: '1', title: lang === 'hi' ? 'फ्लैट डीप क्लीनिंग' : lang === 'mr' ? 'फ्लॅट डीप क्लीनिंग' : 'Flat Deep Clean' },
+        { id: '2', title: lang === 'hi' ? 'बाथरूम क्लीनिंग'    : lang === 'mr' ? 'बाथरूम क्लीनिंग'    : 'Bathroom Clean' },
+        { id: '3', title: lang === 'hi' ? 'मिनी सर्विस पैक'    : lang === 'mr' ? 'मिनी सर्विस पॅक'    : 'Mini Service' },
+        { id: '4', title: lang === 'hi' ? 'विला / बंगला'        : lang === 'mr' ? 'व्हिला / बंगला'      : 'Villa / Bungalow' },
+      ],
+    }],
+  };
+}
+
+function flatStatusPrompt(lang) {
+  return {
+    type: 'buttons',
+    body: t(lang, 'flatStatus_q'),
+    buttons: [
+      { id: '1', title: lang === 'hi' ? 'फर्निश्ड'        : lang === 'mr' ? 'फर्निश्ड'           : 'Furnished' },
+      { id: '2', title: lang === 'hi' ? 'खाली / वेकेंट'   : lang === 'mr' ? 'रिकामा / व्हेकंट'   : 'Empty / Vacant' },
+      { id: '3', title: lang === 'hi' ? 'पोस्ट इंटीरियर' : lang === 'mr' ? 'पोस्ट इंटीरियर'     : 'Post Interior' },
+    ],
+  };
+}
+
+function furnishedSubPrompt(lang) {
+  return {
+    type: 'buttons',
+    body: t(lang, 'sub_q'),
+    buttons: [
+      { id: '1', title: lang === 'hi' ? 'रेगुलर ऑक्युपाइड' : lang === 'mr' ? 'रेगुलर ऑक्युपाइड' : 'Regular Occupied' },
+      { id: '2', title: lang === 'hi' ? 'मूव आउट क्लीन'    : lang === 'mr' ? 'मूव्ह आउट क्लीन'   : 'Move Out Clean' },
+      { id: '3', title: lang === 'hi' ? 'नया फ्लैट पजेशन' : lang === 'mr' ? 'नवीन फ्लॅट पझेशन'    : 'New Flat Possession' },
+    ],
+  };
+}
+
+function emptySubPrompt(lang) {
+  return {
+    type: 'buttons',
+    body: t(lang, 'sub_q'),
+    buttons: [
+      { id: '1', title: lang === 'hi' ? 'मूव आउट क्लीन'    : lang === 'mr' ? 'मूव्ह आउट क्लीन'   : 'Move Out Clean' },
+      { id: '2', title: lang === 'hi' ? 'नया फ्लैट पजेशन' : lang === 'mr' ? 'नवीन फ्लॅट पझेशन'    : 'New Flat Possession' },
+    ],
+  };
+}
+
+function flatBhkPrompt(lang) {
+  return {
+    type: 'list',
+    body: t(lang, 'bhk_q'),
+    buttonLabel: t(lang, 'select_btn'),
+    sections: [{
+      rows: [
+        { id: '1', title: '1 BHK' },
+        { id: '2', title: '2 BHK' },
+        { id: '3', title: '3 BHK' },
+        { id: '4', title: lang === 'hi' ? '4 BHK / विला' : lang === 'mr' ? '4 BHK / व्हिला' : '4 BHK / Villa' },
+      ],
+    }],
+  };
+}
+
+function bathroomTypePrompt(lang) {
+  return {
+    type: 'buttons',
+    body: t(lang, 'bath_type_q'),
+    buttons: [
+      { id: '1', title: t(lang, 'sub') },
+      { id: '2', title: t(lang, 'onetime') },
+    ],
+  };
+}
+
+function bathroomSubCountPrompt(lang) {
+  return {
+    type: 'buttons',
+    body: t(lang, 'bath_sub_q'),
+    buttons: [
+      { id: '1', title: lang === 'hi' ? '2 बाथरूम' : lang === 'mr' ? '2 बाथरूम' : '2 Bathrooms' },
+      { id: '2', title: lang === 'hi' ? '3 बाथरूम' : lang === 'mr' ? '3 बाथरूम' : '3 Bathrooms' },
+      { id: '3', title: lang === 'hi' ? '4 बाथरूम' : lang === 'mr' ? '4 बाथरूम' : '4 Bathrooms' },
+    ],
+  };
+}
+
+function bathroomOneTimeCountPrompt(lang) {
+  return {
+    type: 'list',
+    body: t(lang, 'bath_one_q'),
+    buttonLabel: t(lang, 'select_btn'),
+    sections: [{
+      rows: [
+        { id: '1', title: lang === 'hi' ? '1 बाथरूम'  : lang === 'mr' ? '1 बाथरूम'  : '1 Bathroom' },
+        { id: '2', title: lang === 'hi' ? '2 बाथरूम' : lang === 'mr' ? '2 बाथरूम' : '2 Bathrooms' },
+        { id: '3', title: lang === 'hi' ? '3 बाथरूम' : lang === 'mr' ? '3 बाथरूम' : '3 Bathrooms' },
+        { id: '4', title: lang === 'hi' ? '4+ बाथरूम': lang === 'mr' ? '4+ बाथरूम': '4+ Bathrooms' },
+      ],
+    }],
+  };
+}
+
+function bathroomActionPrompt(details, price, lang) {
+  // Used after bathroom sub or onetime price is shown — keep the price
+  // info as the body, add Continue / Support buttons.
+  return {
+    type: 'buttons',
+    body: t(lang, 'bath_act_q'),
+    buttons: [
+      { id: '1', title: t(lang, 'continue') },
+      { id: '2', title: t(lang, 'support') },
+    ],
+  };
+}
+
+function villaStatusPrompt(lang) {
+  return {
+    type: 'buttons',
+    body: t(lang, 'villa_q'),
+    buttons: [
+      { id: '1', title: lang === 'hi' ? 'रेगुलर ₹6/sq.ft' : lang === 'mr' ? 'रेगुलर ₹6/sq.ft' : 'Regular ₹6/sqft' },
+      { id: '2', title: lang === 'hi' ? 'पोस्ट इंटी ₹9'    : lang === 'mr' ? 'पोस्ट इंटी ₹9'    : 'Post Interior ₹9' },
+    ],
+  };
+}
+
+function cleaningDatePrompt(lang) {
+  return {
+    type: 'buttons',
+    body: t(lang, 'date_q'),
+    buttons: [
+      { id: '1', title: t(lang, 'today') },
+      { id: '2', title: t(lang, 'tomorrow') },
+      { id: '3', title: t(lang, 'selectDate') },
+    ],
+  };
+}
+
+function cleaningContinuePrompt(hasAddons, lang) {
+  const buttons = [{ id: '1', title: t(lang, 'continue') }];
+  if (hasAddons) {
+    buttons.push({ id: '2', title: t(lang, 'addons') });
+    buttons.push({ id: '3', title: t(lang, 'cancel') });
+  } else {
+    buttons.push({ id: '2', title: t(lang, 'cancel') });
+  }
+  return {
+    type: 'buttons',
+    body: t(lang, 'cont_q'),
+    buttons,
+  };
+}
+
+function maidNoMatchPrompt(lang) {
+  return {
+    type: 'buttons',
+    body: t(lang, 'nomatch_q'),
+    buttons: [
+      { id: '1', title: t(lang, 'proceed') },
+      { id: '2', title: t(lang, 'wait') },
+    ],
+  };
+}
+
+function maidPlanPrompt(timing, lang) {
+  const opts = config.getMaidPlanOptions(timing);
+  const entries = Object.entries(opts);
+  // Use buttons if 1-3 plans (current behavior is 1 or 2)
+  return {
+    type: 'buttons',
+    body: config.getMaidPlanMessage(timing, lang),
+    buttons: entries.slice(0, 3).map(([id, label]) => ({
+      id,
+      title: label.length > 20 ? label.slice(0, 18) + '…' : label,
+    })),
+  };
+}
+
+function pcmcAreaPrompt(lang) {
+  const areas = config.pcmcAreas;
+  const rows = areas.map((area, idx) => ({ id: String(idx + 1), title: area }));
+  rows.push({ id: String(areas.length + 1), title: t(lang, 'other') });
+  return {
+    type: 'list',
+    body: t(lang, 'pcmc_areas'),
+    buttonLabel: t(lang, 'select_area'),
+    sections: [{ rows }],
+  };
+}
+
+// PCMC fits in one list (8 areas + Other = 9 ≤ 10 cap).
+// Pune has 19 areas — too many for a single list, keep as text.
+function areaPrompt(city, lang) {
+  if (city === 'PCMC') return pcmcAreaPrompt(lang);
+  return config.getAreaMessage(city, lang);  // plain text fallback for Pune
+}
+
 // "restart" keyword: clears the current session in any state and
 // re-opens the main menu (skipping language pick if we remember it).
 // Accepts a few common variants in EN/HI/MR.
@@ -326,7 +690,7 @@ async function handleMessage(msg) {
         session.data.serviceCategory = 'maid';
         session.state = 'WORK_TYPE';
         saveProgress(session);
-        return [config.workTypeMessage[savedLang]];
+        return [workTypePrompt(savedLang)];
       }
       // No remembered language yet — ask, then route into the requested flow
       session.data.directFlow = restart;
@@ -345,7 +709,7 @@ async function handleMessage(msg) {
   if (body === "0" && session.state === "MAID_CHOICE") {
     const lang = session.data.lang || "en";
     session.state = "MAID_NO_MATCH_OFFER";
-    return [config.maidNoMatchOfferMessage[lang]];
+    return [maidNoMatchPrompt(lang)];
   }
 
   // GLOBAL HANDLER FOR "0" - Talk to Support
@@ -380,8 +744,8 @@ async function handleMessage(msg) {
         responses[i] = r + hint;
         break;
       }
-      // Button messages: append the hint to the body text instead.
-      if (typeof r === "object" && r && r.type === "buttons" && r.body && !r.body.includes("0️⃣")) {
+      // Button + list messages: append the hint to the body text instead.
+      if (typeof r === "object" && r && (r.type === "buttons" || r.type === "list") && r.body && !r.body.includes("0️⃣")) {
         r.body = r.body + hint;
         break;
       }
@@ -410,7 +774,7 @@ async function processState(session, body, senderId, msg) {
         delete session.data.directFlow;
         session.data.serviceCategory = 'maid';
         session.state = 'WORK_TYPE';
-        return [config.workTypeMessage[lang]];
+        return [workTypePrompt(lang)];
       }
 
       session.state = "MAIN_MENU";
@@ -425,7 +789,7 @@ async function processState(session, body, senderId, msg) {
       } else if (body === "2") {
         session.data.serviceCategory = "maid";
         session.state = "WORK_TYPE";
-        return [config.workTypeMessage[session.data.lang]];
+        return [workTypePrompt(session.data.lang)];
       } else {
         return [mainMenuPrompt(session.data.lang)];
       }
@@ -438,7 +802,7 @@ async function processState(session, body, senderId, msg) {
       }
       session.data.contactName = trimmed;
       session.state = "CLEANING_SERVICE_TYPE";
-      return [config.cleaningServiceMessage[session.data.lang]];
+      return [cleaningServicePrompt(session.data.lang)];
     }
 
     // ==========================================
@@ -465,7 +829,7 @@ async function processState(session, body, senderId, msg) {
         nextState = "CLEANING_VILLA_SQFT";
         nextMessage = config.villaSqftMessage[session.data.lang];
       } else {
-        return [config.cleaningServiceMessage[session.data.lang]];
+        return [cleaningServicePrompt(session.data.lang)];
       }
 
       session.data.cleaningServiceType = chosen;
@@ -505,7 +869,7 @@ async function processState(session, body, senderId, msg) {
       // Store sqft and move to status selection
       session.data.villaSqft = sqft;
       session.state = "CLEANING_VILLA_STATUS";
-      return [config.villaStatusMessage[session.data.lang]];
+      return [villaStatusPrompt(session.data.lang)];
     }
 
     case "CLEANING_VILLA_STATUS": {
@@ -516,31 +880,38 @@ async function processState(session, body, senderId, msg) {
         session.data.villaRate = 9;
         session.data.villaCondition = "Post Interior / Renovation";
       } else {
-        return [config.villaStatusMessage[session.data.lang]];
+        return [villaStatusPrompt(session.data.lang)];
       }
       
       const price = session.data.villaSqft * session.data.villaRate;
       session.data.cleaningDetails = `${session.data.villaCondition} - ${session.data.villaSqft} Sq.Ft`;
       session.data.cleaningPrice = `₹${price}`;
       session.state = "CLEANING_CONTINUE";
-      return [config.villaPriceMessage(session.data.villaSqft, price, session.data.villaRate, session.data.villaCondition, session.data.lang)];
+      return [{
+        type: 'buttons',
+        body: config.villaPriceMessage(session.data.villaSqft, price, session.data.villaRate, session.data.villaCondition, session.data.lang),
+        buttons: [
+          { id: '1', title: t(session.data.lang, 'booking') },
+          { id: '2', title: t(session.data.lang, 'cancel') },
+        ],
+      }];
     }
 
     case "CLEANING_FLAT_STATUS": {
       if (body === "1") {
         session.data.cleaningFlatStatus = "Furnished";
         session.state = "CLEANING_FURNISHED_SUB";
-        return [config.furnishedSubMessage[session.data.lang]];
+        return [furnishedSubPrompt(session.data.lang)];
       } else if (body === "2") {
         session.data.cleaningFlatStatus = "Empty / Vacant";
         session.state = "CLEANING_EMPTY_SUB";
-        return [config.emptySubMessage[session.data.lang]];
+        return [emptySubPrompt(session.data.lang)];
       } else if (body === "3") {
         session.data.cleaningFlatStatus = "Post Interior Cleaning";
         session.state = "CLEANING_FLAT_BHK";
-        return [config.flatBhkMessage[session.data.lang]];
+        return [flatBhkPrompt(session.data.lang)];
       } else {
-        return [config.flatStatusMessage[session.data.lang]];
+        return [flatStatusPrompt(session.data.lang)];
       }
     }
 
@@ -548,19 +919,19 @@ async function processState(session, body, senderId, msg) {
       if (body === "1") session.data.cleaningSubCondition = "Regular Occupied House";
       else if (body === "2") session.data.cleaningSubCondition = "Move Out Cleaning";
       else if (body === "3") session.data.cleaningSubCondition = "New Flat Possession";
-      else return [config.furnishedSubMessage[session.data.lang]];
+      else return [furnishedSubPrompt(session.data.lang)];
 
       session.state = "CLEANING_FLAT_BHK";
-      return [config.flatBhkMessage[session.data.lang]];
+      return [flatBhkPrompt(session.data.lang)];
     }
 
     case "CLEANING_EMPTY_SUB": {
       if (body === "1") session.data.cleaningSubCondition = "Move Out Cleaning";
       else if (body === "2") session.data.cleaningSubCondition = "New Flat Possession";
-      else return [config.emptySubMessage[session.data.lang]];
+      else return [emptySubPrompt(session.data.lang)];
 
       session.state = "CLEANING_FLAT_BHK";
-      return [config.flatBhkMessage[session.data.lang]];
+      return [flatBhkPrompt(session.data.lang)];
     }
 
     case "CLEANING_FLAT_BHK": {
@@ -586,9 +957,22 @@ async function processState(session, body, senderId, msg) {
         session.data.cleaningPrice = p;
 
         session.state = "CLEANING_CONTINUE";
-        return [config.flatDeepCleaningPriceMessage(session.data.cleaningFlatStatus, body, session.data.lang)];
+        const lang = session.data.lang;
+        const priceBody = config.flatDeepCleaningPriceMessage(session.data.cleaningFlatStatus, body, lang);
+        const hasAddons = (st === "Furnished" || st === "Post Interior Cleaning") && body !== "4";
+        const buttons = hasAddons
+          ? [
+              { id: '1', title: t(lang, 'skip_addons') },
+              { id: '2', title: t(lang, 'addons') },
+              { id: '3', title: t(lang, 'cancel') },
+            ]
+          : [
+              { id: '1', title: t(lang, 'continue') },
+              { id: '2', title: t(lang, 'cancel') },
+            ];
+        return [{ type: 'buttons', body: priceBody, buttons }];
       } else {
-        return [config.flatBhkMessage[session.data.lang]];
+        return [flatBhkPrompt(session.data.lang)];
       }
     }
 
@@ -596,13 +980,13 @@ async function processState(session, body, senderId, msg) {
       if (body === "1") {
         session.data.cleaningBathroomType = "Subscription";
         session.state = "CLEANING_BATHROOM_SUB_COUNT";
-        return [config.bathroomSubscriptionCountMessage[session.data.lang]];
+        return [bathroomSubCountPrompt(session.data.lang)];
       } else if (body === "2") {
         session.data.cleaningBathroomType = "One-Time";
         session.state = "CLEANING_BATHROOM_ONETIME_COUNT";
-        return [config.bathroomOneTimeCountMessage[session.data.lang]];
+        return [bathroomOneTimeCountPrompt(session.data.lang)];
       } else {
-        return [config.bathroomTypeMessage[session.data.lang]];
+        return [bathroomTypePrompt(session.data.lang)];
       }
     }
 
@@ -616,9 +1000,16 @@ async function processState(session, body, senderId, msg) {
         session.data.cleaningDetails = `${count} Bathrooms 3-Month Subscription`;
         session.data.cleaningPrice = `₹${price} (3 months, 3 visits)`;
         session.state = "CLEANING_BATHROOM_ACTION";
-        return [config.bathroomSubMessage(count, price, session.data.lang)];
+        return [{
+          type: 'buttons',
+          body: config.bathroomSubMessage(count, price, session.data.lang),
+          buttons: [
+            { id: '1', title: t(session.data.lang, 'continue') },
+            { id: '2', title: t(session.data.lang, 'support') },
+          ],
+        }];
       } else {
-        return [config.bathroomSubscriptionCountMessage[session.data.lang]];
+        return [bathroomSubCountPrompt(session.data.lang)];
       }
     }
 
@@ -629,9 +1020,16 @@ async function processState(session, body, senderId, msg) {
         session.data.cleaningDetails = `${body} Bathroom(s) One-Time`;
         session.data.cleaningPrice = p;
         session.state = "CLEANING_BATHROOM_ACTION";
-        return [config.bathroomOneTimePriceMessage(body, session.data.lang)];
+        return [{
+          type: 'buttons',
+          body: config.bathroomOneTimePriceMessage(body, session.data.lang),
+          buttons: [
+            { id: '1', title: t(session.data.lang, 'continue') },
+            { id: '2', title: t(session.data.lang, 'support') },
+          ],
+        }];
       } else {
-        return [config.bathroomOneTimeCountMessage[session.data.lang]];
+        return [bathroomOneTimeCountPrompt(session.data.lang)];
       }
     }
 
@@ -823,7 +1221,7 @@ async function processState(session, body, senderId, msg) {
         session.data.flat = body;
         session.data.cleaningLocation = body; // address is the location, no area selection needed
         session.state = "CLEANING_DATE";
-        return [config.cleaningDateMessage[session.data.lang]];
+        return [cleaningDatePrompt(session.data.lang)];
       } else {
         // Maid flow
         session.data.flat = body;
@@ -845,7 +1243,7 @@ async function processState(session, body, senderId, msg) {
         session.state = "CLEANING_CUSTOM_DATE";
         return [config.cleaningCustomDateMessage[session.data.lang]];
       } else {
-        return [config.cleaningDateMessage[session.data.lang]];
+        return [cleaningDatePrompt(session.data.lang)];
       }
     }
 
@@ -878,23 +1276,23 @@ async function processState(session, body, senderId, msg) {
     // ==========================================
     case "WORK_TYPE": {
       const v = config.workTypes[body];
-      if (!v) return [config.workTypeMessage[session.data.lang]];
+      if (!v) return [workTypePrompt(session.data.lang)];
       session.data.workType = v;
       session.state = "TIMING";
-      return [config.timingMessage[session.data.lang]];
+      return [timingPrompt(session.data.lang)];
     }
 
     case "TIMING": {
       const v = config.timings[body];
-      if (!v) return [config.timingMessage[session.data.lang]];
+      if (!v) return [timingPrompt(session.data.lang)];
       session.data.timing = v;
       session.state = "BUDGET";
-      return [config.getBudgetMessage(v, session.data.lang)];
+      return [budgetPrompt(v, session.data.lang)];
     }
     case "BUDGET": {
       const opts = config.getBudgetOptions(session.data.timing);
       const v = opts[body];
-      if (!v) return [config.getBudgetMessage(session.data.timing, session.data.lang)];
+      if (!v) return [budgetPrompt(session.data.timing, session.data.lang)];
       session.data.budget = v;
       session.state = "MAID_CITY";
       return [cityPrompt(session.data.lang)];
@@ -909,7 +1307,7 @@ async function processState(session, body, senderId, msg) {
         return [cityPrompt(session.data.lang)];
       }
       session.state = "MAID_AREA";
-      return [config.getAreaMessage(session.data.maidCity, session.data.lang)];
+      return [areaPrompt(session.data.maidCity, session.data.lang)];
     }
 
     case "MAID_AREA": {
@@ -921,7 +1319,7 @@ async function processState(session, body, senderId, msg) {
         return [config.customAreaPromptMessage[session.data.lang || "en"]];
       }
       if (isNaN(idx) || idx < 0 || idx >= areas.length) {
-        return [config.getAreaMessage(session.data.maidCity, session.data.lang)];
+        return [areaPrompt(session.data.maidCity, session.data.lang)];
       }
       const selectedArea = areas[idx];
       session.data.maidArea = selectedArea;
@@ -953,7 +1351,7 @@ async function processState(session, body, senderId, msg) {
           // Team finds the maid post-booking.
           session.state = "MAID_NO_MATCH_OFFER";
           session.data.availableMaids = []; // for admin alert if user says 2
-          return [config.maidNoMatchOfferMessage[session.data.lang || "en"]];
+          return [maidNoMatchPrompt(session.data.lang || "en")];
         }
 
         let resultMsg = session.data.lang === "hi"
@@ -1051,7 +1449,7 @@ async function processState(session, body, senderId, msg) {
         clearSession(senderId);
         return [config.maidsRejectedMessage(lang), { _adminAlert: adminAlert }];
       }
-      return [config.maidNoMatchOfferMessage[lang]];
+      return [maidNoMatchPrompt(lang)];
     }
 
     case "MAID_CHOICE": {
@@ -1130,13 +1528,13 @@ async function processState(session, body, senderId, msg) {
       if (body.length <= 3) return [config.collectDateMessage[session.data.lang || "en"]];
       session.data.startDate = body;
       session.state = "MAID_PLAN";
-      return [config.getMaidPlanMessage(session.data.timing, session.data.lang)];
+      return [maidPlanPrompt(session.data.timing, session.data.lang)];
     }
 
     case "MAID_PLAN": {
       const opts = config.getMaidPlanOptions(session.data.timing);
       const plan = opts[body];
-      if (!plan) return [config.getMaidPlanMessage(session.data.timing, session.data.lang)];
+      if (!plan) return [maidPlanPrompt(session.data.timing, session.data.lang)];
       session.data.selectedPlan = plan;
       session.state = "CONFIRM";
       return [confirmPrompt(session.data, session.data.lang || "en")];
