@@ -1,8 +1,8 @@
 // ============================================================
-// index.js — CLEANLY bot — WATI edition
+// index.js — CLEANLY bot — Meta WhatsApp Cloud API edition
 // ============================================================
-// Receives incoming WhatsApp messages via WATI webhook,
-// processes them through flow.js, sends replies via WATI REST API.
+// Receives incoming WhatsApp messages via Meta Cloud API webhook,
+// processes them through flow.js, sends replies via Meta Graph API.
 // ============================================================
 
 require('dotenv').config();
@@ -16,29 +16,26 @@ process.on('uncaughtException',  (err) => console.error('[crash] Uncaught except
 process.on('unhandledRejection', (r)   => console.error('[crash] Unhandled rejection:', r?.message || r));
 
 const app  = express();
-app.use(express.json({ limit: '5mb' }));   // WATI sends ~ small payloads, 5mb is generous
+app.use(express.json({ limit: '5mb' }));
 const PORT = process.env.PORT || 3000;
 
-// ─── WATI config ─────────────────────────────────────────────
-const WATI_BASE   = process.env.WATI_BASE_URL || 'https://live-mt-server.wati.io/10166417';
-let   WATI_TOKEN  = process.env.WATI_TOKEN || '';
-const BOT_NUMBER  = process.env.WATI_BOT_NUMBER || '917385155526';
-
-// Defensive: WATI requires `Bearer <jwt>` in the Authorization header.
-// Auto-prepend if env var was set without it.
-if (WATI_TOKEN && !WATI_TOKEN.toLowerCase().startsWith('bearer ')) {
-  WATI_TOKEN = 'Bearer ' + WATI_TOKEN;
-  console.log('[boot] WATI_TOKEN was missing "Bearer " prefix — added automatically');
-}
+// ─── Meta Cloud API config ───────────────────────────────────
+const META_API_VERSION    = process.env.META_API_VERSION    || 'v22.0';
+const META_PHONE_NUMBER_ID = process.env.META_PHONE_NUMBER_ID || '';
+const META_ACCESS_TOKEN    = process.env.META_ACCESS_TOKEN   || '';
+const META_VERIFY_TOKEN    = process.env.META_VERIFY_TOKEN   || '';
+const META_GRAPH_BASE      = `https://graph.facebook.com/${META_API_VERSION}`;
+const BOT_NUMBER           = process.env.META_BOT_NUMBER || ''; // display only
 
 // Admin number for booking/payment/lead alerts — hardcoded so misconfig
 // can never reroute alerts.
 const OWNER_PHONE = '919975233763';
 
-if (!WATI_TOKEN) {
-  console.error('[boot] ❌ WATI_TOKEN env var is missing — outgoing messages will fail');
-}
-console.log('[boot] WATI base:', WATI_BASE, '| bot number:', BOT_NUMBER);
+if (!META_ACCESS_TOKEN)    console.error('[boot] ❌ META_ACCESS_TOKEN missing — outgoing sends will fail');
+if (!META_PHONE_NUMBER_ID) console.error('[boot] ❌ META_PHONE_NUMBER_ID missing — outgoing sends will fail');
+if (!META_VERIFY_TOKEN)    console.error('[boot] ❌ META_VERIFY_TOKEN missing — webhook verification will fail');
+
+console.log(`[boot] Meta Cloud API ${META_API_VERSION} | phoneId: ${META_PHONE_NUMBER_ID || 'MISSING'}`);
 
 // ─── WATI send helper ───────────────────────────────────────
 // Sends a free-form text message inside an open 24-hr session window.
@@ -64,67 +61,113 @@ function recordFailure(phone, reason, text) {
   if (sendMetrics.recentFailures.length > 50) sendMetrics.recentFailures.shift();
 }
 
-async function _watiSendOnce(phone, text) {
-  const url = `${WATI_BASE}/api/v1/sendSessionMessage/${phone}?messageText=${encodeURIComponent(text)}`;
+async function _metaSendOnce(phone, text) {
+  const url = `${META_GRAPH_BASE}/${META_PHONE_NUMBER_ID}/messages`;
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), SEND_TIMEOUT_MS);
   try {
     const res = await fetch(url, {
       method: 'POST',
-      headers: { 'Authorization': WATI_TOKEN, 'Content-Type': 'application/json' },
+      headers: {
+        'Authorization': `Bearer ${META_ACCESS_TOKEN}`,
+        'Content-Type':  'application/json',
+      },
+      body: JSON.stringify({
+        messaging_product: 'whatsapp',
+        recipient_type:    'individual',
+        to:                phone,
+        type:              'text',
+        text: { preview_url: false, body: text },
+      }),
       signal: controller.signal,
     });
     const body = await res.text();
-    return { ok: res.ok, status: res.status, body };
+
+    // Inspect Meta's response. On success: `{messages:[{id:"wamid..."}]}`.
+    // On failure: `{error:{message, code, type, fbtrace_id}}` with non-2xx status.
+    let metaOk = res.ok;
+    let metaInfo = '';
+    let waMessageId = null;
+    try {
+      const j = JSON.parse(body);
+      if (j?.error) {
+        metaOk = false;
+        metaInfo = `${j.error.code || '?'}: ${j.error.message || '(no message)'}`;
+      } else if (Array.isArray(j?.messages) && j.messages[0]?.id) {
+        waMessageId = j.messages[0].id;
+        metaInfo = waMessageId.slice(0, 40);
+      }
+    } catch { /* not JSON — rely on HTTP status */ }
+
+    return { ok: res.ok, status: res.status, body, metaOk, metaInfo, waMessageId };
   } finally {
     clearTimeout(timer);
   }
 }
 
+// Kept the name `watiSend` because it's called from many places (nudge,
+// task loop, takeover, /verify-payment, etc.). Internally now hits the
+// Meta Graph API.
 async function watiSend(phone, text, opts = {}) {
-  if (!phone || !text) return { ok: false, status: 0, body: 'missing phone or text' };
+  if (!phone || !text) {
+    console.error('[meta] ✗ missing phone or text:', { phone: !!phone, textLen: text?.length || 0 });
+    return { ok: false, status: 0, body: 'missing phone or text' };
+  }
 
   const maxAttempts  = opts.maxAttempts ?? SEND_MAX_ATTEMPTS;
   const isOwnerAlert = opts.isOwnerAlert === true;
   let lastReason = 'unknown';
 
+  console.log(`[meta] → send ${text.length}c to ${phone}: ${JSON.stringify(text.slice(0, 40))}`);
+
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {
     try {
-      const res = await _watiSendOnce(phone, text);
+      const res = await _metaSendOnce(phone, text);
 
-      if (res.ok) {
-        if (attempt > 1) console.log(`[wati] ✓ recovered on attempt ${attempt} to ${phone}`);
+      // True success — HTTP ok AND Meta returned a wamid.
+      if (res.ok && res.metaOk) {
+        console.log(`[meta] ✓ sent to ${phone}${res.metaInfo ? ' — ' + res.metaInfo : ''}`);
         sendMetrics.sent++;
+        if (attempt > 1) console.log(`[meta]   (recovered on attempt ${attempt})`);
         return res;
       }
 
-      // 4xx (not 429) — permanent error, don't retry.
-      // Common causes: bad token, customer outside 24-hr session window,
-      // invalid phone. None of these fix themselves with a retry.
+      // HTTP 200 but Meta JSON says failure — usually 24-hr window expired,
+      // template required, or destination not opted in. Don't retry.
+      if (res.ok && !res.metaOk) {
+        const info = String(res.metaInfo || '').slice(0, 200);
+        console.error(`[meta] ✗ Meta rejected (HTTP 200) to ${phone}: ${info}`);
+        console.error(`[meta]   full body: ${res.body.slice(0, 500)}`);
+        recordFailure(phone, `Meta rejected: ${info.slice(0, 80)}`, text);
+        if (!isOwnerAlert) notifyOwnerOfFailure(phone, `Meta rejected: ${info.slice(0, 80)}`, text);
+        return { ...res, ok: false };
+      }
+
+      // 4xx (not 429) — permanent HTTP error (bad token, bad phone, etc).
       if (res.status >= 400 && res.status < 500 && res.status !== 429) {
-        console.error(`[wati] ✗ send ${res.status} (no retry) to ${phone}: ${res.body.slice(0, 200)}`);
-        recordFailure(phone, `HTTP ${res.status}: ${res.body.slice(0, 80)}`, text);
-        if (!isOwnerAlert) notifyOwnerOfFailure(phone, `HTTP ${res.status}`, text);
+        const reason = res.metaInfo || res.body.slice(0, 200);
+        console.error(`[meta] ✗ HTTP ${res.status} (no retry) to ${phone}: ${reason}`);
+        recordFailure(phone, `HTTP ${res.status}: ${reason.slice(0, 80)}`, text);
+        if (!isOwnerAlert) notifyOwnerOfFailure(phone, `HTTP ${res.status}: ${reason.slice(0, 80)}`, text);
         return res;
       }
 
       // 5xx or 429 — retry with backoff.
       lastReason = `HTTP ${res.status}`;
-      console.warn(`[wati] send ${res.status} (attempt ${attempt}/${maxAttempts}) to ${phone}`);
+      console.warn(`[meta] send ${res.status} (attempt ${attempt}/${maxAttempts}) to ${phone}: ${res.body.slice(0, 120)}`);
     } catch (e) {
       const aborted = e.name === 'AbortError';
       lastReason = aborted ? `timeout ${SEND_TIMEOUT_MS}ms` : (e.message || 'fetch exception');
-      console.warn(`[wati] send error (attempt ${attempt}/${maxAttempts}) to ${phone}: ${lastReason}`);
+      console.warn(`[meta] send error (attempt ${attempt}/${maxAttempts}) to ${phone}: ${lastReason}`);
     }
 
     if (attempt < maxAttempts) {
-      // 500ms, 1500ms, 4500ms
-      const delay = 500 * Math.pow(3, attempt - 1);
+      const delay = 500 * Math.pow(3, attempt - 1); // 500ms, 1500ms, 4500ms
       await new Promise(r => setTimeout(r, delay));
     }
   }
 
-  console.error(`[wati] ✗ send FAILED after ${maxAttempts} attempts to ${phone}: ${lastReason}`);
+  console.error(`[meta] ✗ send FAILED after ${maxAttempts} attempts to ${phone}: ${lastReason}`);
   recordFailure(phone, lastReason, text);
   if (!isOwnerAlert) notifyOwnerOfFailure(phone, lastReason, text);
   return { ok: false, status: 0, body: lastReason };
@@ -141,7 +184,7 @@ function notifyOwnerOfFailure(toPhone, reason, originalText) {
 ${(originalText || '').slice(0, 100)}
 
 The bot couldn't deliver this reply. Please contact the customer manually.`;
-  _watiSendOnce(OWNER_PHONE, alert).catch(() => {});
+  _metaSendOnce(OWNER_PHONE, alert).catch(() => {});
 }
 
 // ─── Inactivity nudge ───────────────────────────────────────
@@ -236,7 +279,7 @@ function runQueued(jid, task) {
 // ─── Build the wrappedMsg flow.js expects ───────────────────
 // flow.handleMessage was written for whatsapp-web.js / Baileys
 // message objects. We give it the same shape from WATI's payload.
-function buildWrappedMsg(phone, text, type, mediaUrl, senderName) {
+function buildWrappedMsg(phone, text, type, mediaId, senderName) {
   return {
     from: phone,
     body: text || '',
@@ -247,23 +290,36 @@ function buildWrappedMsg(phone, text, type, mediaUrl, senderName) {
       id: { _serialized: phone },
     }),
     downloadMedia: async () => {
-      // Only used in PAYMENT_RECEIPT state. Returns null on failure so
-      // the flow falls back to caption text. WATI's own media URLs need
-      // the Bearer token; pass it as Authorization for those.
-      if (!mediaUrl) return null;
+      // Only used in PAYMENT_RECEIPT state. Meta uses a two-step flow:
+      //   1) GET /MEDIA_ID  → returns { url: "https://lookaside.fbsbx.com/..." }
+      //   2) GET <url>      → returns the actual bytes (Bearer auth required)
+      // Returns null on failure so the flow can react gracefully.
+      if (!mediaId) return null;
       try {
-        const headers = {};
-        if (mediaUrl.includes('wati.io')) headers['Authorization'] = WATI_TOKEN;
-        const res = await fetch(mediaUrl, { headers });
-        if (!res.ok) {
-          console.error('[wati] media download HTTP', res.status, 'for', mediaUrl.slice(0, 80));
+        const metaUrl = `${META_GRAPH_BASE}/${mediaId}`;
+        const meta = await fetch(metaUrl, {
+          headers: { 'Authorization': `Bearer ${META_ACCESS_TOKEN}` },
+        });
+        if (!meta.ok) {
+          console.error('[meta] media lookup HTTP', meta.status, 'for', mediaId);
           return null;
         }
-        const buf = Buffer.from(await res.arrayBuffer());
-        const ct = res.headers.get('content-type') || 'image/jpeg';
-        return { data: buf.toString('base64'), mimetype: ct };
+        const { url, mime_type } = await meta.json();
+        if (!url) return null;
+        const dl = await fetch(url, {
+          headers: { 'Authorization': `Bearer ${META_ACCESS_TOKEN}` },
+        });
+        if (!dl.ok) {
+          console.error('[meta] media download HTTP', dl.status);
+          return null;
+        }
+        const buf = Buffer.from(await dl.arrayBuffer());
+        return {
+          data: buf.toString('base64'),
+          mimetype: mime_type || dl.headers.get('content-type') || 'image/jpeg',
+        };
       } catch (e) {
-        console.error('[wati] media download failed:', e.message);
+        console.error('[meta] media download failed:', e.message);
         return null;
       }
     },
@@ -271,40 +327,86 @@ function buildWrappedMsg(phone, text, type, mediaUrl, senderName) {
   };
 }
 
-// ─── WATI webhook — incoming customer messages ──────────────
+// ─── Meta webhook — GET verification (handshake) ────────────
+// Meta sends GET /wati-webhook?hub.mode=subscribe&hub.verify_token=...&hub.challenge=...
+// We must echo back hub.challenge if the verify token matches.
+app.get('/wati-webhook', (req, res) => {
+  const mode      = req.query['hub.mode'];
+  const token     = req.query['hub.verify_token'];
+  const challenge = req.query['hub.challenge'];
+  if (mode === 'subscribe' && token === META_VERIFY_TOKEN) {
+    console.log('[meta] webhook verified ✓');
+    return res.status(200).send(challenge);
+  }
+  console.warn('[meta] webhook verification failed — token mismatch');
+  return res.sendStatus(403);
+});
+
+// ─── Meta webhook — POST incoming customer messages ─────────
 app.post('/wati-webhook', async (req, res) => {
-  // ACK first so WATI doesn't retry on slow processing
+  // ACK first so Meta doesn't retry on slow processing
   res.status(200).send('OK');
 
-  const evt = req.body || {};
+  const body = req.body || {};
+  if (body.object !== 'whatsapp_business_account') return;
 
-  // We only care about incoming customer messages, not status updates
-  // or echoes of our own sends.
-  const eventType = evt.eventType || evt.type;
-  if (eventType && eventType !== 'message') return;
-  if (evt.owner === true) return;          // skip our own outgoing echo
+  // Meta nests messages deep: entry[].changes[].value.messages[]
+  const entries = Array.isArray(body.entry) ? body.entry : [];
+  for (const entry of entries) {
+    const changes = Array.isArray(entry.changes) ? entry.changes : [];
+    for (const change of changes) {
+      if (change.field !== 'messages') continue;
+      const value = change.value || {};
 
-  // Pull the fields. WATI's payload varies slightly; cover the common cases.
-  const phone     = (evt.waId || evt.whatsappId || evt.phone || '').toString();
-  const msgId     = evt.id || evt.messageId || evt.whatsappMessageId;
-  const msgType   = (evt.type || '').toLowerCase();   // text / image / document / etc.
-  const senderName = evt.senderName || '';
+      // Skip status updates (delivery receipts: sent/delivered/read/failed).
+      // We only care about inbound messages.
+      if (Array.isArray(value.statuses) && !Array.isArray(value.messages)) continue;
+      const messages = Array.isArray(value.messages) ? value.messages : [];
+      if (messages.length === 0) continue;
 
-  // For text messages, text is in `text`/`data`. For media messages, WATI
-  // puts the URL in `text`/`data` and the actual caption in `caption`.
-  // Extract both correctly based on type.
-  let text, mediaUrl;
-  const isMedia = ['image', 'document', 'video', 'audio'].includes(msgType);
-  if (isMedia) {
-    mediaUrl = evt.sourceUrl || evt.mediaUrl || evt.text || evt.data || null;
-    text     = evt.caption || '';
-  } else {
-    text     = evt.text || evt.data || evt.caption || '';
-    mediaUrl = null;
+      // Pull the sender name (if Meta included a contact profile)
+      const senderName = value.contacts?.[0]?.profile?.name || '';
+
+      for (const m of messages) {
+        await handleMetaMessage(m, senderName);
+      }
+    }
   }
+});
 
-  if (!phone) { console.warn('[wati] webhook missing phone'); return; }
-  if (alreadyProcessed(msgId)) { console.log('[wati] dedup', msgId); return; }
+async function handleMetaMessage(m, senderName) {
+  const phone = (m.from || '').toString();
+  const msgId = m.id;
+  const msgType = (m.type || '').toLowerCase();
+  if (!phone) { console.warn('[meta] message missing from'); return; }
+  if (alreadyProcessed(msgId)) { console.log('[meta] dedup', msgId); return; }
+
+  // Extract text + media-id depending on message type
+  let text = '';
+  let mediaId = null;
+  if (msgType === 'text') {
+    text = m.text?.body || '';
+  } else if (msgType === 'image') {
+    text    = m.image?.caption || '';
+    mediaId = m.image?.id || null;
+  } else if (msgType === 'document') {
+    text    = m.document?.caption || m.document?.filename || '';
+    mediaId = m.document?.id || null;
+  } else if (msgType === 'video') {
+    text    = m.video?.caption || '';
+    mediaId = m.video?.id || null;
+  } else if (msgType === 'audio' || msgType === 'voice') {
+    text    = '';
+    mediaId = m.audio?.id || m.voice?.id || null;
+  } else if (msgType === 'button') {
+    text = m.button?.text || m.button?.payload || '';
+  } else if (msgType === 'interactive') {
+    text = m.interactive?.button_reply?.title
+        || m.interactive?.list_reply?.title
+        || '';
+  } else {
+    text = '';
+  }
 
   // If admin has taken over this customer manually, the bot stays silent.
   // The customer gets a single "an agent will help you" notice the first
@@ -320,12 +422,12 @@ app.post('/wati-webhook', async (req, res) => {
     return;
   }
 
-  console.log('[wati] from:', phone, 'type:', msgType, 'body:', JSON.stringify(String(text)).slice(0, 30));
+  console.log('[meta] from:', phone, 'type:', msgType, 'body:', JSON.stringify(String(text)).slice(0, 30));
 
   // Hand off to the flow inside the per-user queue
   runQueued(phone, async () => {
     const t0 = Date.now();
-    const wrapped = buildWrappedMsg(phone, text, msgType, mediaUrl, senderName);
+    const wrapped = buildWrappedMsg(phone, text, msgType === 'image' ? 'image' : 'chat', mediaId, senderName);
     try {
       const replies = await flow.handleMessage(wrapped);
       console.log('[task]', phone, 'flow:', Date.now() - t0, 'ms, replies:', replies.length);
@@ -360,7 +462,7 @@ app.post('/wati-webhook', async (req, res) => {
       clearNudge(phone);
     }
   });
-});
+}
 
 // ─── HTTP endpoints (admin + health) ───────────────────────
 app.get('/', (_req, res) => {
@@ -369,7 +471,7 @@ app.get('/', (_req, res) => {
 .card{text-align:center;background:#1e293b;padding:3rem;border-radius:1rem}
 .dot{display:inline-block;width:14px;height:14px;border-radius:50%;background:#22c55e;margin-right:8px;animation:pulse 2s infinite}
 @keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}</style></head>
-<body><div class="card"><h1><span class="dot"></span> Bot is Live (WATI)</h1>
+<body><div class="card"><h1><span class="dot"></span> Bot is Live (Meta Cloud API)</h1>
 <p>${config.businessName}</p>
 <p style="font-size:.85rem;color:#94a3b8;margin-top:1rem">Sessions: <span id="s">—</span> · Uptime: <span id="u">—</span>s</p></div>
 <script>setInterval(()=>fetch('/status').then(r=>r.json()).then(d=>{document.getElementById('s').textContent=d.activeSessions;document.getElementById('u').textContent=Math.floor(d.uptime)}),5000)</script>
@@ -378,6 +480,12 @@ app.get('/', (_req, res) => {
 
 app.get('/status', (_req, res) => res.json({
   ok: true,
+  sender: 'Meta Cloud API',
+  build: process.env.RENDER_GIT_COMMIT?.slice(0, 7) || 'local',
+  apiVersion: META_API_VERSION,
+  phoneId: META_PHONE_NUMBER_ID || 'MISSING',
+  hasToken: !!META_ACCESS_TOKEN,
+  hasVerifyToken: !!META_VERIFY_TOKEN,
   activeSessions: flow.activeSessionCount(),
   uptime: process.uptime(),
   bot: BOT_NUMBER,
@@ -501,4 +609,7 @@ app.post('/verify-payment', async (req, res) => {
 });
 
 // ─── Start ──────────────────────────────────────────────────
-app.listen(PORT, () => console.log(`[server] WATI bot ready on :${PORT}`));
+app.listen(PORT, () => {
+  console.log(`[server] Meta Cloud API bot ready on :${PORT}`);
+  console.log(`[server] build: ${process.env.RENDER_GIT_COMMIT?.slice(0,7) || 'local'} | phoneId: ${META_PHONE_NUMBER_ID || 'MISSING'} | verifyToken: ${META_VERIFY_TOKEN ? 'set' : 'MISSING'}`);
+});
