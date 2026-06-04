@@ -105,6 +105,67 @@ async function _metaSendOnce(phone, text) {
   }
 }
 
+// Meta interactive button message — max 3 buttons, titles ≤ 20 chars,
+// body ≤ 1024 chars. Returns the same shape as watiSend.
+// buttons: [{ id: "1", title: "English" }, ...]
+async function watiSendButtons(phone, bodyText, buttons) {
+  if (!phone || !Array.isArray(buttons) || buttons.length === 0) {
+    return { ok: false, status: 0, body: 'missing phone or buttons' };
+  }
+  const safeButtons = buttons.slice(0, 3).map(b => ({
+    type: 'reply',
+    reply: { id: String(b.id), title: String(b.title).slice(0, 20) },
+  }));
+  const url = `${META_GRAPH_BASE}/${META_PHONE_NUMBER_ID}/messages`;
+  const payload = {
+    messaging_product: 'whatsapp',
+    recipient_type:    'individual',
+    to:                phone,
+    type:              'interactive',
+    interactive: {
+      type: 'button',
+      body: { text: String(bodyText).slice(0, 1024) },
+      action: { buttons: safeButtons },
+    },
+  };
+
+  console.log(`[meta] → send buttons (${safeButtons.length}) to ${phone}: "${bodyText.slice(0,40)}..."`);
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), SEND_TIMEOUT_MS);
+  try {
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${META_ACCESS_TOKEN}`,
+        'Content-Type':  'application/json',
+      },
+      body: JSON.stringify(payload),
+      signal: controller.signal,
+    });
+    const body = await res.text();
+    let metaOk = res.ok;
+    let metaInfo = '';
+    try {
+      const j = JSON.parse(body);
+      if (j?.error) { metaOk = false; metaInfo = `${j.error.code || '?'}: ${j.error.message || ''}`; }
+      else if (j?.messages?.[0]?.id) { metaInfo = j.messages[0].id.slice(0, 40); }
+    } catch {}
+    if (res.ok && metaOk) {
+      console.log(`[meta] ✓ buttons sent to ${phone}${metaInfo ? ' — ' + metaInfo : ''}`);
+      sendMetrics.sent++;
+      return { ok: true, status: res.status, body };
+    }
+    console.error(`[meta] ✗ buttons HTTP ${res.status} to ${phone}: ${metaInfo || body.slice(0, 200)}`);
+    recordFailure(phone, `buttons: ${metaInfo || 'HTTP ' + res.status}`, bodyText);
+    return { ok: false, status: res.status, body };
+  } catch (e) {
+    console.error('[meta] buttons send exception:', e.message);
+    return { ok: false, status: 0, body: e.message };
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 // Kept the name `watiSend` because it's called from many places (nudge,
 // task loop, takeover, /verify-payment, etc.). Internally now hits the
 // Meta Graph API.
@@ -401,7 +462,11 @@ async function handleMetaMessage(m, senderName) {
   } else if (msgType === 'button') {
     text = m.button?.text || m.button?.payload || '';
   } else if (msgType === 'interactive') {
-    text = m.interactive?.button_reply?.title
+    // Prefer the button/list `id` (matches the bot's numeric state logic
+    // like "1", "2", "3") over the human-readable title.
+    text = m.interactive?.button_reply?.id
+        || m.interactive?.list_reply?.id
+        || m.interactive?.button_reply?.title
         || m.interactive?.list_reply?.title
         || '';
   } else {
@@ -438,6 +503,11 @@ async function handleMetaMessage(m, senderName) {
             watiSend(OWNER_PHONE, reply._adminAlert)
               .then(r => console.log(r.ok ? '[task] adminAlert sent' : '[task] adminAlert FAILED: ' + r.body.slice(0,80)))
               .catch(e => console.error('[task] adminAlert send threw:', e.message));
+            continue;
+          }
+          if (typeof reply === 'object' && reply && reply.type === 'buttons') {
+            const r = await watiSendButtons(phone, reply.body, reply.buttons);
+            if (!r.ok) console.warn('[task] buttons reply not delivered to', phone, '— see /status');
             continue;
           }
           if (typeof reply === 'string' && reply.length > 0) {

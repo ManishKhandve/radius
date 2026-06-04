@@ -154,6 +154,85 @@ function restartIntent(text) {
   return null;
 }
 
+// ─── Interactive button helpers (Phase 1) ───────────────────
+// Each helper returns the shape index.js's reply loop expects for
+// interactive button messages:
+//   { type: 'buttons', body: '<message text>', buttons: [{id, title}, ...] }
+// The `id` matches the existing numeric state logic (1/2/3 etc.) so the
+// processState switches don't need to change.
+
+function langPrompt() {
+  return {
+    type: 'buttons',
+    body: config.languageMessage,
+    buttons: [
+      { id: '1', title: 'English' },
+      { id: '2', title: 'मराठी' },
+      { id: '3', title: 'हिंदी' },
+    ],
+  };
+}
+
+function mainMenuPrompt(lang) {
+  const labels = {
+    en: { home: '🏠 Home Cleaning', maid: '🧹 Maid Service' },
+    hi: { home: '🏠 घर की क्लीनिंग', maid: '🧹 मेड सर्विस' },
+    mr: { home: '🏠 घराची क्लीनिंग', maid: '🧹 मेड सर्विस' },
+  }[lang] || { en: '', home: '🏠 Home Cleaning', maid: '🧹 Maid Service' }.en;
+  const L = labels.home ? labels : { home: '🏠 Home Cleaning', maid: '🧹 Maid Service' };
+  return {
+    type: 'buttons',
+    body: config.mainMenuMessage[lang] || config.mainMenuMessage.en,
+    buttons: [
+      { id: '1', title: L.home },
+      { id: '2', title: L.maid },
+    ],
+  };
+}
+
+function cityPrompt(lang) {
+  return {
+    type: 'buttons',
+    body: config.maidCityMessage[lang] || config.maidCityMessage.en,
+    buttons: [
+      { id: '1', title: 'Pune' },
+      { id: '2', title: 'PCMC' },
+    ],
+  };
+}
+
+function confirmPrompt(data, lang) {
+  const titles = {
+    en: { confirm: '✅ Confirm', cancel: '❌ Cancel' },
+    hi: { confirm: '✅ कन्फर्म', cancel: '❌ कैंसिल' },
+    mr: { confirm: '✅ कन्फर्म', cancel: '❌ कैंसल' },
+  }[lang] || { confirm: '✅ Confirm', cancel: '❌ Cancel' };
+  return {
+    type: 'buttons',
+    body: config.confirmMessage(data, lang),
+    buttons: [
+      { id: '1', title: titles.confirm },
+      { id: '2', title: titles.cancel },
+    ],
+  };
+}
+
+function cleaningConfirmPrompt(data, lang) {
+  const titles = {
+    en: { confirm: '✅ Confirm', cancel: '❌ Cancel' },
+    hi: { confirm: '✅ कन्फर्म', cancel: '❌ कैंसिल' },
+    mr: { confirm: '✅ कन्फर्म', cancel: '❌ कैंसल' },
+  }[lang] || { confirm: '✅ Confirm', cancel: '❌ Cancel' };
+  return {
+    type: 'buttons',
+    body: config.cleaningConfirmMessage(data, lang),
+    buttons: [
+      { id: '1', title: titles.confirm },
+      { id: '2', title: titles.cancel },
+    ],
+  };
+}
+
 // "restart" keyword: clears the current session in any state and
 // re-opens the main menu (skipping language pick if we remember it).
 // Accepts a few common variants in EN/HI/MR.
@@ -199,11 +278,11 @@ async function handleMessage(msg) {
       fresh.data.lang = savedLang;
       fresh.state = "MAIN_MENU";
       saveProgress(fresh);
-      return [config.mainMenuMessage[savedLang]];
+      return [mainMenuPrompt(savedLang)];
     }
     fresh.state = "LANGUAGE";
     saveProgress(fresh);
-    return [config.languageMessage];
+    return [langPrompt()];
   }
 
   // If they want to restart, clear their current session
@@ -253,12 +332,12 @@ async function handleMessage(msg) {
       session.data.directFlow = restart;
       session.state = 'LANGUAGE';
       saveProgress(session);
-      return [config.languageMessage];
+      return [langPrompt()];
     }
 
     session.state = 'LANGUAGE';
     saveProgress(session);
-    return [config.languageMessage];
+    return [langPrompt()];
   }
 
   // MAID_CHOICE special "0" — customer didn't like any maid shown.
@@ -296,8 +375,14 @@ async function handleMessage(msg) {
       : `\n\n0️⃣ For custom questions, Call us: ${config.contactNumber}\n🔄 Type *restart* anytime to start over`;
 
     for (let i = responses.length - 1; i >= 0; i--) {
-      if (typeof responses[i] === "string" && !responses[i].includes("0️⃣")) {
-        responses[i] += hint;
+      const r = responses[i];
+      if (typeof r === "string" && !r.includes("0️⃣")) {
+        responses[i] = r + hint;
+        break;
+      }
+      // Button messages: append the hint to the body text instead.
+      if (typeof r === "object" && r && r.type === "buttons" && r.body && !r.body.includes("0️⃣")) {
+        r.body = r.body + hint;
         break;
       }
     }
@@ -310,7 +395,7 @@ async function processState(session, body, senderId, msg) {
   switch (session.state) {
     case "LANGUAGE": {
       const lang = config.langs[body];
-      if (!lang) return [config.languageMessage];
+      if (!lang) return [langPrompt()];
       session.data.lang = lang;
       userLanguages.set(senderId, lang);
 
@@ -329,7 +414,7 @@ async function processState(session, body, senderId, msg) {
       }
 
       session.state = "MAIN_MENU";
-      return [config.mainMenuMessage[lang]];
+      return [mainMenuPrompt(lang)];
     }
     
     case "MAIN_MENU": {
@@ -342,7 +427,7 @@ async function processState(session, body, senderId, msg) {
         session.state = "WORK_TYPE";
         return [config.workTypeMessage[session.data.lang]];
       } else {
-        return [config.mainMenuMessage[session.data.lang]];
+        return [mainMenuPrompt(session.data.lang)];
       }
     }
 
@@ -751,11 +836,11 @@ async function processState(session, body, senderId, msg) {
       if (body === "1") {
         session.data.cleaningDate = "Today";
         session.state = "CLEANING_CONFIRM";
-        return [config.cleaningConfirmMessage(session.data, session.data.lang)];
+        return [cleaningConfirmPrompt(session.data, session.data.lang)];
       } else if (body === "2") {
         session.data.cleaningDate = "Tomorrow";
         session.state = "CLEANING_CONFIRM";
-        return [config.cleaningConfirmMessage(session.data, session.data.lang)];
+        return [cleaningConfirmPrompt(session.data, session.data.lang)];
       } else if (body === "3") {
         session.state = "CLEANING_CUSTOM_DATE";
         return [config.cleaningCustomDateMessage[session.data.lang]];
@@ -768,7 +853,7 @@ async function processState(session, body, senderId, msg) {
       if (body.length <= 2) return [config.cleaningCustomDateMessage[session.data.lang]];
       session.data.cleaningDate = body;
       session.state = "CLEANING_CONFIRM";
-      return [config.cleaningConfirmMessage(session.data, session.data.lang)];
+      return [cleaningConfirmPrompt(session.data, session.data.lang)];
     }
 
     case "CLEANING_CONFIRM": {
@@ -784,7 +869,7 @@ async function processState(session, body, senderId, msg) {
         clearSession(senderId);
         return [config.cancelMessage[lang]];
       } else {
-        return [config.cleaningConfirmMessage(session.data, session.data.lang)];
+        return [cleaningConfirmPrompt(session.data, session.data.lang)];
       }
     }
 
@@ -812,7 +897,7 @@ async function processState(session, body, senderId, msg) {
       if (!v) return [config.getBudgetMessage(session.data.timing, session.data.lang)];
       session.data.budget = v;
       session.state = "MAID_CITY";
-      return [config.maidCityMessage[session.data.lang]];
+      return [cityPrompt(session.data.lang)];
     }
 
     case "MAID_CITY": {
@@ -821,7 +906,7 @@ async function processState(session, body, senderId, msg) {
       } else if (body === "2") {
         session.data.maidCity = "PCMC";
       } else {
-        return [config.maidCityMessage[session.data.lang]];
+        return [cityPrompt(session.data.lang)];
       }
       session.state = "MAID_AREA";
       return [config.getAreaMessage(session.data.maidCity, session.data.lang)];
@@ -1054,7 +1139,7 @@ async function processState(session, body, senderId, msg) {
       if (!plan) return [config.getMaidPlanMessage(session.data.timing, session.data.lang)];
       session.data.selectedPlan = plan;
       session.state = "CONFIRM";
-      return [config.confirmMessage(session.data, session.data.lang || "en")];
+      return [confirmPrompt(session.data, session.data.lang || "en")];
     }
 
     case "CONFIRM": {
@@ -1105,7 +1190,7 @@ async function processState(session, body, senderId, msg) {
         clearSession(senderId);
         return [config.cancelMessage[lang]];
       }
-      return [config.confirmMessage(session.data, session.data.lang || "en")];
+      return [confirmPrompt(session.data, session.data.lang || "en")];
     }
 
     case "PAYMENT_RECEIPT": {
