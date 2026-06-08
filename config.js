@@ -1324,21 +1324,21 @@ const paymentMessage = {
   en: `💰 Please pay ₹1000 booking amount.
 
 👉 Tap to pay:
-upi://pay?pa=${upiId}&pn=Cleanly&am=1000&cu=INR
+https://rzp.io/rzp/O6pvrdBb
 
 After paying, please share the payment screenshot here for verification.`,
 
   hi: `💰 कृपया ₹1000 बुकिंग अमाउंट जमा करें।
 
 👉 पेमेंट के लिए नीचे टैप करें:
-upi://pay?pa=${upiId}&pn=Cleanly&am=1000&cu=INR
+https://rzp.io/rzp/O6pvrdBb
 
 पेमेंट के बाद वेरिफिकेशन के लिए स्क्रीनशॉट यहाँ भेजें।`,
 
   mr: `💰 कृपया ₹1000 बुकिंग रक्कम भरा.
 
 👉 पेमेंटसाठी खाली टॅप करा:
-upi://pay?pa=${upiId}&pn=Cleanly&am=1000&cu=INR
+https://rzp.io/rzp/O6pvrdBb
 
 पेमेंटनंतर व्हेरिफिकेशनसाठी स्क्रीनशॉट इथे पाठवा.`
 };
