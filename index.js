@@ -693,7 +693,10 @@ app.get('/send', async (req, res) => {
   const phone = String(to).replace(/[^0-9]/g, '');
   try {
     await addInvite(phone);
-    const r = await watiSend(phone, config.adminIntroMessage);
+    const r = await watiSendButtons(phone, config.adminIntroMessage, [
+      { id: 'getcode', title: 'Get Code' },
+      { id: 'connect_team', title: 'Connect with Team' }
+    ]);
     if (!r.ok) return res.status(500).send(`Send failed: ${r.body}`);
     res.send(`✅ Sent to ${phone}`);
   } catch (e) { res.status(500).send(e.message); }

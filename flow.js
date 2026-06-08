@@ -224,6 +224,25 @@ function cleaningConfirmPrompt(data, lang) {
     hi: { confirm: '✅ कन्फर्म', cancel: '❌ कैंसिल', restart: '🔄 रीस्टार्ट' },
     mr: { confirm: '✅ कन्फर्म', cancel: '❌ कैंसल', restart: '🔄 रीस्टार्ट' },
   }[lang] || { confirm: '✅ Confirm', cancel: '❌ Cancel', restart: '🔄 Restart' };
+
+  if (data.isBroadcast && !data.discountApplied) {
+    const discountTitles = {
+      en: '🎁 10% Discount',
+      hi: '🎁 10% छूट',
+      mr: '🎁 10% सवलत'
+    }[lang] || '🎁 10% Discount';
+
+    return {
+      type: 'buttons',
+      body: config.cleaningConfirmMessage(data, lang),
+      buttons: [
+        { id: '1', title: titles.confirm },
+        { id: 'apply_discount', title: discountTitles },
+        { id: '2', title: titles.cancel },
+      ],
+    };
+  }
+
   return {
     type: 'buttons',
     body: config.cleaningConfirmMessage(data, lang),
@@ -625,6 +644,43 @@ async function handleMessage(msg) {
   const senderId = msg.from;
   const body = (msg.body || "").trim();
 
+  const cleanBody = body.toLowerCase().trim();
+  const isGetCode = cleanBody === 'getcode' || cleanBody === 'get code';
+  const isConnectTeam = cleanBody === 'connect_team' || cleanBody === 'connect with team';
+
+  if (isGetCode) {
+    clearSession(senderId);
+    const session = createSession(senderId);
+    session.data.isBroadcast = true;
+    try {
+      const c = await msg.getContact();
+      session.data.contactName = c.pushname || c.name || "there";
+      session.data.whatsappNumber = (c.id._serialized || senderId).split('@')[0];
+    } catch {
+      session.data.contactName = "there";
+      session.data.whatsappNumber = senderId.split('@')[0];
+    }
+
+    const savedLang = userLanguages.get(senderId);
+    if (savedLang) {
+      session.data.lang = savedLang;
+      session.data.serviceCategory = 'cleaning';
+      session.state = 'CLEANING_NAME';
+      saveProgress(session);
+      return [config.cleaningNameMessage[savedLang]];
+    }
+    session.data.directFlow = 'cleaning';
+    session.state = 'LANGUAGE';
+    saveProgress(session);
+    return [langPrompt()];
+  }
+
+  if (isConnectTeam) {
+    const savedLang = userLanguages.get(senderId) || 'en';
+    clearSession(senderId);
+    return [config.supportMessage[savedLang]];
+  }
+
   // Images are only accepted in PAYMENT_RECEIPT state. Anywhere else
   // we ignore them — log it so silent drops are visible in debug logs.
   if (msg.type === "image") {
@@ -838,7 +894,7 @@ async function processState(session, body, senderId, msg) {
             preferredDate: "",
             estimatedPrice: "",
             status: "New Lead",
-            source: "WhatsApp Bot",
+            source: session.data.isBroadcast ? "Broadcast" : "WhatsApp Bot",
             language: session.data.lang,
           });
         } catch (e) { console.error("[flow] cleaning lead save err:", e.message); }
@@ -1257,6 +1313,25 @@ async function processState(session, body, senderId, msg) {
         }
         clearSession(senderId);
         return [config.cancelMessage[lang]];
+      } else if (body === "apply_discount" && session.data.isBroadcast && !session.data.discountApplied) {
+        const lang = session.data.lang || "en";
+        const currentPriceStr = session.data.cleaningPrice || "";
+        const numericPrice = parseInt(currentPriceStr.replace(/[^0-9]/g, "")) || 0;
+        if (numericPrice > 0) {
+          const discount = Math.round(numericPrice * 0.10);
+          const newPrice = numericPrice - discount;
+          session.data.cleaningPrice = `₹${newPrice.toLocaleString('en-IN')}`;
+          session.data.discountApplied = true;
+
+          const successMsg = {
+            en: `🎉 10% discount applied! You saved ₹${discount.toLocaleString('en-IN')}.`,
+            hi: `🎉 10% छूट लागू हो गई! आपने ₹${discount.toLocaleString('en-IN')} की बचत की।`,
+            mr: `🎉 10% सवलत लागू झाली! तुम्ही ₹${discount.toLocaleString('en-IN')} वाचवले.`
+          }[lang] || `🎉 10% discount applied! You saved ₹${discount.toLocaleString('en-IN')}.`;
+
+          return [successMsg, cleaningConfirmPrompt(session.data, lang)];
+        }
+        return [cleaningConfirmPrompt(session.data, lang)];
       } else {
         return [cleaningConfirmPrompt(session.data, session.data.lang)];
       }
@@ -1665,6 +1740,7 @@ function finishCleaning(session, senderId) {
           preferredDate: d.cleaningDate,
           estimatedPrice: d.cleaningPrice,
           status: "Confirmed",
+          source: d.isBroadcast ? "Broadcast" : "WhatsApp Bot",
           language: d.lang,
         });
       }
