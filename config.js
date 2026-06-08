@@ -107,32 +107,16 @@ const langs = {
 // ─── Message Templates ──────────────────────────────────────
 
 const languageMessage = `👋 Welcome to CLEANLY Services
-Please choose your preferred language:
-1️⃣ English
-2️⃣ मराठी
-3️⃣ हिंदी
-
-👉 Reply with the number (e.g. 1, 2 or 3)
-👉 नंबर रिप्लाई करें (जैसे 1, 2 या 3)
-👉 नंबर रिप्लाय करा (उदा. 1, 2 किंवा 3)
+Please choose your preferred language: / कृपया अपनी पसंदीदा भाषा चुनें: / कृपया तुमची आवडती भाषा निवडा:
 
 🔴 Please note: replies may take 2-3 seconds.
 🔴 कृपया ध्यान दें: जवाब आने में 2-3 सेकंड लग सकते हैं।
 🔴 कृपया लक्षात ठेवा: उत्तर येण्यास 2-3 सेकंद लागू शकतात.`;
 
 const mainMenuMessage = {
-  en: `Main menu
-Which service are you looking for?
-1️⃣ HOME deep cleaning service
-2️⃣ MONTHLY maid service`,
-  hi: `मेन मेनू
-आपको कौन सी सेवा चाहिए?
-1️⃣ घर की डीप क्लीनिंग
-2️⃣ मंथली मेड सर्विस`,
-  mr: `मेन मेनू
-तुम्हाला कोणती सेवा हवी आहे?
-1️⃣ घराची डीप क्लीनिंग
-2️⃣ मंथली मेड सर्विस`
+  en: `Main menu\nWhich service are you looking for?`,
+  hi: `मेन मेनू\nआपको कौन सी सेवा चाहिए?`,
+  mr: `मेन मेनू\nतुम्हाला कोणती सेवा हवी आहे?`
 };
 
 // --- Maid Flow Messages ---
@@ -200,15 +184,9 @@ _(पगार स्किल आणि अनुभवानुसार ठ�
 };
 
 const maidCityMessage = {
-  en: `🏙️ Please select your city:
-1️⃣ Pune
-2️⃣ PCMC`,
-  hi: `🏙️ अपना शहर चुनें:
-1️⃣ Pune
-2️⃣ PCMC`,
-  mr: `🏙️ तुमचे शहर निवडा:
-1️⃣ Pune
-2️⃣ PCMC`
+  en: `🏙️ Please select your city:`,
+  hi: `🏙️ अपना शहर चुनें:`,
+  mr: `🏙️ तुमचे शहर निवडा:`
 };
 
 const puneAreas = [
@@ -501,28 +479,19 @@ const villaPriceMessage = (sqft, price, rate, condition, lang) => {
 ✔ Size: ${sqft} Sq.Ft
 ✔ Condition: ${condition}
 ✔ Rate: ₹${rate}/sq.ft
-✔ Total Cost: ₹${price}
+✔ Total Cost: ₹${price}`;
 
-Reply *1* to proceed with booking
-Reply *2* to cancel`;
-
-  const hi = `💰 अनुमानित किंमत:
+  const hi = `💰 अनुमानित कीमत:
 ✔ साइज: ${sqft} Sq.Ft
 ✔ कंडिशन: ${condition}
 ✔ रेट: ₹${rate}/sq.ft
-✔ कुल खर्च: ₹${price}
-
-बुकिंग के लिए *1* रिप्लाई करें
-कैंसिल के लिए *2* रिप्लाई करें`;
+✔ कुल खर्च: ₹${price}`;
 
   const mr = `💰 अंदाजित किंमत:
 ✔ साइज: ${sqft} Sq.Ft
 ✔ कंडिशन: ${condition}
 ✔ रेट: ₹${rate}/sq.ft
-✔ एकूण खर्च: ₹${price}
-
-बुकिंगसाठी *1* रिप्लाय करा
-कैंसलसाठी *2* रिप्लाय करा`;
+✔ एकूण खर्च: ₹${price}`;
 
   return lang === 'hi' ? hi : lang === 'mr' ? mr : en;
 };
@@ -561,13 +530,13 @@ const flatDeepCleaningPriceMessage = (status, bhk, lang) => {
   // proceed/cancel only.
   const canOfferAddons = (status === "Furnished" || status === "Post Interior Cleaning") && bhk !== "4";
   if (canOfferAddons) {
-    addOnsEn = `\n\n✨ *Available Add-ons:*\n• Kitchen Internal: ₹450  • Sofa: ₹150/seat\n• Chimney: ₹399  • Microwave: ₹199\n• Fridge: ₹399  • Mattress: ₹499\n\nReply *1* to continue without add-ons\nReply *2* to select add-ons\nReply *3* to cancel`;
-    addOnsHi = `\n\n✨ *उपलब्ध ऐड-ऑन:*\n• किचन इंटरनल: ₹450  • सोफा: ₹150/सीट\n• चिमनी: ₹399  • माइक्रोवेव: ₹199\n• फ्रिज: ₹399  • मैट्रेस: ₹499\n\n*1* रिप्लाई करें — ऐड-ऑन के बिना आगे बढ़ें\n*2* रिप्लाई करें — ऐड-ऑन चुनें\n*3* रिप्लाई करें — कैंसिल`;
-    addOnsMr = `\n\n✨ *उपलब्ध ऐड-ऑन:*\n• किचन इंटरनल: ₹450  • सोफा: ₹150/सीट\n• चिमणी: ₹399  • मायक्रोवेव्ह: ₹199\n• फ्रिज: ₹399  • मॅट्रेस: ₹499\n\n*1* रिप्लाय करा — ऐड-ऑनशिवाय पुढे चला\n*2* रिप्लाय करा — ऐड-ऑन निवडा\n*3* रिप्लाय करा — कैंसल`;
+    addOnsEn = `\n\n✨ *Available Add-ons:*\n• Kitchen Internal: ₹450  • Sofa: ₹150/seat\n• Chimney: ₹399  • Microwave: ₹199\n• Fridge: ₹399  • Mattress: ₹499`;
+    addOnsHi = `\n\n✨ *उपलब्ध ऐड-ऑन:*\n• किचन इंटरनल: ₹450  • सोफा: ₹150/सीट\n• चिमनी: ₹399  • माइक्रोवेव: ₹199\n• फ्रिज: ₹399  • मैट्रेस: ₹499`;
+    addOnsMr = `\n\n✨ *उपलब्ध ऐड-ऑन:*\n• किचन इंटरनल: ₹450  • सोफा: ₹150/सीट\n• चिमणी: ₹399  • मायक्रोवेव्ह: ₹199\n• फ्रिज: ₹399  • मॅट्रेस: ₹499`;
   } else {
-    addOnsEn = `\n\nReply *1* to proceed with booking\nReply *2* to cancel`;
-    addOnsHi = `\n\nबुकिंग के लिए *1* रिप्लाई करें\nकैंसिल के लिए *2* रिप्लाई करें`;
-    addOnsMr = `\n\nबुकिंगसाठी *1* रिप्लाय करा\nकैंसलसाठी *2* रिप्लाय करा`;
+    addOnsEn = ``;
+    addOnsHi = ``;
+    addOnsMr = ``;
   }
 
   const en = `💰 Estimated Pricing:
@@ -621,11 +590,7 @@ const bathroomSubMessage = (count, price, lang) => {
 ✅ Floor & wall tile deep scrubbing
 ✅ Fixture & fittings cleaning
 ✅ Mirror & glass cleaning
-📌 Valid for ${count} bathrooms only
-
-Reply:
-1️⃣ Continue Booking
-2️⃣ Talk to Support`;
+📌 Valid for ${count} bathrooms only`;
 
   const hi = `✨ 3 महीने का बाथरूम सब्सक्रिप्शन प्लान (${count} बाथरूम)
 💵 ₹${price} — 3 महीने के लिए (कुल 3 विजिट)
@@ -635,11 +600,7 @@ Reply:
 ✅ फ्लोर और टाइल्स की गहरी सफाई
 ✅ फिटिंग्स और फिक्स्चर की सफाई
 ✅ मिरर और शीशे की सफाई
-📌 सिर्फ ${count} बाथरूम के लिए वैलिड
-
-रिप्लाई करें:
-1️⃣ बुकिंग जारी रखें
-2️⃣ सपोर्ट से बात करें`;
+📌 सिर्फ ${count} बाथरूम के लिए वैलिड`;
 
   const mr = `✨ 3 महिन्यांचा बाथरूम सब्सक्रिप्शन प्लान (${count} बाथरूम)
 💵 ₹${price} — 3 महिन्यांसाठी (एकूण 3 व्हिजिट)
@@ -649,11 +610,7 @@ Reply:
 ✅ फ्लोर आणि टाइल्सची साफसफाई
 ✅ फिटिंग्ज आणि फिक्स्चरची साफसफाई
 ✅ मिरर आणि काचेची साफसफाई
-📌 फक्त ${count} बाथरूमसाठी वैध
-
-रिप्लाय करा:
-1️⃣ बुकिंग सुरू ठेवा
-2️⃣ सपोर्टशी बोला`;
+📌 फक्त ${count} बाथरूमसाठी वैध`;
 
   return lang === 'hi' ? hi : lang === 'mr' ? mr : en;
 };
@@ -694,10 +651,7 @@ const bathroomOneTimePriceMessage = (count, lang) => {
 ✅ Wash Basin Cleaning
 ✅ Mirror Cleaning
 
-💵 Estimated Cost: ${price}
-
-Reply 1 to Continue Booking
-Reply 2 to Talk to Support`;
+💵 Estimated Cost: ${price}`;
 
   const hi = `✨ डीप क्लीनिंग में शामिल है:
 ✅ मशीन स्क्रबिंग
@@ -707,10 +661,7 @@ Reply 2 to Talk to Support`;
 ✅ वॉश बेसिन क्लीनिंग
 ✅ मिरर क्लीनिंग
 
-💵 अनुमानित खर्च: ${price}
-
-बुकिंग जारी रखने के लिए 1 रिप्लाई करें
-सपोर्ट के लिए 2 रिप्लाई करें`;
+💵 अनुमानित खर्च: ${price}`;
 
   const mr = `✨ डीप क्लीनिंगमध्ये समाविष्ट आहे:
 ✅ मशीन स्क्रबिंग
@@ -720,10 +671,7 @@ Reply 2 to Talk to Support`;
 ✅ वॉश बेसिन क्लीनिंग
 ✅ मिरर क्लीनिंग
 
-💵 अंदाजित खर्च: ${price}
-
-बुकिंग सुरू ठेवण्यासाठी 1 रिप्लाय करा
-सपोर्टसाठी 2 रिप्लाय करा`;
+💵 अंदाजित खर्च: ${price}`;
 
   return lang === 'hi' ? hi : lang === 'mr' ? mr : en;
 };
@@ -1219,19 +1167,15 @@ function getMaidPlanMessage(timing, lang) {
   if (isPartTime(timing)) {
     return `${header}
 
-1️⃣ ${planBlocks.partTimeStandard[L]}
+${planBlocks.partTimeStandard[L]}
 
-2️⃣ ${planBlocks.partTimeVerified[L]}
-
-${replyHintTwo[L]}
+${planBlocks.partTimeVerified[L]}
 
 ${footer}`;
   }
   return `${header}
 
-1️⃣ ${planBlocks.fullTimeVerified[L]}
-
-${replyHintSingle[L]}
+${planBlocks.fullTimeVerified[L]}
 
 ${footer}`;
 }
@@ -1251,10 +1195,7 @@ function confirmMessage(data, lang = "en") {
 👩 मेड चुनी    : ${data.maidChoice}
 🏠 पता          : ${address}
 📅 इंटरव्यू डेट : ${data.startDate}
-📦 प्लान        : ${plan}
-
-*1* रिप्लाई करें — कन्फर्म ✅
-*2* रिप्लाई करें — कैंसिल ❌`;
+📦 प्लान        : ${plan}`;
 
   if (lang === "mr") return `📋 *बुकिंग डिटेल्स*
 
@@ -1265,10 +1206,7 @@ function confirmMessage(data, lang = "en") {
 👩 मेड निवडली   : ${data.maidChoice}
 🏠 पत्ता         : ${address}
 📅 इंटरव्ह्यू डेट: ${data.startDate}
-📦 प्लान         : ${plan}
-
-*1* रिप्लाय करा — कन्फर्म ✅
-*2* रिप्लाय करा — कैंसल ❌`;
+📦 प्लान         : ${plan}`;
 
   return `📋 *Booking Summary*
 
@@ -1279,10 +1217,7 @@ function confirmMessage(data, lang = "en") {
 👩 Maid Chosen: ${data.maidChoice}
 🏠 Address    : ${address}
 📅 Interview Date : ${data.startDate}
-📦 Plan       : ${plan}
-
-Reply *1* to Confirm ✅
-Reply *2* to Cancel ❌`;
+📦 Plan       : ${plan}`;
 }
 
 function adminCleaningAlert(data) {
@@ -1307,30 +1242,21 @@ const cleaningConfirmMessage = (data, lang) => {
 🧹 Service    : ${data.cleaningServiceType}
 ℹ️ Details    : ${data.cleaningDetails}
 🏠 Location   : ${data.cleaningLocation}
-📅 Date       : ${data.cleaningDate}${priceDisplay}
-
-Reply *1* to Confirm ✅
-Reply *2* to Cancel ❌`;
+📅 Date       : ${data.cleaningDate}${priceDisplay}`;
 
   const hi = `📋 *क्लीनिंग बुकिंग डिटेल*
 👤 नाम       : ${data.contactName}
 🧹 सर्विस    : ${data.cleaningServiceType}
 ℹ️ डिटेल     : ${data.cleaningDetails}
 🏠 लोकेशन   : ${data.cleaningLocation}
-📅 तारीख     : ${data.cleaningDate}${priceDisplay}
-
-कन्फर्म करने के लिए *1* रिप्लाई करें ✅
-कैंसल करने के लिए *2* रिप्लाई करें ❌`;
+📅 तारीख     : ${data.cleaningDate}${priceDisplay}`;
 
   const mr = `📋 *क्लिनिंग बुकिंग डिटेल*
 👤 नाव       : ${data.contactName}
 🧹 सर्विस    : ${data.cleaningServiceType}
 ℹ️ डिटेल     : ${data.cleaningDetails}
 🏠 लोकेशन   : ${data.cleaningLocation}
-📅 तारीख     : ${data.cleaningDate}${priceDisplay}
-
-कन्फर्म करण्यासाठी *1* रिप्लाय करा ✅
-कैंसल करण्यासाठी *2* रिप्लाय करा ❌`;
+📅 तारीख     : ${data.cleaningDate}${priceDisplay}`;
 
   return lang === 'hi' ? hi : lang === 'mr' ? mr : en;
 };

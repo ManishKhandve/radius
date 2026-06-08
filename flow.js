@@ -815,11 +815,11 @@ async function processState(session, body, senderId, msg) {
       if (body === "1") {
         chosen = "Flat Deep Cleaning";
         nextState = "CLEANING_FLAT_STATUS";
-        nextMessage = config.flatStatusMessage[session.data.lang];
+        nextMessage = flatStatusPrompt(session.data.lang);
       } else if (body === "2") {
         chosen = "Bathroom Cleaning";
         nextState = "CLEANING_BATHROOM_TYPE";
-        nextMessage = config.bathroomTypeMessage[session.data.lang];
+        nextMessage = bathroomTypePrompt(session.data.lang);
       } else if (body === "3") {
         chosen = "Mini Service Package";
         nextState = "CLEANING_MINI_SERVICE";
