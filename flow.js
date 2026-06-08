@@ -203,32 +203,34 @@ function cityPrompt(lang) {
 
 function confirmPrompt(data, lang) {
   const titles = {
-    en: { confirm: '✅ Confirm', cancel: '❌ Cancel' },
-    hi: { confirm: '✅ कन्फर्म', cancel: '❌ कैंसिल' },
-    mr: { confirm: '✅ कन्फर्म', cancel: '❌ कैंसल' },
-  }[lang] || { confirm: '✅ Confirm', cancel: '❌ Cancel' };
+    en: { confirm: '✅ Confirm', cancel: '❌ Cancel', restart: '🔄 Restart' },
+    hi: { confirm: '✅ कन्फर्म', cancel: '❌ कैंसिल', restart: '🔄 रीस्टार्ट' },
+    mr: { confirm: '✅ कन्फर्म', cancel: '❌ कैंसल', restart: '🔄 रीस्टार्ट' },
+  }[lang] || { confirm: '✅ Confirm', cancel: '❌ Cancel', restart: '🔄 Restart' };
   return {
     type: 'buttons',
     body: config.confirmMessage(data, lang),
     buttons: [
       { id: '1', title: titles.confirm },
       { id: '2', title: titles.cancel },
+      { id: 'restart', title: titles.restart },
     ],
   };
 }
 
 function cleaningConfirmPrompt(data, lang) {
   const titles = {
-    en: { confirm: '✅ Confirm', cancel: '❌ Cancel' },
-    hi: { confirm: '✅ कन्फर्म', cancel: '❌ कैंसिल' },
-    mr: { confirm: '✅ कन्फर्म', cancel: '❌ कैंसल' },
-  }[lang] || { confirm: '✅ Confirm', cancel: '❌ Cancel' };
+    en: { confirm: '✅ Confirm', cancel: '❌ Cancel', restart: '🔄 Restart' },
+    hi: { confirm: '✅ कन्फर्म', cancel: '❌ कैंसिल', restart: '🔄 रीस्टार्ट' },
+    mr: { confirm: '✅ कन्फर्म', cancel: '❌ कैंसल', restart: '🔄 रीस्टार्ट' },
+  }[lang] || { confirm: '✅ Confirm', cancel: '❌ Cancel', restart: '🔄 Restart' };
   return {
     type: 'buttons',
     body: config.cleaningConfirmMessage(data, lang),
     buttons: [
       { id: '1', title: titles.confirm },
       { id: '2', title: titles.cancel },
+      { id: 'restart', title: titles.restart },
     ],
   };
 }
@@ -240,6 +242,8 @@ function cleaningConfirmPrompt(data, lang) {
 
 const T = {
   en: {
+    choose:     'Choose',
+    restart_btn:'🔄 Restart',
     work_q:     '🧹 What type of work do you need help with?',
     timing_q:   '⏰ What timing works best for you?',
     budget_q:   "💰 What's your monthly budget for the maid's salary?",
@@ -277,6 +281,8 @@ const T = {
     onetime:    'One-Time',
   },
   hi: {
+    choose:     'चुनें',
+    restart_btn:'🔄 रीस्टार्ट',
     work_q:     '🧹 कौन से काम की जरूरत है?',
     timing_q:   '⏰ कितने घंटे काम चाहिए?',
     budget_q:   '💰 मेड की सैलरी का मंथली बजट?',
@@ -314,6 +320,8 @@ const T = {
     onetime:    'एक बार',
   },
   mr: {
+    choose:     'निवडा',
+    restart_btn:'🔄 रीस्टार्ट',
     work_q:     '🧹 कोणत्या कामाची गरज आहे?',
     timing_q:   '⏰ किती वेळ काम हवे आहे?',
     budget_q:   '💰 मेडच्या पगाराचे मंथली बजट?',
@@ -356,7 +364,7 @@ function t(lang, key) { return (T[lang] || T.en)[key] || T.en[key] || ''; }
 function workTypePrompt(lang) {
   return {
     type: 'list',
-    body: t(lang, 'work_q'),
+    body: t(lang, 'choose'),
     buttonLabel: t(lang, 'select_btn'),
     sections: [{
       rows: [
@@ -373,7 +381,7 @@ function workTypePrompt(lang) {
 function timingPrompt(lang) {
   return {
     type: 'list',
-    body: t(lang, 'timing_q'),
+    body: t(lang, 'choose'),
     buttonLabel: t(lang, 'select_btn'),
     sections: [{
       rows: [
@@ -399,7 +407,7 @@ function budgetPrompt(timing, lang) {
 function cleaningServicePrompt(lang) {
   return {
     type: 'list',
-    body: t(lang, 'service_q'),
+    body: t(lang, 'choose'),
     buttonLabel: t(lang, 'select_btn'),
     sections: [{
       rows: [
@@ -450,7 +458,7 @@ function emptySubPrompt(lang) {
 function flatBhkPrompt(lang) {
   return {
     type: 'list',
-    body: t(lang, 'bhk_q'),
+    body: t(lang, 'choose'),
     buttonLabel: t(lang, 'select_btn'),
     sections: [{
       rows: [
@@ -489,7 +497,7 @@ function bathroomSubCountPrompt(lang) {
 function bathroomOneTimeCountPrompt(lang) {
   return {
     type: 'list',
-    body: t(lang, 'bath_one_q'),
+    body: t(lang, 'choose'),
     buttonLabel: t(lang, 'select_btn'),
     sections: [{
       rows: [
@@ -567,14 +575,17 @@ function maidNoMatchPrompt(lang) {
 function maidPlanPrompt(timing, lang) {
   const opts = config.getMaidPlanOptions(timing);
   const entries = Object.entries(opts);
-  // Use buttons if 1-3 plans (current behavior is 1 or 2)
+  const buttons = entries.slice(0, 2).map(([id, label]) => ({
+    id,
+    title: label.length > 20 ? label.slice(0, 18) + '…' : label,
+  }));
+  if (buttons.length < 3) {
+    buttons.push({ id: 'restart', title: t(lang, 'restart_btn') });
+  }
   return {
     type: 'buttons',
     body: config.getMaidPlanMessage(timing, lang),
-    buttons: entries.slice(0, 3).map(([id, label]) => ({
-      id,
-      title: label.length > 20 ? label.slice(0, 18) + '…' : label,
-    })),
+    buttons,
   };
 }
 
@@ -584,7 +595,7 @@ function pcmcAreaPrompt(lang) {
   rows.push({ id: String(areas.length + 1), title: t(lang, 'other') });
   return {
     type: 'list',
-    body: t(lang, 'pcmc_areas'),
+    body: t(lang, 'choose'),
     buttonLabel: t(lang, 'select_area'),
     sections: [{ rows }],
   };
@@ -726,30 +737,6 @@ async function handleMessage(msg) {
   // so customer reply isn't slowed by the Sheets round-trip.
   if (getSession(senderId) !== null) {
     saveProgress(session);
-  }
-
-  // Append the Call + Restart hint if the session is still active
-  // (i.e. they haven't finished or cancelled).
-  if (getSession(senderId) !== null) {
-    const lang = session.data.lang || "en";
-    const hint = lang === "hi"
-      ? `\n\n0️⃣ कस्टम प्रश्नों के लिए, कॉल करें: ${config.contactNumber}\n🔄 दोबारा शुरू करने के लिए *restart* टाइप करें`
-      : lang === "mr"
-      ? `\n\n0️⃣ अधिक माहितीसाठी, कॉल करा: ${config.contactNumber}\n🔄 पुन्हा सुरू करण्यासाठी *restart* टाइप करा`
-      : `\n\n0️⃣ For custom questions, Call us: ${config.contactNumber}\n🔄 Type *restart* anytime to start over`;
-
-    for (let i = responses.length - 1; i >= 0; i--) {
-      const r = responses[i];
-      if (typeof r === "string" && !r.includes("0️⃣")) {
-        responses[i] = r + hint;
-        break;
-      }
-      // Button + list messages: append the hint to the body text instead.
-      if (typeof r === "object" && r && (r.type === "buttons" || r.type === "list") && r.body && !r.body.includes("0️⃣")) {
-        r.body = r.body + hint;
-        break;
-      }
-    }
   }
   
   return responses;
@@ -893,6 +880,7 @@ async function processState(session, body, senderId, msg) {
         buttons: [
           { id: '1', title: t(session.data.lang, 'booking') },
           { id: '2', title: t(session.data.lang, 'cancel') },
+          { id: 'restart', title: t(session.data.lang, 'restart_btn') },
         ],
       }];
     }
@@ -969,6 +957,7 @@ async function processState(session, body, senderId, msg) {
           : [
               { id: '1', title: t(lang, 'continue') },
               { id: '2', title: t(lang, 'cancel') },
+              { id: 'restart', title: t(lang, 'restart_btn') },
             ];
         return [{ type: 'buttons', body: priceBody, buttons }];
       } else {
@@ -1006,6 +995,7 @@ async function processState(session, body, senderId, msg) {
           buttons: [
             { id: '1', title: t(session.data.lang, 'continue') },
             { id: '2', title: t(session.data.lang, 'support') },
+            { id: 'restart', title: t(session.data.lang, 'restart_btn') },
           ],
         }];
       } else {
@@ -1026,6 +1016,7 @@ async function processState(session, body, senderId, msg) {
           buttons: [
             { id: '1', title: t(session.data.lang, 'continue') },
             { id: '2', title: t(session.data.lang, 'support') },
+            { id: 'restart', title: t(session.data.lang, 'restart_btn') },
           ],
         }];
       } else {
