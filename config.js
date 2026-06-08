@@ -528,9 +528,27 @@ const flatDeepCleaningPriceMessage = (status, bhk, lang) => {
   // proceed/cancel only.
   const canOfferAddons = (status === "Furnished" || status === "Post Interior Cleaning") && bhk !== "4";
   if (canOfferAddons) {
-    addOnsEn = `\n\n✨ *Available Add-ons:*\n• Kitchen Internal: ₹450  • Sofa: ₹150/seat\n• Chimney: ₹399  • Microwave: ₹199\n• Fridge: ₹399  • Mattress: ₹499`;
-    addOnsHi = `\n\n✨ *उपलब्ध ऐड-ऑन:*\n• किचन इंटरनल: ₹450  • सोफा: ₹150/सीट\n• चिमनी: ₹399  • माइक्रोवेव: ₹199\n• फ्रिज: ₹399  • मैट्रेस: ₹499`;
-    addOnsMr = `\n\n✨ *उपलब्ध ऐड-ऑन:*\n• किचन इंटरनल: ₹450  • सोफा: ₹150/सीट\n• चिमणी: ₹399  • मायक्रोवेव्ह: ₹199\n• फ्रिज: ₹399  • मॅट्रेस: ₹499`;
+    addOnsEn = `\n\n✨ *Available Add-ons:*
+• Kitchen Internal: ₹450
+• Sofa: ₹150/seat
+• Chimney: ₹399
+• Microwave: ₹199
+• Fridge: ₹399
+• Mattress: ₹499`;
+    addOnsHi = `\n\n✨ *उपलब्ध ऐड-ऑन:*
+• किचन इंटरनल: ₹450
+• सोफा: ₹150/सीट
+• चिमनी: ₹399
+• माइक्रोवेव: ₹199
+• फ्रिज: ₹399
+• मैट्रेस: ₹499`;
+    addOnsMr = `\n\n✨ *उपलब्ध ऐड-ऑन:*
+• किचन इंटरनल: ₹450
+• सोफा: ₹150/सीट
+• चिमणी: ₹399
+• मायक्रोवेव्ह: ₹199
+• फ्रिज: ₹399
+• मॅट्रेस: ₹499`;
   } else {
     addOnsEn = ``;
     addOnsHi = ``;
