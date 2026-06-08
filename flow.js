@@ -681,11 +681,11 @@ async function handleMessage(msg) {
     return [config.supportMessage[savedLang]];
   }
 
-  // Images are only accepted in PAYMENT_RECEIPT state. Anywhere else
+  // Images are only accepted in PAYMENT_RECEIPT or CLEANING_PAYMENT_RECEIPT state. Anywhere else
   // we ignore them — log it so silent drops are visible in debug logs.
   if (msg.type === "image") {
     const existing = sessions.get(senderId);
-    if (!existing || existing.state !== "PAYMENT_RECEIPT") {
+    if (!existing || (existing.state !== "PAYMENT_RECEIPT" && existing.state !== "CLEANING_PAYMENT_RECEIPT")) {
       console.log('[flow] ignored image from', senderId, '(state:', existing?.state || 'none', ')');
       return [];
     }
@@ -1303,7 +1303,22 @@ async function processState(session, body, senderId, msg) {
 
     case "CLEANING_CONFIRM": {
       if (body === "1") {
-        return finishCleaning(session, senderId);
+        const d = session.data;
+        (async () => {
+          try {
+            await sheets.updateCleaningBooking(d.cleaningBookingId, {
+              details: d.cleaningDetails || "N/A",
+              location: d.cleaningLocation,
+              preferredDate: d.cleaningDate,
+              estimatedPrice: d.cleaningPrice,
+              status: "Payment Pending",
+              paymentStatus: "Pending",
+            });
+          } catch (e) { console.error("[flow] cleaning booking confirm err:", e.message); }
+        })();
+
+        session.state = "CLEANING_PAYMENT_RECEIPT";
+        return [config.cleaningPaymentMessage[d.lang]];
       } else if (body === "2") {
         const lang = session.data.lang || "en";
         // Mark the lead as explicitly cancelled (not just abandoned)
@@ -1335,6 +1350,53 @@ async function processState(session, body, senderId, msg) {
       } else {
         return [cleaningConfirmPrompt(session.data, session.data.lang)];
       }
+    }
+
+    case "CLEANING_PAYMENT_RECEIPT": {
+      const lang = session.data.lang || "en";
+      const isImage = msg && msg.type === "image";
+
+      if (!isImage) {
+        const nudge = lang === "hi"
+          ? "📸 कृपया पेमेंट का *स्क्रीनशॉट (इमेज)* भेजें। टेक्स्ट मैसेज स्वीकार नहीं किए जाते।"
+          : lang === "mr"
+          ? "📸 कृपया पेमेंटचा *स्क्रीनशॉट (इमेज)* पाठवा. टेक्स्ट मेसेज स्वीकारले जात नाहीत."
+          : "📸 Please send a *screenshot (image)* of your payment receipt. Text messages are not accepted — only an actual screenshot will be processed.";
+        return [nudge];
+      }
+
+      const caption = (msg.body || "").trim();
+      const d = session.data;
+
+      let receiptUrl = "";
+      try {
+        const media = await msg.downloadMedia();
+        receiptUrl = await uploadReceipt(d.cleaningBookingId, media.data, media.mimetype);
+      } catch (e) {
+        console.error("[flow] cleaning receipt upload err:", e.message);
+        receiptUrl = caption ? `Upload failed — caption: ${caption}` : "Upload failed — check WhatsApp";
+      }
+
+      (async () => {
+        try {
+          await sheets.updateCleaningBooking(d.cleaningBookingId, {
+            status: "Payment Received",
+            paymentStatus: "Receipt Received",
+            receiptUrl: receiptUrl,
+          });
+        } catch (e) { console.error("[flow] cleaning payment update err:", e.message); }
+      })();
+
+      const adminAlert = config.adminCleaningPaymentAlert({
+        customerName: d.contactName,
+        phone: d.whatsappNumber,
+        bookingId: d.cleaningBookingId,
+        serviceType: d.cleaningServiceType,
+        receiptNote: receiptUrl,
+      });
+
+      clearSession(senderId);
+      return [config.cleaningReceiptReceivedMessage[lang], { _adminAlert: adminAlert, _adminImageId: msg.mediaId }];
     }
 
     // ==========================================
@@ -1703,7 +1765,7 @@ async function processState(session, body, senderId, msg) {
       });
 
       clearSession(senderId);
-      return [config.receiptReceivedMessage[lang], { _adminAlert: adminAlert }];
+      return [config.receiptReceivedMessage[lang], { _adminAlert: adminAlert, _adminImageId: msg.mediaId }];
     }
     default: {
       clearSession(senderId);

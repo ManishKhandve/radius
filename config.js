@@ -1343,6 +1343,29 @@ upi://pay?pa=${upiId}&pn=Cleanly&am=1000&cu=INR
 पेमेंटनंतर व्हेरिफिकेशनसाठी स्क्रीनशॉट इथे पाठवा.`
 };
 
+const cleaningPaymentMessage = {
+  en: `💰 Please pay ₹199 slot booking amount.
+
+👉 Tap to pay:
+https://rzp.io/rzp/oJcfIuc
+
+After paying, please share the payment screenshot here for verification.`,
+
+  hi: `💰 कृपया ₹199 स्लॉट बुकिंग राशि का भुगतान करें।
+
+👉 भुगतान के लिए यहाँ टैप करें:
+https://rzp.io/rzp/oJcfIuc
+
+भुगतान के बाद, कृपया वेरिफिकेशन के लिए पेमेंट का स्क्रीनशॉट यहाँ भेजें।`,
+
+  mr: `💰 कृपया ₹199 स्लॉट बुकिंग रक्कम भरा.
+
+👉 पेमेंटसाठी इथे टॅप करा:
+https://rzp.io/rzp/oJcfIuc
+
+पेमेंटनंतर व्हेरिफिकेशनसाठी स्क्रीनशॉट इथे पाठवा.`
+};
+
 const receiptReceivedMessage = {
   en: `✅ *Receipt Received!*
 
@@ -1369,6 +1392,41 @@ Type *maid* — for maid service`,
   mr: `✅ *Transaction Receipt मिळाली!*
 
 धन्यवाद! आमची टीम तुमचे पेमेंट व्हेरिफाय करून 1 तासांत बुकिंग कन्फर्म करेल.
+
+📞 महत्त्वाच्या प्रश्नांसाठी: ${contactNumber}
+— ${businessName}
+
+🔁 *दुसरी सेवा हवी आहे?*
+*clean* टाइप करा — क्लीनिंगसाठी
+*maid* टाइप करा — मेड सर्विससाठी`
+};
+
+const cleaningReceiptReceivedMessage = {
+  en: `✅ *Receipt Received!*
+
+Thank you! Our admin will verify your slot payment and confirm your cleaning service slot within 2–4 hours.
+
+📞 For urgent queries: ${contactNumber}
+— ${businessName}
+
+🔁 *Need another service?*
+Type *clean* — for cleaning
+Type *maid* — for maid service`,
+
+  hi: `✅ *Transaction Receipt मिल गई!*
+
+धन्यवाद! हमारी टीम आपका स्लॉट पेमेंट वेरिफाई करके १ घंटे में क्लीनिंग स्लॉट कन्फर्म करेगी।
+
+📞 जरूरी सवालों के लिए: ${contactNumber}
+— ${businessName}
+
+🔁 *कोई और सेवा चाहिए?*
+*clean* टाइप करें — क्लीनिंग के लिए
+*maid* टाइप करें — मेड सर्विस के लिए`,
+
+  mr: `✅ *Transaction Receipt मिळाली!*
+
+धन्यवाद! आमची टीम तुमचे स्लॉट पेमेंट व्हेरिफाय करून 1 तासांत क्लीनिंग स्लॉट कन्फर्म करेल.
 
 📞 महत्त्वाच्या प्रश्नांसाठी: ${contactNumber}
 — ${businessName}
@@ -1420,6 +1478,18 @@ function adminPaymentAlert(data) {
 📞 WhatsApp  : ${data.phone}
 🔖 Booking ID: ${data.bookingId}
 👩 Maid      : ${data.maidChoice}
+📝 Receipt   : ${data.receiptNote}
+
+➡️ Verify payment and confirm booking with customer.`;
+}
+
+function adminCleaningPaymentAlert(data) {
+  return `💰 *CLEANING PAYMENT RECEIPT — Verify Now*
+
+👤 Customer  : ${data.customerName}
+📞 WhatsApp  : ${data.phone}
+🔖 Booking ID: ${data.bookingId}
+🧹 Service   : ${data.serviceType}
 📝 Receipt   : ${data.receiptNote}
 
 ➡️ Verify payment and confirm booking with customer.`;
@@ -1499,4 +1569,7 @@ module.exports = {
   receiptReceivedMessage,
   adminPaymentAlert,
   adminIntroMessage,
+  cleaningPaymentMessage,
+  cleaningReceiptReceivedMessage,
+  adminCleaningPaymentAlert,
 };

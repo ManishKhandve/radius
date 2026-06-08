@@ -287,7 +287,7 @@ async function appendCleaningBooking(data) {
     const sheets = await getClient();
     await sheets.spreadsheets.values.append({
       spreadsheetId: sheetId(),
-      range: `${SHEET_CLEANING_BOOKINGS}!A:L`,
+      range: `${SHEET_CLEANING_BOOKINGS}!A:O`,
       valueInputOption: "USER_ENTERED",
       insertDataOption: "INSERT_ROWS",
       requestBody: {
@@ -305,6 +305,9 @@ async function appendCleaningBooking(data) {
             data.source             || "WhatsApp Bot",                                  // J
             data.estimatedPrice     || "",                                              // K
             data.feedback           || "",                                              // L
+            data.paymentStatus      || "Pending",                                       // M
+            data.receiptUrl         || "",                                              // N
+            data.paymentVerified    || "",                                              // O
           ],
         ],
       },
@@ -470,6 +473,9 @@ const CLEANING_COL_MAP = {
   source:         'J',
   estimatedPrice: 'K',
   feedback:       'L',
+  paymentStatus:  'M',
+  receiptUrl:     'N',
+  paymentVerified:'O',
 };
 
 async function updateCleaningBookingFields(bookingId, fields = {}) {
@@ -581,6 +587,9 @@ async function updateCleaningBooking(bookingId, updates = {}) {
     if (updates.preferredDate  !== undefined) data.push({ range: `${SHEET_CLEANING_BOOKINGS}!G${row}`, values: [[updates.preferredDate]] });
     if (updates.status         !== undefined) data.push({ range: `${SHEET_CLEANING_BOOKINGS}!H${row}`, values: [[updates.status]] });
     if (updates.estimatedPrice !== undefined) data.push({ range: `${SHEET_CLEANING_BOOKINGS}!K${row}`, values: [[updates.estimatedPrice]] });
+    if (updates.paymentStatus  !== undefined) data.push({ range: `${SHEET_CLEANING_BOOKINGS}!M${row}`, values: [[updates.paymentStatus]] });
+    if (updates.receiptUrl     !== undefined) data.push({ range: `${SHEET_CLEANING_BOOKINGS}!N${row}`, values: [[updates.receiptUrl]] });
+    if (updates.paymentVerified!== undefined) data.push({ range: `${SHEET_CLEANING_BOOKINGS}!O${row}`, values: [[updates.paymentVerified]] });
     if (data.length === 0) return;
 
     await sheets.spreadsheets.values.batchUpdate({
@@ -630,6 +639,38 @@ async function markPaymentVerified(bookingId) {
   }
 }
 
+async function markCleaningPaymentVerified(bookingId) {
+  try {
+    const sheets = await getClient();
+    const res = await sheets.spreadsheets.values.get({
+      spreadsheetId: sheetId(),
+      range: `${SHEET_CLEANING_BOOKINGS}!A:A`,
+    });
+
+    const rows = res.data.values || [];
+    let targetRow = -1;
+    for (let i = 1; i < rows.length; i++) {
+      if (rows[i] && rows[i][0] === bookingId) { targetRow = i + 1; break; }
+    }
+    if (targetRow === -1) { console.warn(`[sheets] Cleaning booking not found for verify: ${bookingId}`); return; }
+
+    const today = new Date().toLocaleDateString("en-IN");
+    await sheets.spreadsheets.values.batchUpdate({
+      spreadsheetId: sheetId(),
+      requestBody: {
+        valueInputOption: "USER_ENTERED",
+        data: [
+          { range: `${SHEET_CLEANING_BOOKINGS}!M${targetRow}`, values: [["Payment Verified"]] },
+          { range: `${SHEET_CLEANING_BOOKINGS}!O${targetRow}`, values: [[today]] },
+        ],
+      },
+    });
+    console.log(`[sheets] Cleaning payment marked verified: ${bookingId}`);
+  } catch (err) {
+    console.error("[sheets] markCleaningPaymentVerified error:", err.message);
+  }
+}
+
 // ─── Exports ─────────────────────────────────────────────────
 module.exports = {
   appendCustomer,
@@ -642,6 +683,7 @@ module.exports = {
   updateCustomerStatus,
   updateBookingPayment,
   markPaymentVerified,
+  markCleaningPaymentVerified,
   generateCustomerId,
   generateBookingId,
   warmCounters,

@@ -306,6 +306,63 @@ async function watiSend(phone, text, opts = {}) {
   return { ok: false, status: 0, body: lastReason };
 }
 
+// Meta image send helper — sends an image by media ID.
+// Caption is optional and can be up to 1024 chars.
+async function watiSendImage(phone, mediaId, caption = '') {
+  if (!phone || !mediaId) {
+    return { ok: false, status: 0, body: 'missing phone or mediaId' };
+  }
+  const url = `${META_GRAPH_BASE}/${META_PHONE_NUMBER_ID}/messages`;
+  const payload = {
+    messaging_product: 'whatsapp',
+    recipient_type:    'individual',
+    to:                phone,
+    type:              'image',
+    image: {
+      id: mediaId
+    }
+  };
+  if (caption) {
+    payload.image.caption = String(caption).slice(0, 1024);
+  }
+
+  console.log(`[meta] → send image (${mediaId}) to ${phone}`);
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), SEND_TIMEOUT_MS);
+  try {
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${META_ACCESS_TOKEN}`,
+        'Content-Type':  'application/json',
+      },
+      body: JSON.stringify(payload),
+      signal: controller.signal,
+    });
+    const body = await res.text();
+    let metaOk = res.ok;
+    let metaInfo = '';
+    try {
+      const j = JSON.parse(body);
+      if (j?.error) { metaOk = false; metaInfo = `${j.error.code || '?'}: ${j.error.message || ''}`; }
+      else if (j?.messages?.[0]?.id) { metaInfo = j.messages[0].id.slice(0, 40); }
+    } catch {}
+    if (res.ok && metaOk) {
+      console.log(`[meta] ✓ image sent to ${phone}${metaInfo ? ' — ' + metaInfo : ''}`);
+      sendMetrics.sent++;
+      return { ok: true, status: res.status, body };
+    }
+    console.error(`[meta] ✗ image HTTP ${res.status} to ${phone}: ${metaInfo || body.slice(0, 200)}`);
+    recordFailure(phone, `image: ${metaInfo || 'HTTP ' + res.status}`, caption);
+    return { ok: false, status: res.status, body };
+  } catch (e) {
+    console.error('[meta] image send exception:', e.message);
+    return { ok: false, status: 0, body: e.message };
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 // One-shot owner alert when a customer message can't be delivered.
 // Uses a single-attempt send to avoid recursive failure loops.
 function notifyOwnerOfFailure(toPhone, reason, originalText) {
@@ -417,6 +474,7 @@ function buildWrappedMsg(phone, text, type, mediaId, senderName) {
     from: phone,
     body: text || '',
     type: type === 'image' ? 'image' : 'chat',
+    mediaId: mediaId,
     getContact: async () => ({
       pushname: senderName || '',
       name:     senderName || '',
@@ -571,10 +629,16 @@ async function handleMetaMessage(m, senderName) {
       for (const reply of replies) {
         try {
           if (typeof reply === 'object' && reply && reply._adminAlert) {
-            // Admin notification — fire and forget but log outcome
-            watiSend(OWNER_PHONE, reply._adminAlert)
-              .then(r => console.log(r.ok ? '[task] adminAlert sent' : '[task] adminAlert FAILED: ' + r.body.slice(0,80)))
-              .catch(e => console.error('[task] adminAlert send threw:', e.message));
+            // Admin notification — send image with alert text as caption if available
+            if (reply._adminImageId) {
+              watiSendImage(OWNER_PHONE, reply._adminImageId, reply._adminAlert)
+                .then(r => console.log(r.ok ? '[task] adminAlert image sent' : '[task] adminAlert image FAILED: ' + r.body.slice(0,80)))
+                .catch(e => console.error('[task] adminAlert image send threw:', e.message));
+            } else {
+              watiSend(OWNER_PHONE, reply._adminAlert)
+                .then(r => console.log(r.ok ? '[task] adminAlert sent' : '[task] adminAlert FAILED: ' + r.body.slice(0,80)))
+                .catch(e => console.error('[task] adminAlert send threw:', e.message));
+            }
             continue;
           }
           if (typeof reply === 'object' && reply && reply.type === 'buttons') {
@@ -755,9 +819,13 @@ app.post('/verify-payment', async (req, res) => {
   try {
     const msg = config.paymentVerifiedMessage(name || 'there', bookingId, lang || 'en');
     const r = await watiSend(String(phone).replace(/[^0-9]/g, ''), msg);
-    if (!r.ok) return res.status(500).json({ error: 'Send failed', detail: r.body });
-    await sheets.markPaymentVerified(bookingId);
-    res.json({ success: true });
+    if (!r.ok) return res.status(500).send(`Send failed: ${r.body}`);
+    if (String(bookingId).startsWith('CB')) {
+      await sheets.markCleaningPaymentVerified(bookingId);
+    } else {
+      await sheets.markPaymentVerified(bookingId);
+    }
+    res.send(`✅ Sent to ${phone}`);
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
