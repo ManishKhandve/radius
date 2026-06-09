@@ -117,9 +117,6 @@
             <select id="filterAgent" onchange="renderContacts()">
                 <option value="all">All Agents</option>
                 <option value="Unassigned">Unassigned</option>
-                <option value="Priya">Priya</option>
-                <option value="Sunil">Sunil</option>
-                <option value="Rahul">Rahul</option>
             </select>
         </div>
 
@@ -194,9 +191,6 @@
             <div class="crm-label">Assigned To</div>
             <select class="crm-input" id="crmAgent" onchange="updateCRM()">
                 <option value="Unassigned">Unassigned</option>
-                <option value="Priya">Priya</option>
-                <option value="Sunil">Sunil</option>
-                <option value="Rahul">Rahul</option>
             </select>
 
             <div class="crm-label">Follow-up Date</div>
@@ -261,6 +255,19 @@
         }
         
         renderContacts();
+    }
+
+    async function loadUsers() {
+        const res = await authFetch('/api/users');
+        const data = await res.json();
+        
+        const filterAgent = document.getElementById('filterAgent');
+        const crmAgent = document.getElementById('crmAgent');
+        
+        data.users.forEach(u => {
+            filterAgent.add(new Option(u.username, u.username));
+            crmAgent.add(new Option(u.username, u.username));
+        });
     }
 
     function getStatusDot(status) {
@@ -501,6 +508,7 @@
         if (currentPhone) loadMessages();
     }, 5000);
 
+    loadUsers();
     loadContacts();
 </script>
 </body>

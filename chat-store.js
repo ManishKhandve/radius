@@ -243,6 +243,28 @@ async function loginUser(username, password) {
 }
 
 /**
+ * Fetches all system users for agent assignment dropdowns.
+ */
+async function getUsers() {
+  if (!supabase) return [];
+  try {
+    const { data, error } = await supabase
+      .from('users')
+      .select('username, role')
+      .order('username', { ascending: true });
+
+    if (error) {
+      console.error('[chat-store] error fetching users:', error);
+      return [];
+    }
+    return data || [];
+  } catch (err) {
+    console.error('[chat-store] exception fetching users:', err.message);
+    return [];
+  }
+}
+
+/**
  * Fetches the conversation history for a specific contact.
  */
 async function getMessages(phone) {
@@ -275,5 +297,6 @@ module.exports = {
   updateContactCRM,
   getNotes,
   addNote,
-  loginUser
+  loginUser,
+  getUsers
 };

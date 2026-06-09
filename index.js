@@ -835,6 +835,11 @@ app.get('/api/chat/contacts', authMiddleware, async (req, res) => {
   res.json({ success: true, contacts });
 });
 
+app.get('/api/users', authMiddleware, async (req, res) => {
+  const users = await chatStore.getUsers();
+  res.json({ success: true, users });
+});
+
 app.get('/api/chat/messages/:phone', authMiddleware, async (req, res) => {
   const { phone } = req.params;
   const messages = await chatStore.getMessages(phone);
