@@ -870,7 +870,6 @@ app.post('/api/chat/send', authMiddleware, async (req, res) => {
   
   const result = await watiSend(phone, message);
   if (result.ok) {
-    await chatStore.saveMessage(phone, 'Admin', 'outbound', message);
     await chatStore.updateContactLabel(phone, 'read');
     res.json({ success: true });
   } else {

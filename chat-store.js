@@ -18,9 +18,10 @@ async function upsertContact(phone, name, direction) {
   try {
     const payload = {
       phone: phone,
-      name: name || 'Customer',
       last_message_at: new Date().toISOString()
     };
+    if (name) payload.name = name;
+    
     if (direction === 'inbound') {
       payload.label = 'unread';
     }
