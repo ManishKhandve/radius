@@ -365,6 +365,10 @@
             <option value="mr">Marathi (mr)</option>
           </select>
         </div>
+        <div class="form-group" style="grid-column: 1 / -1;">
+          <label for="headerUrl">Header Image URL (Optional)</label>
+          <input type="url" id="headerUrl" placeholder="e.g. https://rzp.io/rzp/O6pvrdBb (or an image link like .png/.jpg)">
+        </div>
       </div>
     </div>
 
@@ -452,6 +456,7 @@
     const sendBtn = document.getElementById('sendBtn');
     const templateNameInput = document.getElementById('templateName');
     const languageCodeInput = document.getElementById('languageCode');
+    const headerUrlInput = document.getElementById('headerUrl');
     
     // Status metrics
     const statusCard = document.getElementById('statusCard');
@@ -581,6 +586,7 @@
     sendBtn.addEventListener('click', async () => {
       const templateName = templateNameInput.value.trim();
       const languageCode = languageCodeInput.value;
+      const headerUrl = headerUrlInput.value.trim();
 
       if (!templateName) {
         alert("Please enter the template name!");
@@ -609,6 +615,7 @@
           body: JSON.stringify({
             templateName,
             languageCode,
+            headerUrl,
             recipients: recipientsList
           })
         });

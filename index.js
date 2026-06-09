@@ -374,7 +374,7 @@ let activeCampaign = {
 };
 
 // Meta Cloud API template sender
-async function watiSendTemplate(phone, templateName, langCode = 'en', variables = []) {
+async function watiSendTemplate(phone, templateName, langCode = 'en', variables = [], headerUrl = null) {
   if (!phone || !templateName) {
     return { ok: false, error: { message: 'Missing phone or templateName' } };
   }
@@ -397,13 +397,30 @@ async function watiSendTemplate(phone, templateName, langCode = 'en', variables 
     }
   };
 
+  const components = [];
+
+  if (headerUrl) {
+    const isDoc = headerUrl.toLowerCase().endsWith('.pdf');
+    components.push({
+      type: 'header',
+      parameters: [
+        {
+          type: isDoc ? 'document' : 'image',
+          [isDoc ? 'document' : 'image']: { link: headerUrl }
+        }
+      ]
+    });
+  }
+
   if (parameters.length > 0) {
-    payload.template.components = [
-      {
-        type: 'body',
-        parameters: parameters
-      }
-    ];
+    components.push({
+      type: 'body',
+      parameters: parameters
+    });
+  }
+
+  if (components.length > 0) {
+    payload.template.components = components;
   }
 
   const controller = new AbortController();
@@ -907,7 +924,7 @@ app.get('/admin/broadcast', (req, res) => {
 });
 
 app.post('/api/broadcast', (req, res) => {
-  const { templateName, languageCode, recipients } = req.body;
+  const { templateName, languageCode, recipients, headerUrl } = req.body;
 
   if (activeCampaign.running) {
     return res.status(400).json({ success: false, error: 'A broadcast campaign is already running.' });
@@ -940,7 +957,7 @@ app.post('/api/broadcast', (req, res) => {
 
       try {
         // We pass the recipient's Name as the first parameter (maps to {{1}} in the body)
-        const result = await watiSendTemplate(cleanPhone, templateName, languageCode, [displayName]);
+        const result = await watiSendTemplate(cleanPhone, templateName, languageCode, [displayName], headerUrl);
         if (result.ok) {
           activeCampaign.success++;
           activeCampaign.log.push(`[${new Date().toLocaleTimeString()}] Sent to ${displayName} (${cleanPhone}) — Success`);
