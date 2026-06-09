@@ -839,6 +839,13 @@ app.post('/api/chat/pause', async (req, res) => {
     res.json({ success: true, paused: false });
   }
 });
+app.post('/api/chat/label', async (req, res) => {
+  const { phone, label } = req.body;
+  if (!phone || !label) return res.status(400).json({ error: 'Missing phone or label' });
+  
+  await chatStore.updateContactLabel(phone, label);
+  res.json({ success: true, label });
+});
 
 app.get('/', (_req, res) => {
   res.send(`<!DOCTYPE html><html><head><meta charset="utf-8"><title>${config.businessName} Bot</title>

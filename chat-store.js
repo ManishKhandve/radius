@@ -13,17 +13,21 @@ if (supabaseUrl && supabaseKey) {
 /**
  * Ensures the contact exists, updates their name and last_message_at.
  */
-async function upsertContact(phone, name) {
+async function upsertContact(phone, name, direction) {
   if (!supabase) return;
   try {
-    // We update the name if provided, and bump the last_message_at
+    const payload = {
+      phone: phone,
+      name: name || 'Customer',
+      last_message_at: new Date().toISOString()
+    };
+    if (direction === 'inbound') {
+      payload.label = 'unread';
+    }
+
     const { data, error } = await supabase
       .from('contacts')
-      .upsert({
-        phone: phone,
-        name: name || 'Customer',
-        last_message_at: new Date().toISOString()
-      }, { onConflict: 'phone' });
+      .upsert(payload, { onConflict: 'phone' });
 
     if (error) console.error('[chat-store] error upserting contact:', error);
   } catch (err) {
@@ -38,7 +42,7 @@ async function upsertContact(phone, name) {
 async function saveMessage(phone, name, direction, content) {
   if (!supabase) return;
   try {
-    await upsertContact(phone, name);
+    await upsertContact(phone, name, direction);
 
     const { error } = await supabase
       .from('messages')
@@ -104,6 +108,23 @@ async function setBotPause(phone, durationHours) {
 }
 
 /**
+ * Updates the custom label for a contact.
+ */
+async function updateContactLabel(phone, label) {
+  if (!supabase) return;
+  try {
+    const { error } = await supabase
+      .from('contacts')
+      .update({ label: label })
+      .eq('phone', phone);
+
+    if (error) console.error('[chat-store] error updating label:', error);
+  } catch (err) {
+    console.error('[chat-store] exception updating label:', err.message);
+  }
+}
+
+/**
  * Fetches all contacts, ordered by the latest message.
  */
 async function getContacts() {
@@ -153,5 +174,6 @@ module.exports = {
   isBotPaused,
   setBotPause,
   getContacts,
-  getMessages
+  getMessages,
+  updateContactLabel
 };

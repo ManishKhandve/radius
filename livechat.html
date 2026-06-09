@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>WhatsApp Live Chat Dashboard</title>
+    <title>WhatsApp Live Chat CRM Dashboard</title>
     <style>
         * { box-sizing: border-box; margin: 0; padding: 0; }
         body { font-family: "Segoe UI", "Helvetica Neue", Helvetica, Arial, sans-serif; background-color: #d1d7db; height: 100vh; display: flex; justify-content: center; align-items: center; }
@@ -19,14 +19,32 @@
 
         /* Sidebar */
         .sidebar { width: 30%; border-right: 1px solid #e9edef; display: flex; flex-direction: column; background: #ffffff; }
-        .sidebar-header { background: #f0f2f5; height: 60px; padding: 10px 16px; display: flex; align-items: center; font-weight: 600; color: #41525d; border-bottom: 1px solid #e9edef; }
+        .sidebar-header { background: #f0f2f5; height: 60px; padding: 10px 16px; display: flex; align-items: center; justify-content: space-between; font-weight: 600; color: #41525d; border-bottom: 1px solid #e9edef; }
+        
+        /* Search and Filter */
+        .search-bar { background: #ffffff; padding: 10px; border-bottom: 1px solid #e9edef; display: flex; gap: 8px; flex-direction: column; }
+        .search-bar input { padding: 8px 12px; border-radius: 8px; border: 1px solid #e9edef; font-size: 14px; outline: none; background: #f0f2f5; }
+        .search-bar select { padding: 8px 12px; border-radius: 8px; border: 1px solid #e9edef; font-size: 14px; outline: none; background: #f0f2f5; cursor: pointer; }
+
         .contact-list { flex: 1; overflow-y: auto; background: #ffffff; }
         .contact-item { display: flex; padding: 12px 15px; cursor: pointer; border-bottom: 1px solid #f2f2f2; align-items: center; }
         .contact-item:hover, .contact-item.active { background: #f0f2f5; }
-        .avatar { width: 49px; height: 49px; border-radius: 50%; background: #dfe5e7; display: flex; justify-content: center; align-items: center; margin-right: 15px; font-size: 20px; color: #fff; font-weight: bold; }
+        .avatar { width: 49px; height: 49px; border-radius: 50%; background: #dfe5e7; display: flex; justify-content: center; align-items: center; margin-right: 15px; font-size: 20px; color: #fff; font-weight: bold; flex-shrink: 0; }
         .contact-info { flex: 1; display: flex; flex-direction: column; justify-content: center; overflow: hidden; }
-        .contact-name { font-size: 17px; color: #111b21; margin-bottom: 3px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-        .contact-time { font-size: 12px; color: #667781; }
+        
+        .contact-name-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 3px; }
+        .contact-name { font-size: 16px; color: #111b21; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-weight: 500; }
+        .contact-time { font-size: 12px; color: #667781; flex-shrink: 0; margin-left: 5px; }
+        
+        /* Badge */
+        .label-badge { font-size: 10px; padding: 2px 6px; border-radius: 4px; font-weight: 600; text-transform: uppercase; margin-top: 4px; display: inline-block; align-self: flex-start; }
+        .badge-unread { background: #25D366; color: white; }
+        .badge-read { background: #e9edef; color: #54656f; }
+        .badge-maid { background: #34B7F1; color: white; }
+        .badge-clean { background: #FFB02E; color: white; }
+        .badge-customer { background: #128C7E; color: white; }
+        .badge-spam { background: #dc3545; color: white; }
+        .badge-default { background: #94a3b8; color: white; }
 
         /* Main Chat Area */
         .chat-area { flex: 1; display: flex; flex-direction: column; background: #efeae2; position: relative; }
@@ -34,8 +52,10 @@
         
         .chat-header { background: #f0f2f5; height: 60px; padding: 10px 16px; display: flex; align-items: center; justify-content: space-between; border-left: 1px solid #e9edef; z-index: 2; }
         .chat-header-info { display: flex; align-items: center; }
-        .bot-control { display: flex; align-items: center; gap: 10px; }
+        .bot-control { display: flex; align-items: center; gap: 15px; }
         
+        .chat-label-select { padding: 6px 12px; border-radius: 6px; font-size: 13px; font-weight: 600; border: 1px solid #ccc; outline: none; cursor: pointer; background: white; }
+
         .toggle-switch { position: relative; display: inline-block; width: 50px; height: 24px; }
         .toggle-switch input { opacity: 0; width: 0; height: 0; }
         .slider { position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background-color: #25D366; transition: .4s; border-radius: 24px; }
@@ -72,8 +92,23 @@
     <!-- Left Sidebar -->
     <div class="sidebar">
         <div class="sidebar-header">
-            Chats
+            <div>Chats</div>
+            <div style="font-size: 13px; font-weight: normal; color: #54656f;" id="totalUsersCount">Total Users: 0</div>
         </div>
+        
+        <div class="search-bar">
+            <input type="text" id="searchInput" placeholder="Search name or phone" onkeyup="renderContacts()">
+            <select id="filterSelect" onchange="renderContacts()">
+                <option value="all">All Labels</option>
+                <option value="unread">Unread</option>
+                <option value="read">Read</option>
+                <option value="maid">Maid Lead</option>
+                <option value="clean">Cleaning Lead</option>
+                <option value="customer">Customer</option>
+                <option value="spam">Spam</option>
+            </select>
+        </div>
+
         <div class="contact-list" id="contactList">
             <!-- Contacts loaded dynamically -->
         </div>
@@ -84,25 +119,36 @@
         <div class="chat-bg"></div>
         
         <div id="emptyState" class="empty-state">
-            <h2>WhatsApp for Web</h2>
+            <h2>WhatsApp CRM Dashboard</h2>
             <span>Select a chat to start messaging</span>
         </div>
 
         <div id="activeChat" style="display: none; height: 100%; flex-direction: column;">
             <div class="chat-header">
                 <div class="chat-header-info">
-                    <div class="avatar" id="headerAvatar">?</div>
+                    <div class="avatar" id="headerAvatar" style="width:40px;height:40px;font-size:16px;">?</div>
                     <div>
-                        <div class="contact-name" id="headerName" style="font-weight: 500;">Customer Name</div>
-                        <div class="contact-time" id="headerPhone">1234567890</div>
+                        <div class="contact-name" id="headerName" style="font-weight: 600;">Customer Name</div>
+                        <div class="contact-time" id="headerPhone" style="margin-left:0; font-size:11px;">1234567890</div>
                     </div>
                 </div>
                 <div class="bot-control">
-                    <span class="toggle-label" id="botStatusLabel">Bot Active</span>
-                    <label class="toggle-switch">
-                        <input type="checkbox" id="pauseBotToggle">
-                        <span class="slider"></span>
-                    </label>
+                    <select class="chat-label-select" id="chatLabelSelect" onchange="updateCurrentLabel()">
+                        <option value="unread">🟢 Unread</option>
+                        <option value="read">⚪ Read</option>
+                        <option value="maid">🔵 Maid Lead</option>
+                        <option value="clean">🟠 Cleaning Lead</option>
+                        <option value="customer">💼 Customer</option>
+                        <option value="spam">🔴 Spam</option>
+                    </select>
+
+                    <div style="display:flex; align-items:center; gap:8px;">
+                        <span class="toggle-label" id="botStatusLabel">Bot Active</span>
+                        <label class="toggle-switch">
+                            <input type="checkbox" id="pauseBotToggle">
+                            <span class="slider"></span>
+                        </label>
+                    </div>
                 </div>
             </div>
 
@@ -119,6 +165,7 @@
 </div>
 
 <script>
+    let allContacts = [];
     let currentPhone = null;
 
     // Load Contacts
@@ -126,10 +173,37 @@
         const res = await fetch('/api/chat/contacts');
         const data = await res.json();
         
+        allContacts = data.contacts;
+        document.getElementById('totalUsersCount').innerText = `Total Users: ${allContacts.length}`;
+        
+        renderContacts();
+    }
+
+    function getBadgeClass(label) {
+        if (label === 'unread') return 'badge-unread';
+        if (label === 'read') return 'badge-read';
+        if (label === 'maid') return 'badge-maid';
+        if (label === 'clean') return 'badge-clean';
+        if (label === 'customer') return 'badge-customer';
+        if (label === 'spam') return 'badge-spam';
+        return 'badge-default';
+    }
+
+    function renderContacts() {
+        const search = document.getElementById('searchInput').value.toLowerCase();
+        const filter = document.getElementById('filterSelect').value;
         const list = document.getElementById('contactList');
+        
         list.innerHTML = '';
         
-        data.contacts.forEach(c => {
+        allContacts.forEach(c => {
+            const name = (c.name || '').toLowerCase();
+            const phone = (c.phone || '').toLowerCase();
+            const label = c.label || 'unread'; // Default logic handles nulls
+
+            if (search && !name.includes(search) && !phone.includes(search)) return;
+            if (filter !== 'all' && label !== filter) return;
+
             const el = document.createElement('div');
             el.className = 'contact-item';
             if (c.phone === currentPhone) el.classList.add('active');
@@ -138,31 +212,59 @@
             const time = new Date(c.last_message_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
             
             el.innerHTML = `
-                <div class="avatar" style="background: hsl(${Math.random() * 360}, 40%, 60%)">${initials}</div>
+                <div class="avatar" style="background: hsl(${c.phone.slice(-3) % 360}, 50%, 60%)">${initials}</div>
                 <div class="contact-info">
-                    <div class="contact-name">${c.name || c.phone}</div>
-                    <div class="contact-time">${time}</div>
+                    <div class="contact-name-row">
+                        <span class="contact-name">${c.name || c.phone}</span>
+                        <span class="contact-time">${time}</span>
+                    </div>
+                    <span class="label-badge ${getBadgeClass(label)}">${label}</span>
                 </div>
             `;
-            el.onclick = () => openChat(c.phone, c.name);
+            el.onclick = () => openChat(c, initials);
             list.appendChild(el);
         });
     }
 
     // Open Chat
-    async function openChat(phone, name) {
-        currentPhone = phone;
+    async function openChat(contact, initials) {
+        currentPhone = contact.phone;
         document.getElementById('emptyState').style.display = 'none';
         document.getElementById('activeChat').style.display = 'flex';
         
-        document.getElementById('headerName').innerText = name || phone;
-        document.getElementById('headerPhone').innerText = phone;
-        document.getElementById('headerAvatar').innerText = (name || phone).substring(0, 1).toUpperCase();
+        document.getElementById('headerName').innerText = contact.name || contact.phone;
+        document.getElementById('headerPhone').innerText = contact.phone;
+        document.getElementById('headerAvatar').innerText = initials;
         
-        // Update active class in sidebar
-        document.querySelectorAll('.contact-item').forEach(el => el.classList.remove('active'));
+        const labelSafe = contact.label || 'unread';
+        document.getElementById('chatLabelSelect').value = labelSafe;
+        
+        // If it was unread, opening it automatically marks it as read
+        if (labelSafe === 'unread') {
+            document.getElementById('chatLabelSelect').value = 'read';
+            updateCurrentLabel();
+        } else {
+            renderContacts(); // update active state visually
+        }
         
         loadMessages();
+    }
+
+    // Update Label manually or automatically
+    async function updateCurrentLabel() {
+        if (!currentPhone) return;
+        const newLabel = document.getElementById('chatLabelSelect').value;
+        
+        await fetch('/api/chat/label', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ phone: currentPhone, label: newLabel })
+        });
+        
+        // update local state so UI is instantly snappy
+        const c = allContacts.find(x => x.phone === currentPhone);
+        if (c) c.label = newLabel;
+        renderContacts();
     }
 
     // Load Messages
@@ -181,9 +283,7 @@
             
             const time = new Date(m.created_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
             
-            // Render text with line breaks
             let textHtml = m.content.replace(/\\n/g, '<br>');
-            
             div.innerHTML = `${textHtml} <span class="msg-time">${time}</span>`;
             msgList.appendChild(div);
         });
@@ -214,7 +314,7 @@
         });
         
         btn.disabled = false;
-        loadMessages(); // reload to show sent msg
+        loadMessages();
     };
     
     // Allow 'Enter' key to send
