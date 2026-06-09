@@ -363,6 +363,76 @@ async function watiSendImage(phone, mediaId, caption = '') {
   }
 }
 
+// ─── Template Broadcast Tracking & Helper ──────────────────
+let activeCampaign = {
+  running: false,
+  total: 0,
+  sent: 0,
+  success: 0,
+  failed: 0,
+  log: []
+};
+
+// Meta Cloud API template sender
+async function watiSendTemplate(phone, templateName, langCode = 'en', variables = []) {
+  if (!phone || !templateName) {
+    return { ok: false, error: { message: 'Missing phone or templateName' } };
+  }
+  const url = `${META_GRAPH_BASE}/${META_PHONE_NUMBER_ID}/messages`;
+  const parameters = variables.map(val => ({
+    type: 'text',
+    text: String(val)
+  }));
+
+  const payload = {
+    messaging_product: 'whatsapp',
+    recipient_type:    'individual',
+    to:                phone,
+    type:              'template',
+    template: {
+      name: templateName,
+      language: {
+        code: langCode
+      }
+    }
+  };
+
+  if (parameters.length > 0) {
+    payload.template.components = [
+      {
+        type: 'body',
+        parameters: parameters
+      }
+    ];
+  }
+
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), SEND_TIMEOUT_MS);
+  try {
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${META_ACCESS_TOKEN}`,
+        'Content-Type':  'application/json',
+      },
+      body: JSON.stringify(payload),
+      signal: controller.signal,
+    });
+    const textBody = await res.text();
+    let j = {};
+    try { j = JSON.parse(textBody); } catch {}
+    
+    if (res.ok && !j.error) {
+      return { ok: true, body: j };
+    }
+    return { ok: false, error: j.error || { message: `HTTP ${res.status}: ${textBody}` } };
+  } catch (err) {
+    return { ok: false, error: { message: err.message } };
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 // One-shot owner alert when a customer message can't be delivered.
 // Uses a single-attempt send to avoid recursive failure loops.
 function notifyOwnerOfFailure(toPhone, reason, originalText) {
@@ -827,6 +897,84 @@ app.post('/verify-payment', async (req, res) => {
     }
     res.send(`✅ Sent to ${phone}`);
   } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// ─── Broadcast Admin Dashboard & API ───────────────────────
+const path = require('path');
+
+app.get('/admin/broadcast', (req, res) => {
+  res.sendFile(path.join(__dirname, 'broadcast.html'));
+});
+
+app.post('/api/broadcast', (req, res) => {
+  const { templateName, languageCode, recipients } = req.body;
+
+  if (activeCampaign.running) {
+    return res.status(400).json({ success: false, error: 'A broadcast campaign is already running.' });
+  }
+
+  if (!templateName || !languageCode || !Array.isArray(recipients) || recipients.length === 0) {
+    return res.status(400).json({ success: false, error: 'Missing parameters (templateName, languageCode, or recipients list).' });
+  }
+
+  // Trigger the broadcast campaign loop asynchronously in the background
+  (async () => {
+    activeCampaign.running = true;
+    activeCampaign.total = recipients.length;
+    activeCampaign.sent = 0;
+    activeCampaign.success = 0;
+    activeCampaign.failed = 0;
+    
+    const startTime = new Date().toLocaleTimeString();
+    activeCampaign.log = [`[${startTime}] Broadcast started with ${recipients.length} recipients.`];
+    
+    for (const r of recipients) {
+      if (!activeCampaign.running) {
+        activeCampaign.log.push(`[${new Date().toLocaleTimeString()}] Broadcast cancelled by system.`);
+        break;
+      }
+
+      const cleanPhone = String(r.phone).replace(/\D/g, '');
+      const displayName = String(r.name || 'Customer').trim();
+      activeCampaign.sent++;
+
+      try {
+        // We pass the recipient's Name as the first parameter (maps to {{1}} in the body)
+        const result = await watiSendTemplate(cleanPhone, templateName, languageCode, [displayName]);
+        if (result.ok) {
+          activeCampaign.success++;
+          activeCampaign.log.push(`[${new Date().toLocaleTimeString()}] Sent to ${displayName} (${cleanPhone}) — Success`);
+        } else {
+          activeCampaign.failed++;
+          const errMsg = result.error?.message || 'Rejected by WhatsApp';
+          activeCampaign.log.push(`[${new Date().toLocaleTimeString()}] Failed to ${displayName} (${cleanPhone}): ${errMsg}`);
+        }
+      } catch (err) {
+        activeCampaign.failed++;
+        activeCampaign.log.push(`[${new Date().toLocaleTimeString()}] Exception for ${displayName} (${cleanPhone}): ${err.message}`);
+      }
+
+      // Add invite to invite-store so their incoming replies work immediately
+      try {
+        await addInvite(cleanPhone);
+      } catch (err) {
+        console.error('[broadcast] failed to add invite for', cleanPhone, err.message);
+      }
+
+      // 200ms sleep delay to comply with standard Meta rate limits
+      await new Promise(resolve => setTimeout(resolve, 200));
+    }
+
+    activeCampaign.running = false;
+    const endTime = new Date().toLocaleTimeString();
+    activeCampaign.log.push(`[${endTime}] Broadcast completed. Success: ${activeCampaign.success}, Failed: ${activeCampaign.failed}`);
+  })();
+
+  res.json({ success: true, message: 'Broadcast campaign started.' });
+});
+
+app.get('/api/broadcast/status', (req, res) => {
+  res.json(activeCampaign);
 });
 
 // ─── Start ──────────────────────────────────────────────────

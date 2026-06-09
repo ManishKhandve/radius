@@ -1,0 +1,687 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>CLEANLY — Broadcast Campaigns</title>
+  <!-- Google Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&family=Outfit:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <!-- SheetJS Library for local Excel/CSV parsing -->
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+  
+  <style>
+    :root {
+      --bg-gradient: linear-gradient(135deg, #0f172a 0%, #020617 100%);
+      --card-bg: rgba(30, 41, 59, 0.4);
+      --card-border: rgba(255, 255, 255, 0.08);
+      --text-main: #f8fafc;
+      --text-muted: #94a3b8;
+      --primary: #38bdf8;
+      --primary-hover: #0ea5e9;
+      --success: #10b981;
+      --error: #ef4444;
+      --glow: rgba(56, 189, 248, 0.15);
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      font-family: 'Inter', system-ui, sans-serif;
+      background: var(--bg-gradient);
+      color: var(--text-main);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 2rem 1rem;
+    }
+
+    h1, h2, h3 {
+      font-family: 'Outfit', sans-serif;
+    }
+
+    .container {
+      width: 100%;
+      max-width: 900px;
+      margin: 0 auto;
+    }
+
+    /* Header styling */
+    header {
+      text-align: center;
+      margin-bottom: 2.5rem;
+    }
+
+    header h1 {
+      font-size: 2.5rem;
+      font-weight: 700;
+      background: linear-gradient(to right, #38bdf8, #818cf8);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      margin-bottom: 0.5rem;
+    }
+
+    header p {
+      color: var(--text-muted);
+      font-size: 1rem;
+    }
+
+    /* Cards */
+    .card {
+      background: var(--card-bg);
+      border: 1px solid var(--card-border);
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
+      border-radius: 1.25rem;
+      padding: 2rem;
+      margin-bottom: 2rem;
+      box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.3);
+      transition: transform 0.2s, border-color 0.2s;
+    }
+
+    .card:hover {
+      border-color: rgba(56, 189, 248, 0.25);
+    }
+
+    .card h2 {
+      font-size: 1.25rem;
+      font-weight: 600;
+      margin-bottom: 1.5rem;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      border-bottom: 1px solid var(--card-border);
+      padding-bottom: 0.75rem;
+    }
+
+    /* Grid Form */
+    .form-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 1.5rem;
+      margin-bottom: 1.5rem;
+    }
+
+    @media (max-width: 600px) {
+      .form-grid {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    .form-group {
+      display: flex;
+      flex-direction: column;
+      gap: 0.5rem;
+    }
+
+    label {
+      font-size: 0.875rem;
+      font-weight: 500;
+      color: var(--text-muted);
+    }
+
+    input, select {
+      background: rgba(15, 23, 42, 0.6);
+      border: 1px solid var(--card-border);
+      border-radius: 0.625rem;
+      padding: 0.75rem 1rem;
+      color: var(--text-main);
+      font-family: inherit;
+      font-size: 0.95rem;
+      outline: none;
+      transition: border-color 0.2s, box-shadow 0.2s;
+    }
+
+    input:focus, select:focus {
+      border-color: var(--primary);
+      box-shadow: 0 0 0 3px rgba(56, 189, 248, 0.15);
+    }
+
+    /* Drag & Drop File Zone */
+    .dropzone {
+      border: 2px dashed rgba(255, 255, 255, 0.15);
+      border-radius: 0.75rem;
+      padding: 2.5rem 1.5rem;
+      text-align: center;
+      cursor: pointer;
+      background: rgba(15, 23, 42, 0.3);
+      transition: border-color 0.2s, background 0.2s;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 0.75rem;
+    }
+
+    .dropzone:hover, .dropzone.dragover {
+      border-color: var(--primary);
+      background: rgba(56, 189, 248, 0.04);
+    }
+
+    .dropzone svg {
+      width: 48px;
+      height: 48px;
+      color: var(--text-muted);
+      transition: color 0.2s;
+    }
+
+    .dropzone:hover svg {
+      color: var(--primary);
+    }
+
+    .dropzone p {
+      font-size: 0.9rem;
+      color: var(--text-muted);
+    }
+
+    .dropzone .highlight {
+      color: var(--primary);
+      font-weight: 500;
+    }
+
+    /* Table Preview */
+    .preview-container {
+      margin-top: 1.5rem;
+      max-height: 250px;
+      overflow-y: auto;
+      border: 1px solid var(--card-border);
+      border-radius: 0.625rem;
+      background: rgba(15, 23, 42, 0.4);
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.875rem;
+      text-align: left;
+    }
+
+    th {
+      background: rgba(15, 23, 42, 0.8);
+      position: sticky;
+      top: 0;
+      padding: 0.75rem 1rem;
+      font-weight: 600;
+      color: var(--text-muted);
+      border-bottom: 1px solid var(--card-border);
+    }
+
+    td {
+      padding: 0.625rem 1rem;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+    }
+
+    tr:last-child td {
+      border-bottom: none;
+    }
+
+    /* Action Buttons */
+    .btn {
+      width: 100%;
+      padding: 1rem;
+      border-radius: 0.75rem;
+      border: none;
+      font-size: 1rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: transform 0.1s, opacity 0.2s;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      gap: 0.5rem;
+      background: linear-gradient(135deg, var(--primary) 0%, #6366f1 100%);
+      color: white;
+      box-shadow: 0 4px 15px rgba(56, 189, 248, 0.3);
+    }
+
+    .btn:hover {
+      opacity: 0.95;
+    }
+
+    .btn:active {
+      transform: scale(0.99);
+    }
+
+    .btn:disabled {
+      background: #334155;
+      color: #64748b;
+      cursor: not-allowed;
+      box-shadow: none;
+    }
+
+    /* Live Progress Section */
+    .progress-stats {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 1rem;
+      margin-bottom: 1.5rem;
+    }
+
+    @media (max-width: 500px) {
+      .progress-stats {
+        grid-template-columns: repeat(2, 1fr);
+      }
+    }
+
+    .stat-box {
+      background: rgba(15, 23, 42, 0.5);
+      border: 1px solid var(--card-border);
+      border-radius: 0.75rem;
+      padding: 1rem;
+      text-align: center;
+    }
+
+    .stat-label {
+      font-size: 0.75rem;
+      color: var(--text-muted);
+      font-weight: 500;
+      text-transform: uppercase;
+      margin-bottom: 0.25rem;
+    }
+
+    .stat-val {
+      font-size: 1.5rem;
+      font-family: 'Outfit', sans-serif;
+      font-weight: 700;
+    }
+
+    .stat-val.total { color: #f1f5f9; }
+    .stat-val.sent { color: var(--primary); }
+    .stat-val.success { color: var(--success); }
+    .stat-val.failed { color: var(--error); }
+
+    /* Progress bar */
+    .progress-bar-container {
+      width: 100%;
+      height: 10px;
+      background: rgba(15, 23, 42, 0.8);
+      border-radius: 9999px;
+      overflow: hidden;
+      margin-bottom: 1.5rem;
+      border: 1px solid var(--card-border);
+    }
+
+    .progress-bar-fill {
+      height: 100%;
+      width: 0%;
+      background: linear-gradient(90deg, var(--primary) 0%, var(--success) 100%);
+      transition: width 0.3s ease;
+      box-shadow: 0 0 10px var(--primary);
+    }
+
+    /* Console Log panel */
+    .console-log {
+      background: #020617;
+      border: 1px solid var(--card-border);
+      border-radius: 0.75rem;
+      padding: 1rem;
+      font-family: monospace;
+      font-size: 0.8rem;
+      height: 180px;
+      overflow-y: auto;
+      color: #a7f3d0;
+      line-height: 1.5;
+    }
+
+    .log-line {
+      margin-bottom: 0.25rem;
+      white-space: pre-wrap;
+    }
+
+    .log-line.error { color: #fca5a5; }
+    .log-line.info { color: #93c5fd; }
+  </style>
+</head>
+<body>
+
+  <div class="container">
+    <header>
+      <h1>📢 CLEANLY Campaigns</h1>
+      <p>Broadcast WhatsApp Templates securely via Meta Cloud API</p>
+    </header>
+
+    <!-- Configuration Card -->
+    <div class="card">
+      <h2>
+        <svg style="width:20px;height:20px;" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"></path><path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path></svg>
+        Campaign Parameters
+      </h2>
+      <div class="form-grid">
+        <div class="form-group">
+          <label for="templateName">Approved Template Name</label>
+          <input type="text" id="templateName" placeholder="e.g. cleanly_invite" value="">
+        </div>
+        <div class="form-group">
+          <label for="languageCode">Language Code</label>
+          <select id="languageCode">
+            <option value="en">English (en)</option>
+            <option value="hi">Hindi (hi)</option>
+            <option value="mr">Marathi (mr)</option>
+            <option value="en_US">English US (en_US)</option>
+          </select>
+        </div>
+      </div>
+    </div>
+
+    <!-- Upload Card -->
+    <div class="card">
+      <h2>
+        <svg style="width:20px;height:20px;" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"></path></svg>
+        Load Target List
+      </h2>
+      <div class="dropzone" id="dropzone">
+        <svg fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m6.75 12H9m1.5-12H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z"></path></svg>
+        <p>Drag and drop your <span class="highlight">Excel (.xlsx, .xls)</span> or <span class="highlight">CSV (.csv)</span> here</p>
+        <p style="font-size:0.78rem;opacity:0.7;">Make sure column headers contain <b>"Phone"</b> and <b>"Name"</b></p>
+        <input type="file" id="fileInput" accept=".xlsx, .xls, .csv" style="display:none;">
+      </div>
+
+      <!-- Preview Table -->
+      <div id="previewWrapper" style="display:none;">
+        <div class="preview-container">
+          <table id="previewTable">
+            <thead>
+              <tr>
+                <th>Row</th>
+                <th>Name</th>
+                <th>Phone Number</th>
+              </tr>
+            </thead>
+            <tbody id="previewBody"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- Actions -->
+    <div style="margin-bottom: 2rem;">
+      <button class="btn" id="sendBtn" disabled>
+        <svg style="width:18px;height:18px;" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M6 12L3.269 3.126A59.768 59.768 0 0121.485 12 59.77 59.77 0 013.27 20.876L5.999 12zm0 0h7.5"></path></svg>
+        Execute Broadcast Campaign
+      </button>
+    </div>
+
+    <!-- Live Status Monitoring -->
+    <div class="card" id="statusCard" style="display:none;">
+      <h2>
+        <svg style="width:20px;height:20px;" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"></path></svg>
+        Campaign Analytics & Console
+      </h2>
+      <div class="progress-stats">
+        <div class="stat-box">
+          <div class="stat-label">Recipients</div>
+          <div class="stat-val total" id="statTotal">0</div>
+        </div>
+        <div class="stat-box">
+          <div class="stat-label">Processed</div>
+          <div class="stat-val sent" id="statSent">0</div>
+        </div>
+        <div class="stat-box">
+          <div class="stat-label">Delivered</div>
+          <div class="stat-val success" id="statSuccess">0</div>
+        </div>
+        <div class="stat-box">
+          <div class="stat-label">Failed</div>
+          <div class="stat-val failed" id="statFailed">0</div>
+        </div>
+      </div>
+
+      <div class="progress-bar-container">
+        <div class="progress-bar-fill" id="progressBar"></div>
+      </div>
+
+      <div class="console-log" id="consoleLog"></div>
+    </div>
+  </div>
+
+  <script>
+    // State management variables
+    let recipientsList = [];
+    let isUploading = false;
+    let pollInterval = null;
+
+    const dropzone = document.getElementById('dropzone');
+    const fileInput = document.getElementById('fileInput');
+    const previewWrapper = document.getElementById('previewWrapper');
+    const previewBody = document.getElementById('previewBody');
+    const sendBtn = document.getElementById('sendBtn');
+    const templateNameInput = document.getElementById('templateName');
+    const languageCodeInput = document.getElementById('languageCode');
+    
+    // Status metrics
+    const statusCard = document.getElementById('statusCard');
+    const statTotal = document.getElementById('statTotal');
+    const statSent = document.getElementById('statSent');
+    const statSuccess = document.getElementById('statSuccess');
+    const statFailed = document.getElementById('statFailed');
+    const progressBar = document.getElementById('progressBar');
+    const consoleLog = document.getElementById('consoleLog');
+
+    // Trigger file dialog
+    dropzone.addEventListener('click', () => fileInput.click());
+
+    // Drag-and-drop styles
+    ['dragenter', 'dragover'].forEach(eventName => {
+      dropzone.addEventListener(eventName, (e) => {
+        e.preventDefault();
+        dropzone.classList.add('dragover');
+      }, false);
+    });
+
+    ['dragleave', 'drop'].forEach(eventName => {
+      dropzone.addEventListener(eventName, (e) => {
+        e.preventDefault();
+        dropzone.classList.remove('dragover');
+      }, false);
+    });
+
+    // Handle dropped files
+    dropzone.addEventListener('drop', (e) => {
+      const dt = e.dataTransfer;
+      const files = dt.files;
+      if (files.length) handleFile(files[0]);
+    });
+
+    // Handle selected files
+    fileInput.addEventListener('change', (e) => {
+      if (fileInput.files.length) handleFile(fileInput.files[0]);
+    });
+
+    // Validate parameters to enable Send button
+    function updateSendButtonState() {
+      const templateName = templateNameInput.value.trim();
+      sendBtn.disabled = !(recipientsList.length > 0 && templateName.length > 0);
+    }
+
+    templateNameInput.addEventListener('input', updateSendButtonState);
+
+    // Parse Excel/CSV file locally
+    function handleFile(file) {
+      const reader = new FileReader();
+      reader.onload = function(e) {
+        try {
+          const data = new Uint8Array(e.target.result);
+          const workbook = XLSX.read(data, { type: 'array' });
+          const firstSheetName = workbook.SheetNames[0];
+          const worksheet = workbook.Sheets[firstSheetName];
+          const rawRows = XLSX.utils.sheet_to_json(worksheet);
+
+          if (!rawRows || rawRows.length === 0) {
+            alert("No rows found in the sheet!");
+            return;
+          }
+
+          // Parse column mapping
+          const firstRowKeys = Object.keys(rawRows[0]);
+          let nameKey = null;
+          let phoneKey = null;
+
+          // Intelligently scan for columns matching "Name" and "Phone"
+          firstRowKeys.forEach(k => {
+            const cleanKey = k.toLowerCase().replace(/[\s_\-]/g, '');
+            if (cleanKey.includes('name') || cleanKey.includes('customername')) {
+              nameKey = k;
+            }
+            if (cleanKey.includes('phone') || cleanKey.includes('number') || cleanKey.includes('whatsapp') || cleanKey.includes('mobile')) {
+              phoneKey = k;
+            }
+          });
+
+          // Fallbacks if matching headers aren't found
+          if (!nameKey) nameKey = firstRowKeys[0];
+          if (!phoneKey) phoneKey = firstRowKeys[1] || firstRowKeys[0];
+
+          recipientsList = [];
+          previewBody.innerHTML = '';
+
+          rawRows.forEach((row, idx) => {
+            const rawPhone = String(row[phoneKey] || '').replace(/\D/g, '');
+            // Simple validation: make sure it has a valid-looking phone number length
+            if (rawPhone.length >= 10) {
+              const cleanRow = {
+                name: String(row[nameKey] || 'Customer').trim(),
+                phone: rawPhone
+              };
+              recipientsList.push(cleanRow);
+
+              // Append preview row
+              const tr = document.createElement('tr');
+              tr.innerHTML = `
+                <td>${idx + 1}</td>
+                <td><b>${cleanRow.name}</b></td>
+                <td>${cleanRow.phone}</td>
+              `;
+              previewBody.appendChild(tr);
+            }
+          });
+
+          if (recipientsList.length === 0) {
+            alert("Could not extract any valid phone numbers (min 10 digits required)!");
+            previewWrapper.style.display = 'none';
+          } else {
+            previewWrapper.style.display = 'block';
+            dropzone.innerHTML = `<svg style="color:var(--success)" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg><p style="color:var(--success)"><b>File parsed successfully!</b></p><p style="font-size:0.8rem">${recipientsList.length} valid recipients loaded</p>`;
+          }
+          updateSendButtonState();
+
+        } catch (err) {
+          console.error(err);
+          alert("Error reading file: " + err.message);
+        }
+      };
+      reader.readAsArrayBuffer(file);
+    }
+
+    // Trigger Campaign Broadcast
+    sendBtn.addEventListener('click', async () => {
+      const templateName = templateNameInput.value.trim();
+      const languageCode = languageCodeInput.value;
+
+      if (!templateName) {
+        alert("Please enter the template name!");
+        return;
+      }
+      if (recipientsList.length === 0) {
+        alert("Please load an Excel sheet first!");
+        return;
+      }
+
+      const confirmRun = confirm(`Execute broadcast campaign for ${recipientsList.length} numbers using template "${templateName}"?`);
+      if (!confirmRun) return;
+
+      sendBtn.disabled = true;
+      templateNameInput.disabled = true;
+      languageCodeInput.disabled = true;
+      statusCard.style.display = 'block';
+      consoleLog.innerHTML = `<div class="log-line info">[System] Starting campaign background job...</div>`;
+
+      try {
+        const res = await fetch('/api/broadcast', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            templateName,
+            languageCode,
+            recipients: recipientsList
+          })
+        });
+
+        const data = await res.json();
+        if (res.ok && data.success) {
+          addLogLine("Campaign running successfully on background.");
+          startStatusPolling();
+        } else {
+          addLogLine("Error starting campaign: " + (data.error || "Unknown error"), true);
+          resetUI();
+        }
+      } catch (err) {
+        addLogLine("Network exception: " + err.message, true);
+        resetUI();
+      }
+    });
+
+    // Status Polling logic
+    function startStatusPolling() {
+      if (pollInterval) clearInterval(pollInterval);
+      pollInterval = setInterval(async () => {
+        try {
+          const res = await fetch('/api/broadcast/status');
+          const data = await res.json();
+
+          statTotal.textContent = data.total;
+          statSent.textContent = data.sent;
+          statSuccess.textContent = data.success;
+          statFailed.textContent = data.failed;
+
+          // Compute percentage
+          const progressPct = data.total > 0 ? Math.round((data.sent / data.total) * 100) : 0;
+          progressBar.style.width = `${progressPct}%`;
+
+          // Draw logs
+          consoleLog.innerHTML = '';
+          (data.log || []).forEach(line => {
+            const div = document.createElement('div');
+            div.className = 'log-line' + (line.includes('fail') || line.includes('error') || line.includes('rejected') ? ' error' : '');
+            div.textContent = line;
+            consoleLog.appendChild(div);
+          });
+          // Auto scroll to bottom
+          consoleLog.scrollTop = consoleLog.scrollHeight;
+
+          // Stop polling if complete
+          if (!data.running) {
+            clearInterval(pollInterval);
+            addLogLine("[System] Campaign execution completed.");
+            resetUI();
+          }
+        } catch (e) {
+          console.error("Polling status error:", e);
+        }
+      }, 1000);
+    }
+
+    function addLogLine(text, isError = false) {
+      const time = new Date().toLocaleTimeString();
+      const div = document.createElement('div');
+      div.className = 'log-line' + (isError ? ' error' : ' info');
+      div.textContent = `[${time}] ${text}`;
+      consoleLog.appendChild(div);
+      consoleLog.scrollTop = consoleLog.scrollHeight;
+    }
+
+    function resetUI() {
+      sendBtn.disabled = false;
+      templateNameInput.disabled = false;
+      languageCodeInput.disabled = false;
+      updateSendButtonState();
+    }
+  </script>
+</body>
+</html>
