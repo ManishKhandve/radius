@@ -234,16 +234,7 @@ function cleaningConfirmPrompt(data, lang) {
       { id: 'restart', title: titles.restart },
     ],
   };
-
-  return {
-    type: 'buttons',
-    body: config.cleaningConfirmMessage(data, lang),
-    buttons: [
-      { id: '1', title: titles.confirm },
-      { id: '2', title: titles.cancel },
-      { id: 'restart', title: titles.restart },
-    ],
-  };
+}
 function getDiscountOrAddressPrompt(session, prefixMsg = "") {
   const lang = session.data.lang || "en";
   if (session.data.isBroadcast && !session.data.discountApplied) {
