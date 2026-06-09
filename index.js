@@ -718,8 +718,8 @@ async function handleMetaMessage(m, senderName) {
   await chatStore.saveMessage(phone, senderName, 'inbound', msgType === 'image' || msgType === 'document' ? `[${msgType}] ${text}` : text);
 
   if (paused) {
-    if (flow.restartIntent(text)) {
-      console.log(`[pause] ${phone} → keyword triggered, unpausing automatically`);
+    if (flow.restartIntent(text) || flow.isAdMessage(text)) {
+      console.log(`[pause] ${phone} → keyword/ad triggered, unpausing automatically`);
       await resumeUser(phone);
     } else {
       const entry = pausedUsers.get(phone);
