@@ -946,7 +946,10 @@ app.post('/api/broadcast', (req, res) => {
           activeCampaign.log.push(`[${new Date().toLocaleTimeString()}] Sent to ${displayName} (${cleanPhone}) — Success`);
         } else {
           activeCampaign.failed++;
-          const errMsg = result.error?.message || 'Rejected by WhatsApp';
+          let errMsg = result.error?.message || 'Rejected by WhatsApp';
+          if (result.error?.error_data?.details) {
+            errMsg += ` Details: ${result.error.error_data.details}`;
+          }
           activeCampaign.log.push(`[${new Date().toLocaleTimeString()}] Failed to ${displayName} (${cleanPhone}): ${errMsg}`);
         }
       } catch (err) {
