@@ -657,9 +657,18 @@ app.post('/wati-webhook', async (req, res) => {
       if (change.field !== 'messages') continue;
       const value = change.value || {};
 
-      // Skip status updates (delivery receipts: sent/delivered/read/failed).
-      // We only care about inbound messages.
-      if (Array.isArray(value.statuses) && !Array.isArray(value.messages)) continue;
+      if (Array.isArray(value.statuses)) {
+        for (const st of value.statuses) {
+          const wamid = st.id;
+          const statusVal = st.status; // sent, delivered, read, failed
+          const campaignName = wamidToCampaign.get(wamid);
+          if (campaignName && ['sent', 'delivered', 'read'].includes(statusVal)) {
+            chatStore.updateBroadcastMetric(campaignName, statusVal).catch(() => {});
+          }
+        }
+        if (!Array.isArray(value.messages)) continue;
+      }
+      
       const messages = Array.isArray(value.messages) ? value.messages : [];
       if (messages.length === 0) continue;
 
@@ -808,6 +817,7 @@ app.get('/login', (req, res) => {
 
 const crypto = require('crypto');
 const authTokens = new Map();
+const wamidToCampaign = new Map();
 
 app.post('/api/login', async (req, res) => {
   const { username, password } = req.body;
@@ -838,6 +848,11 @@ app.get('/api/chat/contacts', authMiddleware, async (req, res) => {
 app.get('/api/users', authMiddleware, async (req, res) => {
   const users = await chatStore.getUsers();
   res.json({ success: true, users });
+});
+
+app.get('/api/analytics', authMiddleware, async (req, res) => {
+  const metrics = await chatStore.getBroadcastMetrics();
+  res.json({ success: true, metrics });
 });
 
 app.get('/api/chat/messages/:phone', authMiddleware, async (req, res) => {
@@ -1106,6 +1121,11 @@ app.post('/api/broadcast', (req, res) => {
         if (result.ok) {
           activeCampaign.success++;
           activeCampaign.log.push(`[${new Date().toLocaleTimeString()}] Sent to ${displayName} (${cleanPhone}) — Success`);
+          
+          if (result.body && result.body.messages && result.body.messages[0]) {
+             wamidToCampaign.set(result.body.messages[0].id, templateName);
+             await chatStore.updateBroadcastMetric(templateName, 'sent').catch(()=>{});
+          }
         } else {
           activeCampaign.failed++;
           let errMsg = result.error?.message || 'Rejected by WhatsApp';

@@ -265,6 +265,35 @@ async function getUsers() {
 }
 
 /**
+ * Updates a broadcast metric (sent, delivered, read, replied).
+ */
+async function updateBroadcastMetric(campaign_name, metric_type) {
+  if (!supabase) return;
+  try {
+    let { data } = await supabase.from('broadcast_metrics').select(metric_type).eq('campaign_name', campaign_name).single();
+    let currentVal = data ? data[metric_type] || 0 : 0;
+    
+    if (!data) {
+      const insertData = { campaign_name, sent: 0, delivered: 0, read: 0, replied: 0 };
+      insertData[metric_type] = 1;
+      await supabase.from('broadcast_metrics').insert([insertData]);
+    } else {
+      await supabase.from('broadcast_metrics').update({ [metric_type]: currentVal + 1 }).eq('campaign_name', campaign_name);
+    }
+  } catch (err) {
+    // If table doesn't exist, ignore (user will create it soon)
+  }
+}
+
+async function getBroadcastMetrics() {
+  if (!supabase) return [];
+  try {
+    const { data } = await supabase.from('broadcast_metrics').select('*').order('campaign_name', { ascending: false });
+    return data || [];
+  } catch(err) { return []; }
+}
+
+/**
  * Fetches the conversation history for a specific contact.
  */
 async function getMessages(phone) {
@@ -298,5 +327,7 @@ module.exports = {
   getNotes,
   addNote,
   loginUser,
-  getUsers
+  getUsers,
+  updateBroadcastMetric,
+  getBroadcastMetrics
 };

@@ -94,12 +94,18 @@
 <div class="app-container">
     <!-- 1. Left Sidebar -->
     <div class="sidebar">
-        <div class="sidebar-header">
-            <div>
-                <span id="loggedInUser" style="color: #00a884; margin-right: 5px;"></span>
-                <span id="logoutBtn" style="font-size: 11px; cursor: pointer; color: #dc3545;" onclick="logout()">Logout</span>
+        <div class="sidebar-header" style="flex-direction: column; align-items: flex-start; gap: 10px;">
+            <div style="display: flex; justify-content: space-between; width: 100%;">
+                <div>
+                    <span id="loggedInUser" style="color: #00a884; margin-right: 5px;"></span>
+                    <span id="logoutBtn" style="font-size: 11px; cursor: pointer; color: #dc3545;" onclick="logout()">Logout</span>
+                </div>
+                <div style="font-size: 13px; font-weight: normal; color: #54656f;" id="totalUsersCount"></div>
             </div>
-            <div style="font-size: 13px; font-weight: normal; color: #54656f;" id="totalUsersCount"></div>
+            <div style="display: flex; gap: 10px; width: 100%;">
+                <button onclick="showChatView()" class="btn-login" style="padding: 6px; font-size: 12px; margin-top: 0; background: #00a884;">Chats</button>
+                <button onclick="showAnalyticsView()" class="btn-login" id="analyticsNavBtn" style="padding: 6px; font-size: 12px; margin-top: 0; background: #54656f; display: none;">Analytics</button>
+            </div>
         </div>
         
         <div class="search-bar">
@@ -126,6 +132,27 @@
     <div id="emptyState" class="empty-state">
         <h2>WhatsApp CRM</h2>
         <span>Select a lead to start messaging</span>
+    </div>
+
+    <!-- Analytics Dashboard View -->
+    <div class="chat-area" id="analyticsView" style="display: none; background: #f0f2f5; padding: 30px; overflow-y: auto;">
+        <h2 style="margin-bottom: 20px; color: #111b21;">Broadcast Analytics</h2>
+        <div style="background: white; border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); padding: 20px;">
+            <table style="width: 100%; border-collapse: collapse; text-align: left;">
+                <thead>
+                    <tr style="border-bottom: 1px solid #e9edef;">
+                        <th style="padding: 12px; color: #54656f;">Campaign Name</th>
+                        <th style="padding: 12px; color: #54656f;">Sent</th>
+                        <th style="padding: 12px; color: #54656f;">Delivered</th>
+                        <th style="padding: 12px; color: #54656f;">Read</th>
+                        <th style="padding: 12px; color: #54656f;">Read Rate</th>
+                    </tr>
+                </thead>
+                <tbody id="analyticsTableBody">
+                    <tr><td colspan="5" style="padding: 12px; text-align: center;">Loading analytics...</td></tr>
+                </tbody>
+            </table>
+        </div>
     </div>
 
     <!-- 2. Main Chat Area -->
@@ -226,6 +253,10 @@
     
     document.getElementById('loggedInUser').innerText = currentUser + (currentRole === 'admin' ? ' (Admin)' : '');
 
+    if (currentRole === 'admin') {
+        document.getElementById('analyticsNavBtn').style.display = 'block';
+    }
+
     function logout() {
         localStorage.clear();
         window.location.href = '/login';
@@ -270,6 +301,51 @@
         });
     }
 
+    /* Views */
+    function showChatView() {
+        document.getElementById('analyticsView').style.display = 'none';
+        if (currentPhone) {
+            document.getElementById('activeChat').style.display = 'flex';
+            document.getElementById('profilePanel').style.display = 'block';
+            document.getElementById('emptyState').style.display = 'none';
+        } else {
+            document.getElementById('emptyState').style.display = 'flex';
+        }
+    }
+
+    async function showAnalyticsView() {
+        document.getElementById('activeChat').style.display = 'none';
+        document.getElementById('profilePanel').style.display = 'none';
+        document.getElementById('emptyState').style.display = 'none';
+        document.getElementById('analyticsView').style.display = 'block';
+
+        const res = await authFetch('/api/analytics');
+        const data = await res.json();
+        
+        const tbody = document.getElementById('analyticsTableBody');
+        tbody.innerHTML = '';
+        
+        if (!data.metrics || data.metrics.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="5" style="padding: 12px; text-align: center;">No broadcast data yet.</td></tr>';
+            return;
+        }
+
+        data.metrics.forEach(m => {
+            const readRate = m.sent > 0 ? Math.round((m.read / m.sent) * 100) : 0;
+            tbody.innerHTML += `
+                <tr style="border-bottom: 1px solid #f0f2f5;">
+                    <td style="padding: 12px;"><b>${m.campaign_name}</b></td>
+                    <td style="padding: 12px;">${m.sent}</td>
+                    <td style="padding: 12px; color: #00a884;">${m.delivered}</td>
+                    <td style="padding: 12px; color: #0284c7;">${m.read}</td>
+                    <td style="padding: 12px;">
+                        <div style="background: #e0f2fe; border-radius: 4px; padding: 4px 8px; display: inline-block; font-weight: bold; color: #0284c7;">${readRate}%</div>
+                    </td>
+                </tr>
+            `;
+        });
+    }
+
     function getStatusDot(status) {
         if (status === 'New Lead') return 'dot-new';
         if (status === 'Interested' || status === 'Quote Sent' || status === 'Follow-up Required') return 'dot-interested';
@@ -279,12 +355,12 @@
     }
 
     function renderContacts() {
-        const search = document.getElementById('searchInput').value.toLowerCase();
-        const filterStatus = document.getElementById('filterStatus').value;
-        const filterAgent = document.getElementById('filterAgent').value;
         const list = document.getElementById('contactList');
-        
         list.innerHTML = '';
+        
+        const filterStatus = document.getElementById('filterStatus').value;
+        const filterAgentValue = document.getElementById('filterAgent').value;
+        const searchVal = document.getElementById('searchInput').value.toLowerCase();
         
         allContacts.forEach(c => {
             const name = (c.name || '').toLowerCase();
@@ -358,7 +434,6 @@
 
         renderContacts();
         loadMessages();
-        loadNotes();
     }
 
     async function updateCRM() {
@@ -410,21 +485,7 @@
         updateCRM();
     }
 
-    /* Notes Management */
-    async function loadNotes() {
-        const res = await authFetch(`/api/notes/${currentPhone}`);
-        const data = await res.json();
-        const list = document.getElementById('notesList');
-        list.innerHTML = '';
-        data.notes.forEach(n => {
-            const time = new Date(n.created_at).toLocaleString();
-            list.innerHTML += `
-                <div class="note-item">
-                    ${n.note.replace(/\\n/g, '<br>')}
-                    <div class="note-meta">${n.created_by} • ${time}</div>
-                </div>`;
-        });
-    }
+    /* Unified Timeline & Notes */
     async function addNote() {
         const input = document.getElementById('noteInput');
         const text = input.value.trim();
@@ -436,28 +497,63 @@
             body: JSON.stringify({ phone: currentPhone, note: text })
         });
         input.value = '';
-        loadNotes();
+        loadMessages(); // Refresh timeline
     }
 
-    /* Chat Messaging */
+    /* Chat Messaging & Timeline */
     async function loadMessages() {
         if (!currentPhone) return;
-        const res = await authFetch(`/api/chat/messages/${currentPhone}`);
-        const data = await res.json();
+        const [msgRes, noteRes] = await Promise.all([
+            authFetch(`/api/chat/messages/${currentPhone}`),
+            authFetch(`/api/notes/${currentPhone}`)
+        ]);
+        const msgData = await msgRes.json();
+        const noteData = await noteRes.json();
+
+        // 1. Render right panel notes
+        const list = document.getElementById('notesList');
+        list.innerHTML = '';
+        noteData.notes.forEach(n => {
+            const time = new Date(n.created_at).toLocaleString();
+            list.innerHTML += `
+                <div class="note-item">
+                    ${n.note.replace(/\\n/g, '<br>')}
+                    <div class="note-meta">${n.created_by} • ${time}</div>
+                </div>`;
+        });
+
+        // 2. Render unified center timeline
+        let timeline = [
+            ...msgData.messages.map(m => ({ ...m, _type: 'message' })),
+            ...noteData.notes.map(n => ({ ...n, _type: 'note' }))
+        ];
+        
+        // Sort chronologically
+        timeline.sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
+
         const msgList = document.getElementById('messageList');
         msgList.innerHTML = '';
-        data.messages.forEach(m => {
+        
+        timeline.forEach(item => {
+            const time = new Date(item.created_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
             const div = document.createElement('div');
-            div.className = 'msg-bubble ' + (m.direction === 'inbound' ? 'msg-in' : 'msg-out');
-            const time = new Date(m.created_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
-            let textHtml = m.content.replace(/\\n/g, '<br>');
-            div.innerHTML = `${textHtml} <span class="msg-time">${time}</span>`;
+            
+            if (item._type === 'message') {
+                div.className = 'msg-bubble ' + (item.direction === 'inbound' ? 'msg-in' : 'msg-out');
+                let textHtml = item.content.replace(/\\n/g, '<br>');
+                div.innerHTML = `${textHtml} <span class="msg-time">${time}</span>`;
+            } else {
+                div.className = 'msg-bubble';
+                div.style = "align-self: center; background: #fff9c4; color: #54656f; font-size: 12px; max-width: 90%; text-align: center; border: 1px dashed #fbc02d; box-shadow: none;";
+                div.innerHTML = `<strong>📝 Note by ${item.created_by}:</strong> ${item.note.replace(/\\n/g, '<br>')} <span class="msg-time">${time}</span>`;
+            }
             msgList.appendChild(div);
         });
+        
         msgList.scrollTop = msgList.scrollHeight; 
         
-        document.getElementById('pauseBotToggle').checked = data.isBotPaused;
-        document.getElementById('botStatusLabel').innerText = data.isBotPaused ? 'Bot Paused' : 'Bot Active';
+        document.getElementById('pauseBotToggle').checked = msgData.isBotPaused;
+        document.getElementById('botStatusLabel').innerText = msgData.isBotPaused ? 'Bot Paused' : 'Bot Active';
     }
 
     document.getElementById('sendBtn').onclick = async () => {
