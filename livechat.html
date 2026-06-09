@@ -1,0 +1,250 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WhatsApp Live Chat Dashboard</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body { font-family: "Segoe UI", "Helvetica Neue", Helvetica, Arial, sans-serif; background-color: #d1d7db; height: 100vh; display: flex; justify-content: center; align-items: center; }
+        
+        .app-container {
+            width: 100%;
+            height: 100%;
+            display: flex;
+            background: #ffffff;
+            box-shadow: 0 1px 1px 0 rgba(0,0,0,0.06), 0 2px 5px 0 rgba(0,0,0,0.2);
+            position: relative;
+        }
+
+        /* Sidebar */
+        .sidebar { width: 30%; border-right: 1px solid #e9edef; display: flex; flex-direction: column; background: #ffffff; }
+        .sidebar-header { background: #f0f2f5; height: 60px; padding: 10px 16px; display: flex; align-items: center; font-weight: 600; color: #41525d; border-bottom: 1px solid #e9edef; }
+        .contact-list { flex: 1; overflow-y: auto; background: #ffffff; }
+        .contact-item { display: flex; padding: 12px 15px; cursor: pointer; border-bottom: 1px solid #f2f2f2; align-items: center; }
+        .contact-item:hover, .contact-item.active { background: #f0f2f5; }
+        .avatar { width: 49px; height: 49px; border-radius: 50%; background: #dfe5e7; display: flex; justify-content: center; align-items: center; margin-right: 15px; font-size: 20px; color: #fff; font-weight: bold; }
+        .contact-info { flex: 1; display: flex; flex-direction: column; justify-content: center; overflow: hidden; }
+        .contact-name { font-size: 17px; color: #111b21; margin-bottom: 3px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .contact-time { font-size: 12px; color: #667781; }
+
+        /* Main Chat Area */
+        .chat-area { flex: 1; display: flex; flex-direction: column; background: #efeae2; position: relative; }
+        .chat-bg { position: absolute; top: 0; left: 0; width: 100%; height: 100%; opacity: 0.06; pointer-events: none; background-image: url('https://upload.wikimedia.org/wikipedia/commons/8/82/WhatsApp_background.png'); background-repeat: repeat; }
+        
+        .chat-header { background: #f0f2f5; height: 60px; padding: 10px 16px; display: flex; align-items: center; justify-content: space-between; border-left: 1px solid #e9edef; z-index: 2; }
+        .chat-header-info { display: flex; align-items: center; }
+        .bot-control { display: flex; align-items: center; gap: 10px; }
+        
+        .toggle-switch { position: relative; display: inline-block; width: 50px; height: 24px; }
+        .toggle-switch input { opacity: 0; width: 0; height: 0; }
+        .slider { position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background-color: #25D366; transition: .4s; border-radius: 24px; }
+        .slider:before { position: absolute; content: ""; height: 16px; width: 16px; left: 4px; bottom: 4px; background-color: white; transition: .4s; border-radius: 50%; }
+        input:checked + .slider { background-color: #dc3545; }
+        input:checked + .slider:before { transform: translateX(26px); }
+        .toggle-label { font-size: 14px; color: #54656f; font-weight: 500; }
+
+        .messages { flex: 1; padding: 20px 5%; overflow-y: auto; display: flex; flex-direction: column; z-index: 2; }
+        .msg-bubble { max-width: 65%; padding: 6px 10px; border-radius: 7.5px; margin-bottom: 8px; position: relative; word-wrap: break-word; font-size: 14.2px; line-height: 19px; color: #111b21; }
+        
+        .msg-in { background: #ffffff; align-self: flex-start; border-top-left-radius: 0; box-shadow: 0 1px 0.5px rgba(11,20,26,.13); }
+        .msg-out { background: #d9fdd3; align-self: flex-end; border-top-right-radius: 0; box-shadow: 0 1px 0.5px rgba(11,20,26,.13); }
+        
+        .msg-time { font-size: 11px; color: #667781; float: right; margin: 8px 0 -4px 10px; }
+
+        .chat-input-area { background: #f0f2f5; padding: 10px 16px; display: flex; align-items: center; gap: 10px; z-index: 2; }
+        .chat-input-area input { flex: 1; padding: 12px; border: none; border-radius: 8px; font-size: 15px; outline: none; color: #111b21; }
+        .chat-input-area button { background: #00a884; color: white; border: none; padding: 12px 24px; border-radius: 8px; cursor: pointer; font-weight: 600; font-size: 15px; }
+        .chat-input-area button:hover { background: #008f6f; }
+        .chat-input-area button:disabled { background: #86d0bf; cursor: not-allowed; }
+
+        .empty-state { display: flex; flex-direction: column; justify-content: center; align-items: center; height: 100%; color: #667781; font-size: 18px; z-index: 2; }
+        .empty-state span { margin-top: 10px; font-size: 14px; }
+        
+        @media (min-width: 1400px) {
+            .app-container { width: 1400px; height: calc(100vh - 40px); margin-top: 20px; }
+        }
+    </style>
+</head>
+<body>
+
+<div class="app-container">
+    <!-- Left Sidebar -->
+    <div class="sidebar">
+        <div class="sidebar-header">
+            Chats
+        </div>
+        <div class="contact-list" id="contactList">
+            <!-- Contacts loaded dynamically -->
+        </div>
+    </div>
+
+    <!-- Right Chat Area -->
+    <div class="chat-area">
+        <div class="chat-bg"></div>
+        
+        <div id="emptyState" class="empty-state">
+            <h2>WhatsApp for Web</h2>
+            <span>Select a chat to start messaging</span>
+        </div>
+
+        <div id="activeChat" style="display: none; height: 100%; flex-direction: column;">
+            <div class="chat-header">
+                <div class="chat-header-info">
+                    <div class="avatar" id="headerAvatar">?</div>
+                    <div>
+                        <div class="contact-name" id="headerName" style="font-weight: 500;">Customer Name</div>
+                        <div class="contact-time" id="headerPhone">1234567890</div>
+                    </div>
+                </div>
+                <div class="bot-control">
+                    <span class="toggle-label" id="botStatusLabel">Bot Active</span>
+                    <label class="toggle-switch">
+                        <input type="checkbox" id="pauseBotToggle">
+                        <span class="slider"></span>
+                    </label>
+                </div>
+            </div>
+
+            <div class="messages" id="messageList">
+                <!-- Messages loaded dynamically -->
+            </div>
+
+            <div class="chat-input-area">
+                <input type="text" id="messageInput" placeholder="Type a message" autocomplete="off">
+                <button id="sendBtn">Send</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    let currentPhone = null;
+
+    // Load Contacts
+    async function loadContacts() {
+        const res = await fetch('/api/chat/contacts');
+        const data = await res.json();
+        
+        const list = document.getElementById('contactList');
+        list.innerHTML = '';
+        
+        data.contacts.forEach(c => {
+            const el = document.createElement('div');
+            el.className = 'contact-item';
+            if (c.phone === currentPhone) el.classList.add('active');
+            
+            const initials = (c.name || 'C').substring(0, 1).toUpperCase();
+            const time = new Date(c.last_message_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+            
+            el.innerHTML = `
+                <div class="avatar" style="background: hsl(${Math.random() * 360}, 40%, 60%)">${initials}</div>
+                <div class="contact-info">
+                    <div class="contact-name">${c.name || c.phone}</div>
+                    <div class="contact-time">${time}</div>
+                </div>
+            `;
+            el.onclick = () => openChat(c.phone, c.name);
+            list.appendChild(el);
+        });
+    }
+
+    // Open Chat
+    async function openChat(phone, name) {
+        currentPhone = phone;
+        document.getElementById('emptyState').style.display = 'none';
+        document.getElementById('activeChat').style.display = 'flex';
+        
+        document.getElementById('headerName').innerText = name || phone;
+        document.getElementById('headerPhone').innerText = phone;
+        document.getElementById('headerAvatar').innerText = (name || phone).substring(0, 1).toUpperCase();
+        
+        // Update active class in sidebar
+        document.querySelectorAll('.contact-item').forEach(el => el.classList.remove('active'));
+        
+        loadMessages();
+    }
+
+    // Load Messages
+    async function loadMessages() {
+        if (!currentPhone) return;
+        
+        const res = await fetch(`/api/chat/messages/${currentPhone}`);
+        const data = await res.json();
+        
+        const msgList = document.getElementById('messageList');
+        msgList.innerHTML = '';
+        
+        data.messages.forEach(m => {
+            const div = document.createElement('div');
+            div.className = 'msg-bubble ' + (m.direction === 'inbound' ? 'msg-in' : 'msg-out');
+            
+            const time = new Date(m.created_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+            
+            // Render text with line breaks
+            let textHtml = m.content.replace(/\\n/g, '<br>');
+            
+            div.innerHTML = `${textHtml} <span class="msg-time">${time}</span>`;
+            msgList.appendChild(div);
+        });
+        
+        msgList.scrollTop = msgList.scrollHeight; // auto scroll to bottom
+        
+        // Set toggle state
+        const toggle = document.getElementById('pauseBotToggle');
+        const label = document.getElementById('botStatusLabel');
+        toggle.checked = data.isBotPaused;
+        label.innerText = data.isBotPaused ? 'Bot Paused (Human)' : 'Bot Active';
+    }
+
+    // Send Message
+    document.getElementById('sendBtn').onclick = async () => {
+        const input = document.getElementById('messageInput');
+        const text = input.value.trim();
+        if (!text || !currentPhone) return;
+        
+        const btn = document.getElementById('sendBtn');
+        btn.disabled = true;
+        input.value = '';
+        
+        await fetch('/api/chat/send', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ phone: currentPhone, message: text })
+        });
+        
+        btn.disabled = false;
+        loadMessages(); // reload to show sent msg
+    };
+    
+    // Allow 'Enter' key to send
+    document.getElementById('messageInput').addEventListener('keypress', function (e) {
+        if (e.key === 'Enter') {
+            document.getElementById('sendBtn').click();
+        }
+    });
+
+    // Toggle Bot Pause
+    document.getElementById('pauseBotToggle').onchange = async (e) => {
+        const isPaused = e.target.checked;
+        document.getElementById('botStatusLabel').innerText = isPaused ? 'Bot Paused (Human)' : 'Bot Active';
+        
+        await fetch('/api/chat/pause', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ phone: currentPhone, hours: isPaused ? 24 : 0 })
+        });
+    };
+
+    // Polling for real-time updates
+    setInterval(() => {
+        loadContacts();
+        if (currentPhone) loadMessages();
+    }, 5000);
+
+    // Init
+    loadContacts();
+</script>
+
+</body>
+</html>

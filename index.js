@@ -11,6 +11,7 @@ const flow    = require('./flow');
 const config  = require('./config');
 const sheets  = require('./sheets');
 const { addInvite, isInvited, uploadReceipt } = require('./invite-store');
+const chatStore = require('./chat-store');
 
 process.on('uncaughtException',  (err) => console.error('[crash] Uncaught exception:', err.message));
 process.on('unhandledRejection', (r)   => console.error('[crash] Unhandled rejection:', r?.message || r));
@@ -99,6 +100,10 @@ async function _metaSendOnce(phone, text) {
       }
     } catch { /* not JSON — rely on HTTP status */ }
 
+    if (res.ok && metaOk) {
+      chatStore.saveMessage(phone, null, 'outbound', text);
+    }
+
     return { ok: res.ok, status: res.status, body, metaOk, metaInfo, waMessageId };
   } finally {
     clearTimeout(timer);
@@ -153,6 +158,7 @@ async function watiSendButtons(phone, bodyText, buttons) {
     if (res.ok && metaOk) {
       console.log(`[meta] ✓ buttons sent to ${phone}${metaInfo ? ' — ' + metaInfo : ''}`);
       sendMetrics.sent++;
+      chatStore.saveMessage(phone, null, 'outbound', `[Buttons] ${bodyText}`);
       return { ok: true, status: res.status, body };
     }
     console.error(`[meta] ✗ buttons HTTP ${res.status} to ${phone}: ${metaInfo || body.slice(0, 200)}`);
@@ -225,6 +231,7 @@ async function watiSendList(phone, body, buttonLabel, sections, opts = {}) {
     if (res.ok && metaOk) {
       console.log(`[meta] ✓ list sent to ${phone}${metaInfo ? ' — ' + metaInfo : ''}`);
       sendMetrics.sent++;
+      chatStore.saveMessage(phone, null, 'outbound', `[List] ${body}`);
       return { ok: true, status: res.status, body: respBody };
     }
     console.error(`[meta] ✗ list HTTP ${res.status} to ${phone}: ${metaInfo || respBody.slice(0, 200)}`);
@@ -350,6 +357,7 @@ async function watiSendImage(phone, mediaId, caption = '') {
     if (res.ok && metaOk) {
       console.log(`[meta] ✓ image sent to ${phone}${metaInfo ? ' — ' + metaInfo : ''}`);
       sendMetrics.sent++;
+      chatStore.saveMessage(phone, null, 'outbound', `[Image] ${caption || ''}`);
       return { ok: true, status: res.status, body };
     }
     console.error(`[meta] ✗ image HTTP ${res.status} to ${phone}: ${metaInfo || body.slice(0, 200)}`);
@@ -444,6 +452,7 @@ async function watiSendTemplate(phone, templateName, langCode = 'en', variables 
     try { j = JSON.parse(textBody); } catch {}
     
     if (res.ok && !j.error) {
+      chatStore.saveMessage(phone, null, 'outbound', `[Template] ${templateName}`);
       return { ok: true, body: j };
     }
     return { ok: false, error: j.error || { message: `HTTP ${res.status}: ${textBody}` } };
@@ -505,27 +514,35 @@ function scheduleNudge(phone) {
 const PAUSE_DEFAULT_HOURS = 4;
 const pausedUsers = new Map(); // phone -> { expiresAt, notified }
 
-function pauseUser(phone, hours = PAUSE_DEFAULT_HOURS) {
+async function pauseUser(phone, hours = PAUSE_DEFAULT_HOURS) {
   const expiresAt = Date.now() + hours * 60 * 60 * 1000;
   pausedUsers.set(phone, { expiresAt, notified: false });
   console.log(`[pause] ${phone} → paused for ${hours}h`);
+  await chatStore.setBotPause(phone, hours);
 }
 
-function resumeUser(phone) {
+async function resumeUser(phone) {
   const had = pausedUsers.delete(phone);
   if (had) console.log(`[pause] ${phone} → resumed`);
+  await chatStore.setBotPause(phone, 0);
   return had;
 }
 
-function isPaused(phone) {
+async function isPaused(phone) {
   const entry = pausedUsers.get(phone);
-  if (!entry) return false;
-  if (Date.now() > entry.expiresAt) {
+  if (entry && Date.now() <= entry.expiresAt) return true;
+  
+  const dbPaused = await chatStore.isBotPaused(phone);
+  if (dbPaused) {
+    pausedUsers.set(phone, { expiresAt: Date.now() + 24*60*60*1000, notified: true });
+    return true;
+  }
+
+  if (entry) {
     pausedUsers.delete(phone);
     console.log(`[pause] ${phone} → auto-released (pause expired)`);
-    return false;
   }
-  return true;
+  return false;
 }
 
 // ─── Dedup ──────────────────────────────────────────────────
@@ -697,7 +714,10 @@ async function handleMetaMessage(m, senderName) {
   // If admin has taken over this customer manually, the bot stays silent.
   // The customer gets a single "an agent will help you" notice the first
   // time they message while paused, then nothing until /release is hit.
-  if (isPaused(phone)) {
+  const paused = await isPaused(phone);
+  await chatStore.saveMessage(phone, senderName, 'inbound', msgType === 'image' || msgType === 'document' ? `[${msgType}] ${text}` : text);
+
+  if (paused) {
     const entry = pausedUsers.get(phone);
     console.log(`[pause] ${phone} → skipping bot reply (agent takeover)`);
     if (entry && !entry.notified) {
@@ -770,6 +790,51 @@ async function handleMetaMessage(m, senderName) {
 }
 
 // ─── HTTP endpoints (admin + health) ───────────────────────
+
+// ─── Dashboard Chat APIs ───────────────────────────────────────
+app.get('/chat', (req, res) => {
+  res.sendFile(__dirname + '/livechat.html');
+});
+
+app.get('/api/chat/contacts', async (req, res) => {
+  const contacts = await chatStore.getContacts();
+  res.json({ success: true, contacts });
+});
+
+app.get('/api/chat/messages/:phone', async (req, res) => {
+  const { phone } = req.params;
+  const messages = await chatStore.getMessages(phone);
+  const isBotPaused = await chatStore.isBotPaused(phone);
+  res.json({ success: true, messages, isBotPaused });
+});
+
+app.post('/api/chat/send', async (req, res) => {
+  const { phone, message } = req.body;
+  if (!phone || !message) return res.status(400).json({ error: 'Missing phone or message' });
+  
+  await pauseUser(phone, 4); // Pause bot automatically when human replies
+  
+  const result = await watiSend(phone, message);
+  if (result.ok) {
+    res.json({ success: true });
+  } else {
+    res.status(500).json({ error: 'Failed to send', details: result.error });
+  }
+});
+
+app.post('/api/chat/pause', async (req, res) => {
+  const { phone, hours } = req.body;
+  if (!phone) return res.status(400).json({ error: 'Missing phone' });
+  
+  if (hours > 0) {
+    await pauseUser(phone, hours);
+    res.json({ success: true, paused: true });
+  } else {
+    await resumeUser(phone);
+    res.json({ success: true, paused: false });
+  }
+});
+
 app.get('/', (_req, res) => {
   res.send(`<!DOCTYPE html><html><head><meta charset="utf-8"><title>${config.businessName} Bot</title>
 <style>body{font-family:system-ui,sans-serif;background:#0a1628;color:#e2e8f0;display:flex;justify-content:center;align-items:center;height:100vh;margin:0}
