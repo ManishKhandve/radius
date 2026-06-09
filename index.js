@@ -400,13 +400,17 @@ async function watiSendTemplate(phone, templateName, langCode = 'en', variables 
   const components = [];
 
   if (headerUrl) {
-    const isDoc = headerUrl.toLowerCase().endsWith('.pdf');
+    const lowerUrl = headerUrl.toLowerCase();
+    const isDoc = lowerUrl.endsWith('.pdf');
+    const isVideo = lowerUrl.endsWith('.mp4') || lowerUrl.endsWith('.mov') || lowerUrl.endsWith('.avi');
+    const typeStr = isDoc ? 'document' : (isVideo ? 'video' : 'image');
+    
     components.push({
       type: 'header',
       parameters: [
         {
-          type: isDoc ? 'document' : 'image',
-          [isDoc ? 'document' : 'image']: { link: headerUrl }
+          type: typeStr,
+          [typeStr]: { link: headerUrl }
         }
       ]
     });

@@ -645,8 +645,8 @@ async function handleMessage(msg) {
   const body = (msg.body || "").trim();
 
   const cleanBody = body.toLowerCase().trim();
-  const isGetCode = cleanBody === 'getcode' || cleanBody === 'get code';
-  const isConnectTeam = cleanBody === 'connect_team' || cleanBody === 'connect with team';
+  const isGetCode = cleanBody === 'getcode' || cleanBody === 'get code' || cleanBody === 'get quote';
+  const isConnectTeam = cleanBody === 'connect_team' || cleanBody === 'connect with team' || cleanBody === 'request call back';
 
   if (isGetCode) {
     clearSession(senderId);
