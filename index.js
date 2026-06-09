@@ -870,10 +870,19 @@ app.post('/api/chat/send', authMiddleware, async (req, res) => {
   
   const result = await watiSend(phone, message);
   if (result.ok) {
+    await chatStore.saveMessage(phone, 'Admin', 'outbound', message);
+    await chatStore.updateContactLabel(phone, 'read');
     res.json({ success: true });
   } else {
     res.status(500).json({ error: 'Failed to send', details: result.error });
   }
+});
+
+app.post('/api/chat/read', authMiddleware, async (req, res) => {
+  const { phone } = req.body;
+  if (!phone) return res.status(400).json({ error: 'Missing phone' });
+  await chatStore.updateContactLabel(phone, 'read');
+  res.json({ success: true });
 });
 
 app.post('/api/chat/pause', authMiddleware, async (req, res) => {

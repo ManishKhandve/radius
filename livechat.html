@@ -107,9 +107,11 @@
                 <button onclick="showAnalyticsView()" class="btn-login" id="analyticsNavBtn" style="padding: 6px; font-size: 12px; margin-top: 0; background: #54656f; display: none;">Analytics</button>
             </div>
         </div>
-        
         <div class="search-bar">
-            <input type="text" id="searchInput" placeholder="Search name or phone" onkeyup="renderContacts()">
+            <div style="display: flex; gap: 5px; margin-bottom: 5px;">
+                <input type="text" id="searchInput" placeholder="Search name or phone" onkeyup="renderContacts()" style="flex:1;">
+                <button id="filterUnreadBtn" onclick="toggleUnreadFilter()" style="padding: 8px 12px; border: 1px solid #d1d7db; border-radius: 8px; background: white; cursor: pointer; color: #54656f; font-size: 13px;">Unread</button>
+            </div>
             <select id="filterStatus" onchange="renderContacts()">
                 <option value="all">All Statuses</option>
                 <option value="New Lead">New Lead</option>
@@ -376,6 +378,9 @@
             if (!matchesStatus || !matchesAgent || !matchesSearch) return;
 
             const isOverdue = status === 'Follow-up Required' && c.follow_up_time && new Date(c.follow_up_time) <= new Date();
+            const isUnread = c.label === 'unread';
+            
+            if (showUnreadOnly && !isUnread) return;
 
             const el = document.createElement('div');
             el.className = 'contact-item' + (c.phone === currentPhone ? ' active' : '');
@@ -392,8 +397,14 @@
                 <div class="avatar" style="background: hsl(${c.phone.slice(-3) % 360}, 50%, 60%)">${initials}</div>
                 <div class="contact-info">
                     <div class="contact-name-row">
-                        <span class="contact-name"><span class="status-dot ${getStatusDot(status)}"></span>${c.name || c.phone}</span>
-                        <span class="contact-time">${time}</span>
+                        <span class="contact-name" style="${isUnread ? 'font-weight:bold; color:#111b21;' : ''}">
+                            <span class="status-dot ${getStatusDot(status)}"></span>
+                            ${c.name || c.phone}
+                        </span>
+                        <div style="display:flex; flex-direction:column; align-items:flex-end;">
+                            <span class="contact-time" style="${isUnread ? 'color:#25d366;font-weight:bold;' : ''}">${time}</span>
+                            ${isUnread ? '<div style="width:10px;height:10px;background:#25d366;border-radius:50%;margin-top:4px;"></div>' : ''}
+                        </div>
                     </div>
                     <div class="contact-sub-row">
                         <span>${agent}</span>
@@ -408,6 +419,15 @@
 
     async function openChat(contact, initials) {
         currentPhone = contact.phone;
+        
+        if (contact.label === 'unread') {
+            contact.label = 'read';
+            authFetch('/api/chat/read', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ phone: currentPhone })
+            }).catch(()=>{});
+        }
         
         // Show Panes
         document.getElementById('emptyState').style.display = 'none';
@@ -472,6 +492,15 @@
     }
 
     /* Tags Management */
+    let showUnreadOnly = false;
+    function toggleUnreadFilter() {
+        showUnreadOnly = !showUnreadOnly;
+        document.getElementById('filterUnreadBtn').style.background = showUnreadOnly ? '#dcf8c6' : 'white';
+        document.getElementById('filterUnreadBtn').style.fontWeight = showUnreadOnly ? 'bold' : 'normal';
+        document.getElementById('filterUnreadBtn').style.color = showUnreadOnly ? '#111b21' : '#54656f';
+        renderContacts();
+    }
+
     function renderTags() {
         const container = document.getElementById('tagsContainer');
         container.innerHTML = '';
