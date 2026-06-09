@@ -718,14 +718,19 @@ async function handleMetaMessage(m, senderName) {
   await chatStore.saveMessage(phone, senderName, 'inbound', msgType === 'image' || msgType === 'document' ? `[${msgType}] ${text}` : text);
 
   if (paused) {
-    const entry = pausedUsers.get(phone);
-    console.log(`[pause] ${phone} → skipping bot reply (agent takeover)`);
-    if (entry && !entry.notified) {
-      entry.notified = true;
-      watiSend(phone, "👤 An agent from our team will reply to you shortly. Thanks for your patience!")
-        .catch(() => {});
+    if (flow.restartIntent(text)) {
+      console.log(`[pause] ${phone} → keyword triggered, unpausing automatically`);
+      await resumeUser(phone);
+    } else {
+      const entry = pausedUsers.get(phone);
+      console.log(`[pause] ${phone} → skipping bot reply (agent takeover)`);
+      if (entry && !entry.notified) {
+        entry.notified = true;
+        watiSend(phone, "👤 An agent from our team will reply to you shortly. Thanks for your patience!")
+          .catch(() => {});
+      }
+      return;
     }
-    return;
   }
 
   console.log('[meta] from:', phone, 'type:', msgType, 'body:', JSON.stringify(String(text)).slice(0, 30));

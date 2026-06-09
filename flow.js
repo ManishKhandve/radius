@@ -1839,4 +1839,4 @@ function finishCleaning(session, senderId) {
   return [msg, { _adminAlert: adminAlert }];
 }
 
-module.exports = { handleMessage, activeSessionCount, clearSession, sessions, migrateIdentity };
+module.exports = { handleMessage, activeSessionCount, clearSession, sessions, migrateIdentity, restartIntent };
