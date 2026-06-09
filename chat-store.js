@@ -192,15 +192,19 @@ async function addNote(phone, note, created_by = 'Admin') {
 }
 
 /**
- * Fetches all contacts, ordered by the latest message.
+ * Fetches contacts, ordered by the latest message.
+ * Admins see all. Employees see only their assigned chats or unassigned chats.
  */
-async function getContacts() {
+async function getContacts(role = 'admin', username = '') {
   if (!supabase) return [];
   try {
-    const { data, error } = await supabase
-      .from('contacts')
-      .select('*')
-      .order('last_message_at', { ascending: false });
+    let query = supabase.from('contacts').select('*');
+    
+    if (role === 'employee') {
+      query = query.or(`assigned_agent.eq.${username},assigned_agent.eq.Unassigned,assigned_agent.is.null`);
+    }
+
+    const { data, error } = await query.order('last_message_at', { ascending: false });
 
     if (error) {
       console.error('[chat-store] error fetching contacts:', error);
@@ -210,6 +214,31 @@ async function getContacts() {
   } catch (err) {
     console.error('[chat-store] exception fetching contacts:', err.message);
     return [];
+  }
+}
+
+/**
+ * Log in a user.
+ */
+async function loginUser(username, password) {
+  if (!supabase) return null;
+  try {
+    const { data, error } = await supabase
+      .from('users')
+      .select('id, username, role')
+      .eq('username', username)
+      .eq('password_hash', password)
+      .single();
+    
+    if (error || !data) return null;
+
+    // Update last login
+    await supabase.from('users').update({ last_login_at: new Date().toISOString() }).eq('id', data.id);
+
+    return data;
+  } catch (err) {
+    console.error('[chat-store] login exception:', err.message);
+    return null;
   }
 }
 
@@ -245,5 +274,6 @@ module.exports = {
   updateContactLabel,
   updateContactCRM,
   getNotes,
-  addNote
+  addNote,
+  loginUser
 };

@@ -801,19 +801,48 @@ app.get('/chat', (req, res) => {
   res.sendFile(__dirname + '/livechat.html');
 });
 
-app.get('/api/chat/contacts', async (req, res) => {
-  const contacts = await chatStore.getContacts();
+// Serve login page
+app.get('/login', (req, res) => {
+  res.sendFile(__dirname + '/login.html');
+});
+
+const crypto = require('crypto');
+const authTokens = new Map();
+
+app.post('/api/login', async (req, res) => {
+  const { username, password } = req.body;
+  if (!username || !password) return res.status(400).json({ error: 'Missing credentials' });
+
+  const user = await chatStore.loginUser(username, password);
+  if (!user) return res.status(401).json({ error: 'Invalid credentials' });
+
+  const token = crypto.randomBytes(32).toString('hex');
+  authTokens.set(token, { username: user.username, role: user.role });
+
+  res.json({ success: true, token, role: user.role, username: user.username });
+});
+
+const authMiddleware = (req, res, next) => {
+  const token = req.headers['auth-token'];
+  const user = authTokens.get(token);
+  if (!user) return res.status(401).json({ error: 'Unauthorized' });
+  req.user = user;
+  next();
+};
+
+app.get('/api/chat/contacts', authMiddleware, async (req, res) => {
+  const contacts = await chatStore.getContacts(req.user.role, req.user.username);
   res.json({ success: true, contacts });
 });
 
-app.get('/api/chat/messages/:phone', async (req, res) => {
+app.get('/api/chat/messages/:phone', authMiddleware, async (req, res) => {
   const { phone } = req.params;
   const messages = await chatStore.getMessages(phone);
   const isBotPaused = await chatStore.isBotPaused(phone);
   res.json({ success: true, messages, isBotPaused });
 });
 
-app.post('/api/chat/send', async (req, res) => {
+app.post('/api/chat/send', authMiddleware, async (req, res) => {
   const { phone, message } = req.body;
   if (!phone || !message) return res.status(400).json({ error: 'Missing phone or message' });
   
@@ -827,7 +856,7 @@ app.post('/api/chat/send', async (req, res) => {
   }
 });
 
-app.post('/api/chat/pause', async (req, res) => {
+app.post('/api/chat/pause', authMiddleware, async (req, res) => {
   const { phone, hours } = req.body;
   if (!phone) return res.status(400).json({ error: 'Missing phone' });
   
@@ -839,14 +868,16 @@ app.post('/api/chat/pause', async (req, res) => {
     res.json({ success: true, paused: false });
   }
 });
-app.post('/api/chat/label', async (req, res) => {
+
+app.post('/api/chat/label', authMiddleware, async (req, res) => {
   const { phone, label } = req.body;
   if (!phone || !label) return res.status(400).json({ error: 'Missing phone or label' });
   
   await chatStore.updateContactLabel(phone, label);
   res.json({ success: true, label });
 });
-app.post('/api/chat/crm', async (req, res) => {
+
+app.post('/api/chat/crm', authMiddleware, async (req, res) => {
   const { phone, lead_status, assigned_agent, follow_up_time, tags } = req.body;
   if (!phone) return res.status(400).json({ error: 'Missing phone' });
   
@@ -860,17 +891,18 @@ app.post('/api/chat/crm', async (req, res) => {
   res.json({ success: true });
 });
 
-app.get('/api/notes/:phone', async (req, res) => {
+app.get('/api/notes/:phone', authMiddleware, async (req, res) => {
   const { phone } = req.params;
   const notes = await chatStore.getNotes(phone);
   res.json({ success: true, notes });
 });
 
-app.post('/api/notes', async (req, res) => {
-  const { phone, note, created_by } = req.body;
+app.post('/api/notes', authMiddleware, async (req, res) => {
+  const { phone, note } = req.body;
   if (!phone || !note) return res.status(400).json({ error: 'Missing phone or note' });
   
-  const newNote = await chatStore.addNote(phone, note, created_by);
+  // Store note with the logged-in user's name
+  const newNote = await chatStore.addNote(phone, note, req.user.username);
   res.json({ success: true, note: newNote });
 });
 

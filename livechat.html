@@ -95,8 +95,11 @@
     <!-- 1. Left Sidebar -->
     <div class="sidebar">
         <div class="sidebar-header">
-            <div>Inbox</div>
-            <div style="font-size: 13px; font-weight: normal; color: #54656f;" id="totalUsersCount">0 Users</div>
+            <div>
+                <span id="loggedInUser" style="color: #00a884; margin-right: 5px;"></span>
+                <span id="logoutBtn" style="font-size: 11px; cursor: pointer; color: #dc3545;" onclick="logout()">Logout</span>
+            </div>
+            <div style="font-size: 13px; font-weight: normal; color: #54656f;" id="totalUsersCount"></div>
         </div>
         
         <div class="search-bar">
@@ -221,15 +224,42 @@
 </div>
 
 <script>
+    const token = localStorage.getItem('crm_token');
+    if (!token) window.location.href = '/login';
+
+    const currentUser = localStorage.getItem('crm_user');
+    const currentRole = localStorage.getItem('crm_role');
+    
+    document.getElementById('loggedInUser').innerText = currentUser + (currentRole === 'admin' ? ' (Admin)' : '');
+
+    function logout() {
+        localStorage.clear();
+        window.location.href = '/login';
+    }
+
     let allContacts = [];
     let currentPhone = null;
     let currentTags = [];
 
+    async function authFetch(url, options = {}) {
+        if (!options.headers) options.headers = {};
+        options.headers['auth-token'] = token;
+        const res = await fetch(url, options);
+        if (res.status === 401) logout();
+        return res;
+    }
+
     async function loadContacts() {
-        const res = await fetch('/api/chat/contacts');
+        const res = await authFetch('/api/chat/contacts');
         const data = await res.json();
         allContacts = data.contacts;
-        document.getElementById('totalUsersCount').innerText = `${allContacts.length} Users`;
+        
+        if (currentRole === 'admin') {
+            document.getElementById('totalUsersCount').innerText = `${allContacts.length} Users`;
+        } else {
+            document.getElementById('totalUsersCount').style.display = 'none';
+        }
+        
         renderContacts();
     }
 
@@ -333,7 +363,7 @@
         const payload = { phone: currentPhone, lead_status: status, assigned_agent: agent, tags: JSON.stringify(currentTags) };
         if (followup) payload.follow_up_time = new Date(followup).toISOString();
 
-        await fetch('/api/chat/crm', {
+        await authFetch('/api/chat/crm', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(payload)
@@ -375,7 +405,7 @@
 
     /* Notes Management */
     async function loadNotes() {
-        const res = await fetch(`/api/notes/${currentPhone}`);
+        const res = await authFetch(`/api/notes/${currentPhone}`);
         const data = await res.json();
         const list = document.getElementById('notesList');
         list.innerHTML = '';
@@ -393,10 +423,10 @@
         const text = input.value.trim();
         if (!text) return;
         
-        await fetch('/api/notes', {
+        await authFetch('/api/notes', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ phone: currentPhone, note: text, created_by: 'Admin' })
+            body: JSON.stringify({ phone: currentPhone, note: text })
         });
         input.value = '';
         loadNotes();
@@ -405,7 +435,7 @@
     /* Chat Messaging */
     async function loadMessages() {
         if (!currentPhone) return;
-        const res = await fetch(`/api/chat/messages/${currentPhone}`);
+        const res = await authFetch(`/api/chat/messages/${currentPhone}`);
         const data = await res.json();
         const msgList = document.getElementById('messageList');
         msgList.innerHTML = '';
@@ -432,7 +462,7 @@
         btn.disabled = true; input.value = '';
         document.getElementById('qrPopup').style.display = 'none';
         
-        await fetch('/api/chat/send', {
+        await authFetch('/api/chat/send', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ phone: currentPhone, message: text })
@@ -459,7 +489,7 @@
     document.getElementById('pauseBotToggle').onchange = async (e) => {
         const isPaused = e.target.checked;
         document.getElementById('botStatusLabel').innerText = isPaused ? 'Bot Paused' : 'Bot Active';
-        await fetch('/api/chat/pause', {
+        await authFetch('/api/chat/pause', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ phone: currentPhone, hours: isPaused ? 24 : 0 })

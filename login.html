@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cleanly CRM - Login</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; font-family: "Segoe UI", "Helvetica Neue", Helvetica, Arial, sans-serif; }
+        body { background-color: #f0f2f5; display: flex; justify-content: center; align-items: center; height: 100vh; }
+        .login-card { background: white; width: 400px; padding: 40px; border-radius: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.1); text-align: center; }
+        .logo { width: 60px; height: 60px; background: #00a884; border-radius: 50%; display: flex; justify-content: center; align-items: center; margin: 0 auto 20px; }
+        .logo svg { fill: white; width: 30px; }
+        h1 { font-size: 24px; color: #111b21; margin-bottom: 5px; font-weight: 600; }
+        p { color: #667781; font-size: 14px; margin-bottom: 30px; }
+        
+        .input-group { margin-bottom: 20px; text-align: left; }
+        .input-group label { display: block; font-size: 13px; color: #54656f; margin-bottom: 8px; font-weight: 600; }
+        .input-group input { width: 100%; padding: 12px 15px; border: 1px solid #d1d7db; border-radius: 8px; font-size: 15px; outline: none; background: #f8f9fa; transition: border 0.3s; }
+        .input-group input:focus { border-color: #00a884; background: white; }
+        
+        .btn-login { width: 100%; background: #00a884; color: white; border: none; padding: 14px; border-radius: 8px; font-size: 16px; font-weight: 600; cursor: pointer; transition: background 0.3s; margin-top: 10px; }
+        .btn-login:hover { background: #008f6f; }
+        .btn-login:disabled { background: #99dcd0; cursor: not-allowed; }
+        
+        .error-msg { color: #dc3545; font-size: 13px; margin-top: 15px; display: none; }
+    </style>
+</head>
+<body>
+
+    <div class="login-card">
+        <div class="logo">
+            <svg viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 3c1.66 0 3 1.34 3 3s-1.34 3-3 3-3-1.34-3-3 1.34-3 3-3zm0 14.2c-2.5 0-4.71-1.28-6-3.22.03-1.99 4-3.08 6-3.08 1.99 0 5.97 1.09 6 3.08-1.29 1.94-3.5 3.22-6 3.22z"/></svg>
+        </div>
+        <h1>Cleanly CRM</h1>
+        <p>Sign in to manage your leads</p>
+
+        <form id="loginForm">
+            <div class="input-group">
+                <label>Username</label>
+                <input type="text" id="username" required autocomplete="username" placeholder="e.g. Priya">
+            </div>
+            <div class="input-group">
+                <label>Password</label>
+                <input type="password" id="password" required autocomplete="current-password" placeholder="••••••••">
+            </div>
+            <button type="submit" class="btn-login" id="loginBtn">Sign In</button>
+            <div class="error-msg" id="errorMsg">Invalid username or password</div>
+        </form>
+    </div>
+
+    <script>
+        // If already logged in, redirect to chat
+        if (localStorage.getItem('crm_token')) {
+            window.location.href = '/chat';
+        }
+
+        document.getElementById('loginForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const btn = document.getElementById('loginBtn');
+            const errorMsg = document.getElementById('errorMsg');
+            
+            btn.disabled = true;
+            btn.innerText = 'Signing in...';
+            errorMsg.style.display = 'none';
+
+            const user = document.getElementById('username').value.trim();
+            const pass = document.getElementById('password').value.trim();
+
+            try {
+                const res = await fetch('/api/login', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ username: user, password: pass })
+                });
+
+                const data = await res.json();
+
+                if (data.success) {
+                    localStorage.setItem('crm_token', data.token);
+                    localStorage.setItem('crm_role', data.role);
+                    localStorage.setItem('crm_user', data.username);
+                    window.location.href = '/chat';
+                } else {
+                    errorMsg.innerText = data.error || 'Invalid credentials';
+                    errorMsg.style.display = 'block';
+                    btn.disabled = false;
+                    btn.innerText = 'Sign In';
+                }
+            } catch (err) {
+                errorMsg.innerText = 'Network error. Please try again.';
+                errorMsg.style.display = 'block';
+                btn.disabled = false;
+                btn.innerText = 'Sign In';
+            }
+        });
+    </script>
+</body>
+</html>
