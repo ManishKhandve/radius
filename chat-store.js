@@ -294,6 +294,52 @@ async function getBroadcastMetrics() {
 }
 
 /**
+ * Fetch Overdue Follow-ups
+ */
+async function getDueFollowups() {
+  if (!supabase) return [];
+  try {
+    const { data } = await supabase
+      .from('contacts')
+      .select('phone, name, assigned_agent')
+      .eq('lead_status', 'Follow-up Required')
+      .lte('follow_up_time', new Date().toISOString());
+    return data || [];
+  } catch (err) {
+    return [];
+  }
+}
+
+/**
+ * Quick Replies Management
+ */
+async function getQuickReplies() {
+  if (!supabase) return [];
+  try {
+    const { data } = await supabase.from('quick_replies').select('*').order('shortcut', { ascending: true });
+    return data || [];
+  } catch (err) { return []; }
+}
+
+async function addQuickReply(shortcut, message) {
+  if (!supabase) return null;
+  try {
+    // If the table lacks a unique constraint on shortcut, upsert might fail if not configured. 
+    // We will do a safe delete then insert.
+    await supabase.from('quick_replies').delete().eq('shortcut', shortcut);
+    const { data } = await supabase.from('quick_replies').insert([{ shortcut, message }]).select().single();
+    return data;
+  } catch (err) { return null; }
+}
+
+async function deleteQuickReply(shortcut) {
+  if (!supabase) return;
+  try {
+    await supabase.from('quick_replies').delete().eq('shortcut', shortcut);
+  } catch (err) {}
+}
+
+/**
  * Fetches the conversation history for a specific contact.
  */
 async function getMessages(phone) {
@@ -329,5 +375,9 @@ module.exports = {
   loginUser,
   getUsers,
   updateBroadcastMetric,
-  getBroadcastMetrics
+  getBroadcastMetrics,
+  getDueFollowups,
+  getQuickReplies,
+  addQuickReply,
+  deleteQuickReply
 };

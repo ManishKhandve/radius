@@ -178,17 +178,7 @@
         <div class="messages" id="messageList"></div>
 
         <div class="chat-input-area">
-            <div class="qr-popup" id="qrPopup">
-                <div class="qr-item" onclick="insertQR('Hello! Here is our standard pricing:\\n- Full Deep Cleaning: ₹3,599\\n- Bathroom Cleaning: ₹999\\n- Maid Placement: 1 Month Salary')">
-                    <span class="qr-cmd">/pricing</span> - Send Pricing
-                </div>
-                <div class="qr-item" onclick="insertQR('Great! You can book instantly using this link: https://cleanly.example.com/book')">
-                    <span class="qr-cmd">/booking</span> - Send Booking Link
-                </div>
-                <div class="qr-item" onclick="insertQR('Special Offer! Get 10% off your next cleaning if you book today.')">
-                    <span class="qr-cmd">/discount</span> - Send Discount Offer
-                </div>
-            </div>
+            <div class="qr-popup" id="qrPopup"></div>
             <input type="text" id="messageInput" placeholder="Type a message or '/' for quick replies" autocomplete="off" onkeyup="checkQuickReplies(event)">
             <button id="sendBtn">Send</button>
         </div>
@@ -277,6 +267,17 @@
     async function loadContacts() {
         const res = await authFetch('/api/chat/contacts');
         const data = await res.json();
+        
+        // Custom Sort: Overdue follow-ups bubble to the top
+        data.contacts.sort((a, b) => {
+            const now = new Date();
+            const aOverdue = a.lead_status === 'Follow-up Required' && a.follow_up_time && new Date(a.follow_up_time) <= now;
+            const bOverdue = b.lead_status === 'Follow-up Required' && b.follow_up_time && new Date(b.follow_up_time) <= now;
+            if (aOverdue && !bOverdue) return -1;
+            if (!aOverdue && bOverdue) return 1;
+            return new Date(b.last_message_at || 0) - new Date(a.last_message_at || 0);
+        });
+
         allContacts = data.contacts;
         
         if (currentRole === 'admin') {
@@ -365,16 +366,24 @@
         allContacts.forEach(c => {
             const name = (c.name || '').toLowerCase();
             const phone = (c.phone || '').toLowerCase();
-            const status = c.lead_status || '';
+            const status = c.lead_status || 'New Lead';
             const agent = c.assigned_agent || 'Unassigned';
 
-            if (search && !name.includes(search) && !phone.includes(search)) return;
-            if (filterStatus !== 'all' && status !== filterStatus) return;
-            if (filterAgent !== 'all' && agent !== filterAgent) return;
+            const matchesStatus = filterStatus === 'all' || status === filterStatus;
+            const matchesAgent = filterAgentValue === 'all' || agent === filterAgentValue;
+            const matchesSearch = !searchVal || name.includes(searchVal) || phone.includes(searchVal);
+
+            if (!matchesStatus || !matchesAgent || !matchesSearch) return;
+
+            const isOverdue = status === 'Follow-up Required' && c.follow_up_time && new Date(c.follow_up_time) <= new Date();
 
             const el = document.createElement('div');
-            el.className = 'contact-item';
-            if (c.phone === currentPhone) el.classList.add('active');
+            el.className = 'contact-item' + (c.phone === currentPhone ? ' active' : '');
+            
+            if (isOverdue) {
+                el.style.borderLeft = "4px solid #ef4444";
+                el.style.background = c.phone === currentPhone ? "#f0f2f5" : "#fef2f2";
+            }
             
             const initials = (c.name || 'C').substring(0, 1).toUpperCase();
             const time = new Date(c.last_message_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
@@ -388,7 +397,7 @@
                     </div>
                     <div class="contact-sub-row">
                         <span>${agent}</span>
-                        <span>${status || 'No Status'}</span>
+                        <span style="${isOverdue ? 'color:#ef4444;font-weight:bold;' : ''}">${isOverdue ? 'Overdue!' : (status || 'No Status')}</span>
                     </div>
                 </div>
             `;
@@ -576,11 +585,51 @@
     };
 
     /* Quick Replies */
+    let quickReplies = [];
+    async function loadQuickReplies() {
+        const res = await authFetch('/api/quickreplies');
+        const data = await res.json();
+        quickReplies = data.replies || [];
+        renderQuickReplies();
+    }
+
+    function renderQuickReplies() {
+        const popup = document.getElementById('qrPopup');
+        popup.innerHTML = '';
+        quickReplies.forEach(qr => {
+            const safeMsg = qr.message.replace(/'/g, "\\'").replace(/\\n/g, '\\\\n');
+            popup.innerHTML += `
+                <div class="qr-item" onclick="insertQR('${safeMsg}')">
+                    <span class="qr-cmd">/${qr.shortcut}</span>
+                </div>
+            `;
+        });
+        if (currentRole === 'admin') {
+            popup.innerHTML += `
+                <div class="qr-item" style="border-top:1px solid #e9edef; color:#00a884; font-weight:bold; margin-top:5px; padding-top:10px;" onclick="manageQuickReplies()">
+                    + Add New Quick Reply
+                </div>
+            `;
+        }
+    }
+
+    function manageQuickReplies() {
+        const shortcut = prompt("Enter shortcut (without /):");
+        if (!shortcut) return;
+        const message = prompt("Enter message template:");
+        if (!message) return;
+        authFetch('/api/quickreplies', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ shortcut, message })
+        }).then(() => loadQuickReplies());
+    }
+
     function checkQuickReplies(e) {
         if (e.key === 'Enter') { document.getElementById('sendBtn').click(); return; }
         const val = e.target.value;
-        if (val === '/') document.getElementById('qrPopup').style.display = 'block';
-        else if (!val.startsWith('/')) document.getElementById('qrPopup').style.display = 'none';
+        if (val.startsWith('/')) document.getElementById('qrPopup').style.display = 'block';
+        else document.getElementById('qrPopup').style.display = 'none';
     }
     function insertQR(text) {
         const input = document.getElementById('messageInput');
@@ -605,6 +654,7 @@
     }, 5000);
 
     loadUsers();
+    loadQuickReplies();
     loadContacts();
 </script>
 </body>

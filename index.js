@@ -1162,6 +1162,42 @@ app.get('/api/broadcast/status', (req, res) => {
   res.json(activeCampaign);
 });
 
+app.get('/api/quickreplies', authMiddleware, async (req, res) => {
+  const replies = await chatStore.getQuickReplies();
+  res.json({ success: true, replies });
+});
+
+app.post('/api/quickreplies', authMiddleware, async (req, res) => {
+  if (req.user.role !== 'admin') return res.status(403).json({ error: 'Admin only' });
+  const { shortcut, message } = req.body;
+  if (!shortcut || !message) return res.status(400).json({ error: 'Missing fields' });
+  const newReply = await chatStore.addQuickReply(shortcut, message);
+  res.json({ success: true, reply: newReply });
+});
+
+app.delete('/api/quickreplies/:shortcut', authMiddleware, async (req, res) => {
+  if (req.user.role !== 'admin') return res.status(403).json({ error: 'Admin only' });
+  await chatStore.deleteQuickReply(req.params.shortcut);
+  res.json({ success: true });
+});
+
+// ─── Background Cron: Follow-up Reminders ─────────────────────
+const notifiedFollowups = new Set();
+setInterval(async () => {
+  try {
+    const dues = await chatStore.getDueFollowups();
+    for (const d of dues) {
+      if (!notifiedFollowups.has(d.phone)) {
+        notifiedFollowups.add(d.phone);
+        const alertMsg = `⏰ *Follow-up Reminder*\nCustomer: ${d.name || 'Unknown'}\nPhone: +${d.phone}\nAssigned: ${d.assigned_agent || 'Unassigned'}\n\n_Please check the CRM._`;
+        watiSend(OWNER_PHONE, alertMsg).catch(()=>{});
+      }
+    }
+  } catch (err) {
+    console.error('[cron] follow-up check failed', err.message);
+  }
+}, 60000); // Check every minute
+
 // ─── Start ──────────────────────────────────────────────────
 app.listen(PORT, () => {
   console.log(`[server] Meta Cloud API bot ready on :${PORT}`);
