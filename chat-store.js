@@ -125,6 +125,73 @@ async function updateContactLabel(phone, label) {
 }
 
 /**
+ * Updates CRM fields for a contact (Phase 1).
+ */
+async function updateContactCRM(phone, updates) {
+  if (!supabase) return;
+  try {
+    const { error } = await supabase
+      .from('contacts')
+      .update(updates)
+      .eq('phone', phone);
+
+    if (error) console.error('[chat-store] error updating CRM fields:', error);
+  } catch (err) {
+    console.error('[chat-store] exception updating CRM fields:', err.message);
+  }
+}
+
+/**
+ * Fetches internal notes for a contact.
+ */
+async function getNotes(phone) {
+  if (!supabase) return [];
+  try {
+    const { data, error } = await supabase
+      .from('notes')
+      .select('*')
+      .eq('phone', phone)
+      .order('created_at', { ascending: false });
+
+    if (error) {
+      console.error('[chat-store] error fetching notes:', error);
+      return [];
+    }
+    return data || [];
+  } catch (err) {
+    console.error('[chat-store] exception fetching notes:', err.message);
+    return [];
+  }
+}
+
+/**
+ * Adds an internal note for a contact.
+ */
+async function addNote(phone, note, created_by = 'Admin') {
+  if (!supabase) return null;
+  try {
+    const { data, error } = await supabase
+      .from('notes')
+      .insert({
+        phone: phone,
+        note: note,
+        created_by: created_by
+      })
+      .select()
+      .single();
+
+    if (error) {
+      console.error('[chat-store] error adding note:', error);
+      return null;
+    }
+    return data;
+  } catch (err) {
+    console.error('[chat-store] exception adding note:', err.message);
+    return null;
+  }
+}
+
+/**
  * Fetches all contacts, ordered by the latest message.
  */
 async function getContacts() {
@@ -175,5 +242,8 @@ module.exports = {
   setBotPause,
   getContacts,
   getMessages,
-  updateContactLabel
+  updateContactLabel,
+  updateContactCRM,
+  getNotes,
+  addNote
 };

@@ -846,6 +846,33 @@ app.post('/api/chat/label', async (req, res) => {
   await chatStore.updateContactLabel(phone, label);
   res.json({ success: true, label });
 });
+app.post('/api/chat/crm', async (req, res) => {
+  const { phone, lead_status, assigned_agent, follow_up_time, tags } = req.body;
+  if (!phone) return res.status(400).json({ error: 'Missing phone' });
+  
+  const updates = {};
+  if (lead_status !== undefined) updates.lead_status = lead_status;
+  if (assigned_agent !== undefined) updates.assigned_agent = assigned_agent;
+  if (follow_up_time !== undefined) updates.follow_up_time = follow_up_time;
+  if (tags !== undefined) updates.tags = tags;
+
+  await chatStore.updateContactCRM(phone, updates);
+  res.json({ success: true });
+});
+
+app.get('/api/notes/:phone', async (req, res) => {
+  const { phone } = req.params;
+  const notes = await chatStore.getNotes(phone);
+  res.json({ success: true, notes });
+});
+
+app.post('/api/notes', async (req, res) => {
+  const { phone, note, created_by } = req.body;
+  if (!phone || !note) return res.status(400).json({ error: 'Missing phone or note' });
+  
+  const newNote = await chatStore.addNote(phone, note, created_by);
+  res.json({ success: true, note: newNote });
+});
 
 app.get('/', (_req, res) => {
   res.send(`<!DOCTYPE html><html><head><meta charset="utf-8"><title>${config.businessName} Bot</title>

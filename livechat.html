@@ -3,163 +3,219 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>WhatsApp Live Chat CRM Dashboard</title>
+    <title>WhatsApp CRM Dashboard</title>
     <style>
-        * { box-sizing: border-box; margin: 0; padding: 0; }
-        body { font-family: "Segoe UI", "Helvetica Neue", Helvetica, Arial, sans-serif; background-color: #d1d7db; height: 100vh; display: flex; justify-content: center; align-items: center; }
+        * { box-sizing: border-box; margin: 0; padding: 0; font-family: "Segoe UI", "Helvetica Neue", Helvetica, Arial, sans-serif; }
+        body { background-color: #d1d7db; height: 100vh; display: flex; justify-content: center; align-items: center; }
         
-        .app-container {
-            width: 100%;
-            height: 100%;
-            display: flex;
-            background: #ffffff;
-            box-shadow: 0 1px 1px 0 rgba(0,0,0,0.06), 0 2px 5px 0 rgba(0,0,0,0.2);
-            position: relative;
-        }
+        .app-container { width: 100%; height: 100%; display: flex; background: #ffffff; box-shadow: 0 1px 1px 0 rgba(0,0,0,0.06), 0 2px 5px 0 rgba(0,0,0,0.2); }
 
-        /* Sidebar */
-        .sidebar { width: 30%; border-right: 1px solid #e9edef; display: flex; flex-direction: column; background: #ffffff; }
+        /* Left Sidebar (25%) */
+        .sidebar { width: 25%; border-right: 1px solid #e9edef; display: flex; flex-direction: column; background: #ffffff; }
         .sidebar-header { background: #f0f2f5; height: 60px; padding: 10px 16px; display: flex; align-items: center; justify-content: space-between; font-weight: 600; color: #41525d; border-bottom: 1px solid #e9edef; }
         
-        /* Search and Filter */
         .search-bar { background: #ffffff; padding: 10px; border-bottom: 1px solid #e9edef; display: flex; gap: 8px; flex-direction: column; }
-        .search-bar input { padding: 8px 12px; border-radius: 8px; border: 1px solid #e9edef; font-size: 14px; outline: none; background: #f0f2f5; }
-        .search-bar select { padding: 8px 12px; border-radius: 8px; border: 1px solid #e9edef; font-size: 14px; outline: none; background: #f0f2f5; cursor: pointer; }
+        .search-bar input, .search-bar select { padding: 8px 12px; border-radius: 8px; border: 1px solid #e9edef; font-size: 13px; outline: none; background: #f0f2f5; }
 
-        .contact-list { flex: 1; overflow-y: auto; background: #ffffff; }
+        .contact-list { flex: 1; overflow-y: auto; }
         .contact-item { display: flex; padding: 12px 15px; cursor: pointer; border-bottom: 1px solid #f2f2f2; align-items: center; }
         .contact-item:hover, .contact-item.active { background: #f0f2f5; }
-        .avatar { width: 49px; height: 49px; border-radius: 50%; background: #dfe5e7; display: flex; justify-content: center; align-items: center; margin-right: 15px; font-size: 20px; color: #fff; font-weight: bold; flex-shrink: 0; }
-        .contact-info { flex: 1; display: flex; flex-direction: column; justify-content: center; overflow: hidden; }
-        
+        .avatar { width: 45px; height: 45px; border-radius: 50%; background: #dfe5e7; display: flex; justify-content: center; align-items: center; margin-right: 12px; font-size: 18px; color: #fff; font-weight: bold; flex-shrink: 0; }
+        .contact-info { flex: 1; overflow: hidden; }
         .contact-name-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 3px; }
-        .contact-name { font-size: 16px; color: #111b21; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-weight: 500; }
-        .contact-time { font-size: 12px; color: #667781; flex-shrink: 0; margin-left: 5px; }
+        .contact-name { font-size: 15px; color: #111b21; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .contact-time { font-size: 11px; color: #667781; }
+        .contact-sub-row { display: flex; justify-content: space-between; align-items: center; font-size: 12px; color: #667781; }
         
-        /* Badge */
-        .label-badge { font-size: 10px; padding: 2px 6px; border-radius: 4px; font-weight: 600; text-transform: uppercase; margin-top: 4px; display: inline-block; align-self: flex-start; }
-        .badge-unread { background: #25D366; color: white; }
-        .badge-read { background: #e9edef; color: #54656f; }
-        .badge-maid { background: #34B7F1; color: white; }
-        .badge-clean { background: #FFB02E; color: white; }
-        .badge-customer { background: #128C7E; color: white; }
-        .badge-spam { background: #dc3545; color: white; }
-        .badge-default { background: #94a3b8; color: white; }
+        .status-dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; margin-right: 4px; }
+        .dot-new { background: #34B7F1; } .dot-interested { background: #FFB02E; } .dot-booked { background: #25D366; } .dot-closed { background: #dc3545; } .dot-none { background: #ccc; }
 
-        /* Main Chat Area */
-        .chat-area { flex: 1; display: flex; flex-direction: column; background: #efeae2; position: relative; }
+        /* Middle Chat Area (50%) */
+        .chat-area { width: 50%; display: flex; flex-direction: column; background: #efeae2; position: relative; border-right: 1px solid #e9edef; }
         .chat-bg { position: absolute; top: 0; left: 0; width: 100%; height: 100%; opacity: 0.06; pointer-events: none; background-image: url('https://upload.wikimedia.org/wikipedia/commons/8/82/WhatsApp_background.png'); background-repeat: repeat; }
         
-        .chat-header { background: #f0f2f5; height: 60px; padding: 10px 16px; display: flex; align-items: center; justify-content: space-between; border-left: 1px solid #e9edef; z-index: 2; }
-        .chat-header-info { display: flex; align-items: center; }
-        .bot-control { display: flex; align-items: center; gap: 15px; }
-        
-        .chat-label-select { padding: 6px 12px; border-radius: 6px; font-size: 13px; font-weight: 600; border: 1px solid #ccc; outline: none; cursor: pointer; background: white; }
-
-        .toggle-switch { position: relative; display: inline-block; width: 50px; height: 24px; }
+        .chat-header { background: #f0f2f5; height: 60px; padding: 10px 16px; display: flex; align-items: center; justify-content: space-between; z-index: 2; }
+        .bot-control { display: flex; align-items: center; gap: 10px; }
+        .toggle-switch { position: relative; display: inline-block; width: 44px; height: 22px; }
         .toggle-switch input { opacity: 0; width: 0; height: 0; }
-        .slider { position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background-color: #25D366; transition: .4s; border-radius: 24px; }
-        .slider:before { position: absolute; content: ""; height: 16px; width: 16px; left: 4px; bottom: 4px; background-color: white; transition: .4s; border-radius: 50%; }
+        .slider { position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background-color: #25D366; transition: .4s; border-radius: 22px; }
+        .slider:before { position: absolute; content: ""; height: 14px; width: 14px; left: 4px; bottom: 4px; background-color: white; transition: .4s; border-radius: 50%; }
         input:checked + .slider { background-color: #dc3545; }
-        input:checked + .slider:before { transform: translateX(26px); }
-        .toggle-label { font-size: 14px; color: #54656f; font-weight: 500; }
+        input:checked + .slider:before { transform: translateX(22px); }
 
-        .messages { flex: 1; padding: 20px 5%; overflow-y: auto; display: flex; flex-direction: column; z-index: 2; }
-        .msg-bubble { max-width: 65%; padding: 6px 10px; border-radius: 7.5px; margin-bottom: 8px; position: relative; word-wrap: break-word; font-size: 14.2px; line-height: 19px; color: #111b21; }
-        
+        .messages { flex: 1; padding: 20px; overflow-y: auto; display: flex; flex-direction: column; z-index: 2; }
+        .msg-bubble { max-width: 75%; padding: 6px 10px; border-radius: 7.5px; margin-bottom: 8px; position: relative; word-wrap: break-word; font-size: 14px; line-height: 19px; color: #111b21; }
         .msg-in { background: #ffffff; align-self: flex-start; border-top-left-radius: 0; box-shadow: 0 1px 0.5px rgba(11,20,26,.13); }
         .msg-out { background: #d9fdd3; align-self: flex-end; border-top-right-radius: 0; box-shadow: 0 1px 0.5px rgba(11,20,26,.13); }
-        
         .msg-time { font-size: 11px; color: #667781; float: right; margin: 8px 0 -4px 10px; }
 
-        .chat-input-area { background: #f0f2f5; padding: 10px 16px; display: flex; align-items: center; gap: 10px; z-index: 2; }
-        .chat-input-area input { flex: 1; padding: 12px; border: none; border-radius: 8px; font-size: 15px; outline: none; color: #111b21; }
-        .chat-input-area button { background: #00a884; color: white; border: none; padding: 12px 24px; border-radius: 8px; cursor: pointer; font-weight: 600; font-size: 15px; }
-        .chat-input-area button:hover { background: #008f6f; }
-        .chat-input-area button:disabled { background: #86d0bf; cursor: not-allowed; }
-
-        .empty-state { display: flex; flex-direction: column; justify-content: center; align-items: center; height: 100%; color: #667781; font-size: 18px; z-index: 2; }
-        .empty-state span { margin-top: 10px; font-size: 14px; }
+        .chat-input-area { background: #f0f2f5; padding: 10px 16px; display: flex; align-items: center; gap: 10px; z-index: 2; position: relative; }
+        .chat-input-area input { flex: 1; padding: 12px; border: none; border-radius: 8px; font-size: 14px; outline: none; }
+        .chat-input-area button { background: #00a884; color: white; border: none; padding: 12px 20px; border-radius: 8px; cursor: pointer; font-weight: 600; }
         
-        @media (min-width: 1400px) {
-            .app-container { width: 1400px; height: calc(100vh - 40px); margin-top: 20px; }
-        }
+        .qr-popup { display: none; position: absolute; bottom: 60px; left: 16px; background: white; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); width: 300px; max-height: 200px; overflow-y: auto; z-index: 10; border: 1px solid #e9edef; }
+        .qr-item { padding: 10px 15px; border-bottom: 1px solid #f2f2f2; cursor: pointer; font-size: 13px; }
+        .qr-item:hover { background: #f0f2f5; }
+        .qr-cmd { font-weight: 600; color: #00a884; }
+
+        /* Right Profile Panel (25%) */
+        .profile-panel { width: 25%; background: #ffffff; display: none; flex-direction: column; overflow-y: auto; }
+        .profile-header { height: 200px; background: #f0f2f5; display: flex; flex-direction: column; justify-content: center; align-items: center; border-bottom: 1px solid #e9edef; }
+        .profile-avatar { width: 80px; height: 80px; border-radius: 50%; background: #dfe5e7; display: flex; justify-content: center; align-items: center; font-size: 30px; color: #fff; font-weight: bold; margin-bottom: 10px; }
+        .profile-name { font-size: 18px; font-weight: 600; color: #111b21; }
+        .profile-phone { font-size: 14px; color: #667781; }
+
+        .crm-section { padding: 20px; border-bottom: 1px solid #e9edef; }
+        .crm-label { font-size: 12px; font-weight: 600; color: #54656f; margin-bottom: 8px; text-transform: uppercase; letter-spacing: 0.5px; }
+        
+        .crm-input { width: 100%; padding: 8px 10px; border: 1px solid #d1d7db; border-radius: 6px; font-size: 14px; margin-bottom: 15px; outline: none; background: #f8f9fa; }
+        .crm-input:focus { border-color: #00a884; }
+
+        .tags-container { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px; }
+        .tag { background: #e1f0fa; color: #005c4b; padding: 4px 10px; border-radius: 12px; font-size: 12px; font-weight: 500; display: flex; align-items: center; gap: 5px; }
+        .tag-remove { cursor: pointer; font-weight: bold; }
+        .tag-preset { display: inline-block; margin: 2px; padding: 3px 8px; border: 1px solid #ccc; border-radius: 10px; font-size: 11px; cursor: pointer; color: #54656f; }
+        .tag-preset:hover { background: #f0f2f5; }
+
+        .notes-list { max-height: 200px; overflow-y: auto; margin-top: 10px; }
+        .note-item { background: #fff9c4; padding: 10px; border-radius: 6px; margin-bottom: 10px; font-size: 13px; color: #111b21; border-left: 3px solid #fbc02d; }
+        .note-meta { font-size: 10px; color: #667781; margin-top: 5px; text-align: right; }
+
+        .btn-save { background: #00a884; color: white; border: none; padding: 8px 15px; border-radius: 6px; cursor: pointer; font-weight: 600; width: 100%; }
+        .btn-save:hover { background: #008f6f; }
+
+        .empty-state { display: flex; flex-direction: column; justify-content: center; align-items: center; height: 100%; width: 75%; background: #f0f2f5; color: #667781; }
+        
+        @media (min-width: 1400px) { .app-container { width: 1400px; height: calc(100vh - 40px); margin-top: 20px; } }
     </style>
 </head>
 <body>
 
 <div class="app-container">
-    <!-- Left Sidebar -->
+    <!-- 1. Left Sidebar -->
     <div class="sidebar">
         <div class="sidebar-header">
-            <div>Chats</div>
-            <div style="font-size: 13px; font-weight: normal; color: #54656f;" id="totalUsersCount">Total Users: 0</div>
+            <div>Inbox</div>
+            <div style="font-size: 13px; font-weight: normal; color: #54656f;" id="totalUsersCount">0 Users</div>
         </div>
         
         <div class="search-bar">
             <input type="text" id="searchInput" placeholder="Search name or phone" onkeyup="renderContacts()">
-            <select id="filterSelect" onchange="renderContacts()">
-                <option value="all">All Labels</option>
-                <option value="unread">Unread</option>
-                <option value="read">Read</option>
-                <option value="maid">Maid Lead</option>
-                <option value="clean">Cleaning Lead</option>
-                <option value="customer">Customer</option>
-                <option value="spam">Spam</option>
+            <select id="filterStatus" onchange="renderContacts()">
+                <option value="all">All Statuses</option>
+                <option value="New Lead">New Lead</option>
+                <option value="Interested">Interested</option>
+                <option value="Quote Sent">Quote Sent</option>
+                <option value="Follow-up Required">Follow-up Required</option>
+                <option value="Booked">Booked</option>
+                <option value="Service Completed">Service Completed</option>
+                <option value="Not Interested">Not Interested</option>
+            </select>
+            <select id="filterAgent" onchange="renderContacts()">
+                <option value="all">All Agents</option>
+                <option value="Unassigned">Unassigned</option>
+                <option value="Priya">Priya</option>
+                <option value="Sunil">Sunil</option>
+                <option value="Rahul">Rahul</option>
             </select>
         </div>
 
-        <div class="contact-list" id="contactList">
-            <!-- Contacts loaded dynamically -->
+        <div class="contact-list" id="contactList"></div>
+    </div>
+
+    <div id="emptyState" class="empty-state">
+        <h2>WhatsApp CRM</h2>
+        <span>Select a lead to start messaging</span>
+    </div>
+
+    <!-- 2. Main Chat Area -->
+    <div class="chat-area" id="activeChat" style="display: none;">
+        <div class="chat-bg"></div>
+        <div class="chat-header">
+            <div style="display: flex; align-items: center;">
+                <div class="avatar" id="headerAvatar" style="width:40px;height:40px;font-size:16px;">?</div>
+                <div>
+                    <div class="contact-name" id="headerName" style="font-weight: 600;">Customer Name</div>
+                    <div class="contact-time" id="headerPhone" style="font-size:11px;">1234567890</div>
+                </div>
+            </div>
+            <div class="bot-control">
+                <span style="font-size: 13px; font-weight: 500; color: #54656f;" id="botStatusLabel">Bot Active</span>
+                <label class="toggle-switch">
+                    <input type="checkbox" id="pauseBotToggle">
+                    <span class="slider"></span>
+                </label>
+            </div>
+        </div>
+
+        <div class="messages" id="messageList"></div>
+
+        <div class="chat-input-area">
+            <div class="qr-popup" id="qrPopup">
+                <div class="qr-item" onclick="insertQR('Hello! Here is our standard pricing:\\n- Full Deep Cleaning: ₹3,599\\n- Bathroom Cleaning: ₹999\\n- Maid Placement: 1 Month Salary')">
+                    <span class="qr-cmd">/pricing</span> - Send Pricing
+                </div>
+                <div class="qr-item" onclick="insertQR('Great! You can book instantly using this link: https://cleanly.example.com/book')">
+                    <span class="qr-cmd">/booking</span> - Send Booking Link
+                </div>
+                <div class="qr-item" onclick="insertQR('Special Offer! Get 10% off your next cleaning if you book today.')">
+                    <span class="qr-cmd">/discount</span> - Send Discount Offer
+                </div>
+            </div>
+            <input type="text" id="messageInput" placeholder="Type a message or '/' for quick replies" autocomplete="off" onkeyup="checkQuickReplies(event)">
+            <button id="sendBtn">Send</button>
         </div>
     </div>
 
-    <!-- Right Chat Area -->
-    <div class="chat-area">
-        <div class="chat-bg"></div>
-        
-        <div id="emptyState" class="empty-state">
-            <h2>WhatsApp CRM Dashboard</h2>
-            <span>Select a chat to start messaging</span>
+    <!-- 3. Right Profile Panel -->
+    <div class="profile-panel" id="profilePanel">
+        <div class="profile-header">
+            <div class="profile-avatar" id="panelAvatar">?</div>
+            <div class="profile-name" id="panelName">Customer</div>
+            <div class="profile-phone" id="panelPhone">1234567890</div>
         </div>
 
-        <div id="activeChat" style="display: none; height: 100%; flex-direction: column;">
-            <div class="chat-header">
-                <div class="chat-header-info">
-                    <div class="avatar" id="headerAvatar" style="width:40px;height:40px;font-size:16px;">?</div>
-                    <div>
-                        <div class="contact-name" id="headerName" style="font-weight: 600;">Customer Name</div>
-                        <div class="contact-time" id="headerPhone" style="margin-left:0; font-size:11px;">1234567890</div>
-                    </div>
-                </div>
-                <div class="bot-control">
-                    <select class="chat-label-select" id="chatLabelSelect" onchange="updateCurrentLabel()">
-                        <option value="unread">🟢 Unread</option>
-                        <option value="read">⚪ Read</option>
-                        <option value="maid">🔵 Maid Lead</option>
-                        <option value="clean">🟠 Cleaning Lead</option>
-                        <option value="customer">💼 Customer</option>
-                        <option value="spam">🔴 Spam</option>
-                    </select>
+        <div class="crm-section">
+            <div class="crm-label">Lead Status</div>
+            <select class="crm-input" id="crmStatus" onchange="updateCRM()">
+                <option value="">-- Select Status --</option>
+                <option value="New Lead">New Lead</option>
+                <option value="Interested">Interested</option>
+                <option value="Quote Sent">Quote Sent</option>
+                <option value="Follow-up Required">Follow-up Required</option>
+                <option value="Booked">Booked</option>
+                <option value="Service Completed">Service Completed</option>
+                <option value="Not Interested">Not Interested</option>
+            </select>
 
-                    <div style="display:flex; align-items:center; gap:8px;">
-                        <span class="toggle-label" id="botStatusLabel">Bot Active</span>
-                        <label class="toggle-switch">
-                            <input type="checkbox" id="pauseBotToggle">
-                            <span class="slider"></span>
-                        </label>
-                    </div>
-                </div>
-            </div>
+            <div class="crm-label">Assigned To</div>
+            <select class="crm-input" id="crmAgent" onchange="updateCRM()">
+                <option value="Unassigned">Unassigned</option>
+                <option value="Priya">Priya</option>
+                <option value="Sunil">Sunil</option>
+                <option value="Rahul">Rahul</option>
+            </select>
 
-            <div class="messages" id="messageList">
-                <!-- Messages loaded dynamically -->
-            </div>
+            <div class="crm-label">Follow-up Date</div>
+            <input type="datetime-local" class="crm-input" id="crmFollowUp" onchange="updateCRM()">
+        </div>
 
-            <div class="chat-input-area">
-                <input type="text" id="messageInput" placeholder="Type a message" autocomplete="off">
-                <button id="sendBtn">Send</button>
+        <div class="crm-section">
+            <div class="crm-label">Tags & Labels</div>
+            <div class="tags-container" id="tagsContainer"></div>
+            <input type="text" id="tagInput" class="crm-input" placeholder="Type tag and press Enter" style="margin-bottom: 5px;" onkeypress="if(event.key==='Enter') addTag()">
+            <div>
+                <span class="tag-preset" onclick="addPresetTag('Deep Cleaning')">+ Deep Cleaning</span>
+                <span class="tag-preset" onclick="addPresetTag('Maid Service')">+ Maid Service</span>
+                <span class="tag-preset" onclick="addPresetTag('High Value')">+ High Value</span>
             </div>
+        </div>
+
+        <div class="crm-section" style="border-bottom: none;">
+            <div class="crm-label">Internal Notes</div>
+            <textarea id="noteInput" class="crm-input" rows="3" placeholder="Add a private note..."></textarea>
+            <button class="btn-save" onclick="addNote()">Save Note</button>
+            <div class="notes-list" id="notesList"></div>
         </div>
     </div>
 </div>
@@ -167,31 +223,28 @@
 <script>
     let allContacts = [];
     let currentPhone = null;
+    let currentTags = [];
 
-    // Load Contacts
     async function loadContacts() {
         const res = await fetch('/api/chat/contacts');
         const data = await res.json();
-        
         allContacts = data.contacts;
-        document.getElementById('totalUsersCount').innerText = `Total Users: ${allContacts.length}`;
-        
+        document.getElementById('totalUsersCount').innerText = `${allContacts.length} Users`;
         renderContacts();
     }
 
-    function getBadgeClass(label) {
-        if (label === 'unread') return 'badge-unread';
-        if (label === 'read') return 'badge-read';
-        if (label === 'maid') return 'badge-maid';
-        if (label === 'clean') return 'badge-clean';
-        if (label === 'customer') return 'badge-customer';
-        if (label === 'spam') return 'badge-spam';
-        return 'badge-default';
+    function getStatusDot(status) {
+        if (status === 'New Lead') return 'dot-new';
+        if (status === 'Interested' || status === 'Quote Sent' || status === 'Follow-up Required') return 'dot-interested';
+        if (status === 'Booked' || status === 'Service Completed') return 'dot-booked';
+        if (status === 'Not Interested') return 'dot-closed';
+        return 'dot-none';
     }
 
     function renderContacts() {
         const search = document.getElementById('searchInput').value.toLowerCase();
-        const filter = document.getElementById('filterSelect').value;
+        const filterStatus = document.getElementById('filterStatus').value;
+        const filterAgent = document.getElementById('filterAgent').value;
         const list = document.getElementById('contactList');
         
         list.innerHTML = '';
@@ -199,10 +252,12 @@
         allContacts.forEach(c => {
             const name = (c.name || '').toLowerCase();
             const phone = (c.phone || '').toLowerCase();
-            const label = c.label || 'unread'; // Default logic handles nulls
+            const status = c.lead_status || '';
+            const agent = c.assigned_agent || 'Unassigned';
 
             if (search && !name.includes(search) && !phone.includes(search)) return;
-            if (filter !== 'all' && label !== filter) return;
+            if (filterStatus !== 'all' && status !== filterStatus) return;
+            if (filterAgent !== 'all' && agent !== filterAgent) return;
 
             const el = document.createElement('div');
             el.className = 'contact-item';
@@ -215,10 +270,13 @@
                 <div class="avatar" style="background: hsl(${c.phone.slice(-3) % 360}, 50%, 60%)">${initials}</div>
                 <div class="contact-info">
                     <div class="contact-name-row">
-                        <span class="contact-name">${c.name || c.phone}</span>
+                        <span class="contact-name"><span class="status-dot ${getStatusDot(status)}"></span>${c.name || c.phone}</span>
                         <span class="contact-time">${time}</span>
                     </div>
-                    <span class="label-badge ${getBadgeClass(label)}">${label}</span>
+                    <div class="contact-sub-row">
+                        <span>${agent}</span>
+                        <span>${status || 'No Status'}</span>
+                    </div>
                 </div>
             `;
             el.onclick = () => openChat(c, initials);
@@ -226,86 +284,153 @@
         });
     }
 
-    // Open Chat
     async function openChat(contact, initials) {
         currentPhone = contact.phone;
+        
+        // Show Panes
         document.getElementById('emptyState').style.display = 'none';
         document.getElementById('activeChat').style.display = 'flex';
+        document.getElementById('profilePanel').style.display = 'flex';
         
+        // Populate Chat Header
         document.getElementById('headerName').innerText = contact.name || contact.phone;
         document.getElementById('headerPhone').innerText = contact.phone;
         document.getElementById('headerAvatar').innerText = initials;
         
-        const labelSafe = contact.label || 'unread';
-        document.getElementById('chatLabelSelect').value = labelSafe;
+        // Populate Profile Panel
+        document.getElementById('panelName').innerText = contact.name || contact.phone;
+        document.getElementById('panelPhone').innerText = contact.phone;
+        document.getElementById('panelAvatar').innerText = initials;
         
-        // If it was unread, opening it automatically marks it as read
-        if (labelSafe === 'unread') {
-            document.getElementById('chatLabelSelect').value = 'read';
-            updateCurrentLabel();
+        document.getElementById('crmStatus').value = contact.lead_status || '';
+        document.getElementById('crmAgent').value = contact.assigned_agent || 'Unassigned';
+        
+        if (contact.follow_up_time) {
+            // format for datetime-local
+            const d = new Date(contact.follow_up_time);
+            d.setMinutes(d.getMinutes() - d.getTimezoneOffset());
+            document.getElementById('crmFollowUp').value = d.toISOString().slice(0,16);
         } else {
-            renderContacts(); // update active state visually
+            document.getElementById('crmFollowUp').value = '';
         }
-        
+
+        // Handle Tags
+        try { currentTags = typeof contact.tags === 'string' ? JSON.parse(contact.tags) : (contact.tags || []); }
+        catch { currentTags = []; }
+        renderTags();
+
+        renderContacts();
         loadMessages();
+        loadNotes();
     }
 
-    // Update Label manually or automatically
-    async function updateCurrentLabel() {
+    async function updateCRM() {
         if (!currentPhone) return;
-        const newLabel = document.getElementById('chatLabelSelect').value;
+        const status = document.getElementById('crmStatus').value;
+        const agent = document.getElementById('crmAgent').value;
+        const followup = document.getElementById('crmFollowUp').value;
         
-        await fetch('/api/chat/label', {
+        const payload = { phone: currentPhone, lead_status: status, assigned_agent: agent, tags: JSON.stringify(currentTags) };
+        if (followup) payload.follow_up_time = new Date(followup).toISOString();
+
+        await fetch('/api/chat/crm', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ phone: currentPhone, label: newLabel })
+            body: JSON.stringify(payload)
         });
         
-        // update local state so UI is instantly snappy
+        // update local state
         const c = allContacts.find(x => x.phone === currentPhone);
-        if (c) c.label = newLabel;
+        if (c) {
+            c.lead_status = status;
+            c.assigned_agent = agent;
+            if (followup) c.follow_up_time = payload.follow_up_time;
+            c.tags = payload.tags;
+        }
         renderContacts();
     }
 
-    // Load Messages
+    /* Tags Management */
+    function renderTags() {
+        const container = document.getElementById('tagsContainer');
+        container.innerHTML = '';
+        currentTags.forEach((tag, idx) => {
+            container.innerHTML += `<span class="tag">${tag} <span class="tag-remove" onclick="removeTag(${idx})">×</span></span>`;
+        });
+    }
+    function addPresetTag(tag) {
+        if (!currentTags.includes(tag)) { currentTags.push(tag); renderTags(); updateCRM(); }
+    }
+    function addTag() {
+        const input = document.getElementById('tagInput');
+        const tag = input.value.trim();
+        if (tag && !currentTags.includes(tag)) { currentTags.push(tag); renderTags(); updateCRM(); }
+        input.value = '';
+    }
+    function removeTag(idx) {
+        currentTags.splice(idx, 1);
+        renderTags();
+        updateCRM();
+    }
+
+    /* Notes Management */
+    async function loadNotes() {
+        const res = await fetch(`/api/notes/${currentPhone}`);
+        const data = await res.json();
+        const list = document.getElementById('notesList');
+        list.innerHTML = '';
+        data.notes.forEach(n => {
+            const time = new Date(n.created_at).toLocaleString();
+            list.innerHTML += `
+                <div class="note-item">
+                    ${n.note.replace(/\\n/g, '<br>')}
+                    <div class="note-meta">${n.created_by} • ${time}</div>
+                </div>`;
+        });
+    }
+    async function addNote() {
+        const input = document.getElementById('noteInput');
+        const text = input.value.trim();
+        if (!text) return;
+        
+        await fetch('/api/notes', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ phone: currentPhone, note: text, created_by: 'Admin' })
+        });
+        input.value = '';
+        loadNotes();
+    }
+
+    /* Chat Messaging */
     async function loadMessages() {
         if (!currentPhone) return;
-        
         const res = await fetch(`/api/chat/messages/${currentPhone}`);
         const data = await res.json();
-        
         const msgList = document.getElementById('messageList');
         msgList.innerHTML = '';
-        
         data.messages.forEach(m => {
             const div = document.createElement('div');
             div.className = 'msg-bubble ' + (m.direction === 'inbound' ? 'msg-in' : 'msg-out');
-            
             const time = new Date(m.created_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
-            
             let textHtml = m.content.replace(/\\n/g, '<br>');
             div.innerHTML = `${textHtml} <span class="msg-time">${time}</span>`;
             msgList.appendChild(div);
         });
+        msgList.scrollTop = msgList.scrollHeight; 
         
-        msgList.scrollTop = msgList.scrollHeight; // auto scroll to bottom
-        
-        // Set toggle state
-        const toggle = document.getElementById('pauseBotToggle');
-        const label = document.getElementById('botStatusLabel');
-        toggle.checked = data.isBotPaused;
-        label.innerText = data.isBotPaused ? 'Bot Paused (Human)' : 'Bot Active';
+        document.getElementById('pauseBotToggle').checked = data.isBotPaused;
+        document.getElementById('botStatusLabel').innerText = data.isBotPaused ? 'Bot Paused' : 'Bot Active';
     }
 
-    // Send Message
     document.getElementById('sendBtn').onclick = async () => {
         const input = document.getElementById('messageInput');
         const text = input.value.trim();
         if (!text || !currentPhone) return;
         
         const btn = document.getElementById('sendBtn');
-        btn.disabled = true;
-        input.value = '';
+        btn.disabled = true; input.value = '';
+        document.getElementById('qrPopup').style.display = 'none';
         
         await fetch('/api/chat/send', {
             method: 'POST',
@@ -316,19 +441,24 @@
         btn.disabled = false;
         loadMessages();
     };
-    
-    // Allow 'Enter' key to send
-    document.getElementById('messageInput').addEventListener('keypress', function (e) {
-        if (e.key === 'Enter') {
-            document.getElementById('sendBtn').click();
-        }
-    });
 
-    // Toggle Bot Pause
+    /* Quick Replies */
+    function checkQuickReplies(e) {
+        if (e.key === 'Enter') { document.getElementById('sendBtn').click(); return; }
+        const val = e.target.value;
+        if (val === '/') document.getElementById('qrPopup').style.display = 'block';
+        else if (!val.startsWith('/')) document.getElementById('qrPopup').style.display = 'none';
+    }
+    function insertQR(text) {
+        const input = document.getElementById('messageInput');
+        input.value = text;
+        document.getElementById('qrPopup').style.display = 'none';
+        input.focus();
+    }
+
     document.getElementById('pauseBotToggle').onchange = async (e) => {
         const isPaused = e.target.checked;
-        document.getElementById('botStatusLabel').innerText = isPaused ? 'Bot Paused (Human)' : 'Bot Active';
-        
+        document.getElementById('botStatusLabel').innerText = isPaused ? 'Bot Paused' : 'Bot Active';
         await fetch('/api/chat/pause', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -336,15 +466,12 @@
         });
     };
 
-    // Polling for real-time updates
     setInterval(() => {
         loadContacts();
         if (currentPhone) loadMessages();
     }, 5000);
 
-    // Init
     loadContacts();
 </script>
-
 </body>
 </html>
