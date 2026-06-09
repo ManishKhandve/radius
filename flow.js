@@ -225,23 +225,15 @@ function cleaningConfirmPrompt(data, lang) {
     mr: { confirm: '✅ कन्फर्म', cancel: '❌ कैंसल', restart: '🔄 रीस्टार्ट' },
   }[lang] || { confirm: '✅ Confirm', cancel: '❌ Cancel', restart: '🔄 Restart' };
 
-  if (data.isBroadcast && !data.discountApplied) {
-    const discountTitles = {
-      en: '🎁 10% Discount',
-      hi: '🎁 10% छूट',
-      mr: '🎁 10% सवलत'
-    }[lang] || '🎁 10% Discount';
-
-    return {
-      type: 'buttons',
-      body: config.cleaningConfirmMessage(data, lang),
-      buttons: [
-        { id: '1', title: titles.confirm },
-        { id: 'apply_discount', title: discountTitles },
-        { id: '2', title: titles.cancel },
-      ],
-    };
-  }
+  return {
+    type: 'buttons',
+    body: config.cleaningConfirmMessage(data, lang),
+    buttons: [
+      { id: '1', title: titles.confirm },
+      { id: '2', title: titles.cancel },
+      { id: 'restart', title: titles.restart },
+    ],
+  };
 
   return {
     type: 'buttons',
@@ -252,7 +244,45 @@ function cleaningConfirmPrompt(data, lang) {
       { id: 'restart', title: titles.restart },
     ],
   };
+function getDiscountOrAddressPrompt(session, prefixMsg = "") {
+  const lang = session.data.lang || "en";
+  if (session.data.isBroadcast && !session.data.discountApplied) {
+    session.state = "CLEANING_DISCOUNT_PROMPT";
+    const discountTitles = {
+      en: '🎁 Apply 10% Discount',
+      hi: '🎁 10% छूट लागू करें',
+      mr: '🎁 10% सवलत लागू करा'
+    }[lang] || '🎁 Apply 10% Discount';
+
+    const skipTitles = {
+      en: '➡️ Continue',
+      hi: '➡️ आगे बढ़ें',
+      mr: '➡️ पुढे जा'
+    }[lang] || '➡️ Continue';
+
+    const msgText = {
+      en: `You are eligible for a 10% discount on your total of ${session.data.cleaningPrice}!`,
+      hi: `आप अपने कुल ${session.data.cleaningPrice} पर 10% छूट के पात्र हैं!`,
+      mr: `तुम्ही तुमच्या एकूण ${session.data.cleaningPrice} वर 10% सवलतीसाठी पात्र आहात!`
+    }[lang] || `You are eligible for a 10% discount on your total of ${session.data.cleaningPrice}!`;
+
+    const bodyText = prefixMsg ? `${prefixMsg}\n\n${msgText}` : msgText;
+
+    return [{
+      type: 'buttons',
+      body: bodyText,
+      buttons: [
+        { id: 'apply_discount', title: discountTitles },
+        { id: 'skip_discount', title: skipTitles }
+      ]
+    }];
+  } else {
+    session.state = "COLLECT_FLAT";
+    const msg = prefixMsg ? `${prefixMsg}\n\n${config.cleaningAddressMessage[lang]}` : config.cleaningAddressMessage[lang];
+    return [msg];
+  }
 }
+
 
 // ─── Phase 2 + 3 prompt helpers ─────────────────────────────
 // Tactic: extract just the question line(s) for the body, let the
@@ -1082,8 +1112,7 @@ async function processState(session, body, senderId, msg) {
 
     case "CLEANING_BATHROOM_ACTION": {
       if (body === "1") {
-        session.state = "COLLECT_FLAT";
-        return [config.cleaningAddressMessage[session.data.lang || "en"]];
+        return getDiscountOrAddressPrompt(session);
       } else if (body === "2") {
         const msg = config.supportMessage[session.data.lang];
         clearSession(senderId);
@@ -1100,8 +1129,7 @@ async function processState(session, body, senderId, msg) {
         session.data.cleaningPrice !== "Inspection Required";
 
       if (body === "1") {
-        session.state = "COLLECT_FLAT";
-        return [config.cleaningAddressMessage[lang]];
+        return getDiscountOrAddressPrompt(session);
       } else if (body === "2") {
         if (hasAddons) {
           session.state = "CLEANING_ADDONS";
@@ -1134,8 +1162,7 @@ async function processState(session, body, senderId, msg) {
 
       // "Continue without add-ons" — selected alone
       if (picks.length === 1 && picks[0] === config.ADDON_SKIP_OPTION) {
-        session.state = "COLLECT_FLAT";
-        return [config.cleaningAddressMessage[lang]];
+        return getDiscountOrAddressPrompt(session);
       }
 
       // Validate every pick is a real add-on number
@@ -1164,13 +1191,14 @@ async function processState(session, body, senderId, msg) {
       const newTotal = base + addedTotal;
       session.data.cleaningPrice = `₹${newTotal}`;
       session.data.cleaningDetails += ` + Add-ons: ${addedLines.join(' + ')}`;
-      session.state = "COLLECT_FLAT";
-
-      return [lang === "hi"
-        ? `✅ ऐड-ऑन जोड़े गए! नया कुल: ₹${newTotal}\n\n${config.cleaningAddressMessage.hi}`
+      
+      const prefix = lang === "hi"
+        ? `✅ ऐड-ऑन जोड़े गए! नया कुल: ₹${newTotal}`
         : lang === "mr"
-        ? `✅ ऐड-ऑन जोडले! नवीन एकूण: ₹${newTotal}\n\n${config.cleaningAddressMessage.mr}`
-        : `✅ Add-ons added! New total: ₹${newTotal}\n\n${config.cleaningAddressMessage.en}`];
+        ? `✅ ऐड-ऑन जोडले! नवीन एकूण: ₹${newTotal}`
+        : `✅ Add-ons added! New total: ₹${newTotal}`;
+        
+      return getDiscountOrAddressPrompt(session, prefix);
     }
 
     case "CLEANING_ADDON_SOFA": {
@@ -1188,13 +1216,14 @@ async function processState(session, body, senderId, msg) {
       session.data.cleaningPrice = `₹${newTotal}`;
       session.data.cleaningDetails += ` + Add-ons: ${allLines.join(' + ')}`;
       delete session.data.addonPending;
-      session.state = "COLLECT_FLAT";
-
-      return [lang === "hi"
-        ? `✅ ऐड-ऑन जोड़े गए! नया कुल: ₹${newTotal}\n\n${config.cleaningAddressMessage.hi}`
+      
+      const prefix = lang === "hi"
+        ? `✅ ऐड-ऑन जोड़े गए! नया कुल: ₹${newTotal}`
         : lang === "mr"
-        ? `✅ ऐड-ऑन जोडले! नवीन एकूण: ₹${newTotal}\n\n${config.cleaningAddressMessage.mr}`
-        : `✅ Add-ons added! New total: ₹${newTotal}\n\n${config.cleaningAddressMessage.en}`];
+        ? `✅ ऐड-ऑन जोडले! नवीन एकूण: ₹${newTotal}`
+        : `✅ Add-ons added! New total: ₹${newTotal}`;
+
+      return getDiscountOrAddressPrompt(session, prefix);
     }
 
     case "CLEANING_MINI_SERVICE": {
@@ -1242,8 +1271,7 @@ async function processState(session, body, senderId, msg) {
         session.data.cleaningDetails = "Mini Services: " + cart.items.join(', ');
         session.data.cleaningPrice = `₹${cart.total}`;
         delete session.data.miniCart;
-        session.state = "COLLECT_FLAT";
-        return [config.cleaningAddressMessage[lang]];
+        return getDiscountOrAddressPrompt(session);
 
       } catch (err) {
         const msg = lang === "hi"
@@ -1252,6 +1280,30 @@ async function processState(session, body, senderId, msg) {
           ? "⚠️ फॉर्मेट चुकीचे आहे. उदाहरण: 6-2, 3-1, 7-3"
           : "⚠️ Invalid format. Example: 6-2, 3-1, 7-3";
         return [msg];
+      }
+    }
+    case "CLEANING_DISCOUNT_PROMPT": {
+      const lang = session.data.lang || "en";
+      if (body === "apply_discount") {
+        const currentPriceStr = session.data.cleaningPrice || "";
+        const numericPrice = parseInt(currentPriceStr.replace(/[^0-9]/g, "")) || 0;
+        let discountMsg = "";
+        if (numericPrice > 0) {
+          const discount = Math.round(numericPrice * 0.10);
+          const newPrice = numericPrice - discount;
+          session.data.cleaningPrice = `₹${newPrice.toLocaleString('en-IN')}`;
+          session.data.discountApplied = true;
+          discountMsg = {
+            en: `🎉 10% discount applied! You saved ₹${discount.toLocaleString('en-IN')}.\n\n`,
+            hi: `🎉 10% छूट लागू हो गई! आपने ₹${discount.toLocaleString('en-IN')} की बचत की।\n\n`,
+            mr: `🎉 10% सवलत लागू झाली! तुम्ही ₹${discount.toLocaleString('en-IN')} वाचवले.\n\n`
+          }[lang] || `🎉 10% discount applied! You saved ₹${discount.toLocaleString('en-IN')}.\n\n`;
+        }
+        session.state = "COLLECT_FLAT";
+        return [discountMsg + config.cleaningAddressMessage[lang]];
+      } else {
+        session.state = "COLLECT_FLAT";
+        return [config.cleaningAddressMessage[lang]];
       }
     }
 
@@ -1328,25 +1380,6 @@ async function processState(session, body, senderId, msg) {
         }
         clearSession(senderId);
         return [config.cancelMessage[lang]];
-      } else if (body === "apply_discount" && session.data.isBroadcast && !session.data.discountApplied) {
-        const lang = session.data.lang || "en";
-        const currentPriceStr = session.data.cleaningPrice || "";
-        const numericPrice = parseInt(currentPriceStr.replace(/[^0-9]/g, "")) || 0;
-        if (numericPrice > 0) {
-          const discount = Math.round(numericPrice * 0.10);
-          const newPrice = numericPrice - discount;
-          session.data.cleaningPrice = `₹${newPrice.toLocaleString('en-IN')}`;
-          session.data.discountApplied = true;
-
-          const successMsg = {
-            en: `🎉 10% discount applied! You saved ₹${discount.toLocaleString('en-IN')}.`,
-            hi: `🎉 10% छूट लागू हो गई! आपने ₹${discount.toLocaleString('en-IN')} की बचत की।`,
-            mr: `🎉 10% सवलत लागू झाली! तुम्ही ₹${discount.toLocaleString('en-IN')} वाचवले.`
-          }[lang] || `🎉 10% discount applied! You saved ₹${discount.toLocaleString('en-IN')}.`;
-
-          return [successMsg, cleaningConfirmPrompt(session.data, lang)];
-        }
-        return [cleaningConfirmPrompt(session.data, lang)];
       } else {
         return [cleaningConfirmPrompt(session.data, session.data.lang)];
       }
