@@ -1254,7 +1254,7 @@ setInterval(async () => {
       let headerUrl = null;
 
       if (diffDays >= 15 && stage < 15) {
-        template = "drip_campaign_day15"; // Placeholder, change later
+        template = "day15_follow_up"; 
         nextStage = 15;
       } else if (diffDays >= 7 && stage < 7) {
         template = "day7_follow_up"; 
