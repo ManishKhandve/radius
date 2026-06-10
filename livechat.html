@@ -666,24 +666,34 @@
         renderQuickReplies();
     }
 
-    function renderQuickReplies() {
+    function renderQuickReplies(query = '') {
         const popup = document.getElementById('qrPopup');
         popup.innerHTML = '';
+        let hasMatches = false;
+
         quickReplies.forEach(qr => {
-            const safeMsg = qr.message.replace(/'/g, "\\'").replace(/\\n/g, '\\\\n');
+            if (query && !qr.shortcut.toLowerCase().includes(query) && !qr.message.toLowerCase().includes(query)) return;
+            
+            hasMatches = true;
+            const safeMsg = qr.message.replace(/'/g, "\\'").replace(/\n/g, '\\n');
             popup.innerHTML += `
                 <div class="qr-item" onclick="insertQR('${safeMsg}')">
-                    <span class="qr-cmd">/${qr.shortcut}</span>
+                    <span class="qr-cmd">/${qr.shortcut}</span><br>
+                    <span style="color:#667781; font-size:11px;">${qr.message.substring(0, 45)}${qr.message.length > 45 ? '...' : ''}</span>
                 </div>
             `;
         });
+
         if (currentRole === 'admin') {
             popup.innerHTML += `
                 <div class="qr-item" style="border-top:1px solid #e9edef; color:#00a884; font-weight:bold; margin-top:5px; padding-top:10px;" onclick="manageQuickReplies()">
                     + Add New Quick Reply
                 </div>
             `;
+            hasMatches = true;
         }
+
+        popup.style.display = hasMatches ? 'block' : 'none';
     }
 
     function manageQuickReplies() {
@@ -701,8 +711,11 @@
     function checkQuickReplies(e) {
         if (e.key === 'Enter') { document.getElementById('sendBtn').click(); return; }
         const val = e.target.value;
-        if (val.startsWith('/')) document.getElementById('qrPopup').style.display = 'block';
-        else document.getElementById('qrPopup').style.display = 'none';
+        if (val.startsWith('/')) {
+            renderQuickReplies(val.slice(1).toLowerCase());
+        } else {
+            document.getElementById('qrPopup').style.display = 'none';
+        }
     }
     function insertQR(text) {
         const input = document.getElementById('messageInput');
