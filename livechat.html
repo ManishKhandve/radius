@@ -230,10 +230,13 @@
             <div class="crm-label">Tags & Labels</div>
             <div class="tags-container" id="tagsContainer"></div>
             <input type="text" id="tagInput" class="crm-input" placeholder="Type tag and press Enter" style="margin-bottom: 5px;" onkeypress="if(event.key==='Enter') addTag()">
-            <div>
+            <div style="display: flex; gap: 5px; flex-wrap: wrap;">
                 <span class="tag-preset" onclick="addPresetTag('Deep Cleaning')">+ Deep Cleaning</span>
+                <span class="tag-preset" onclick="addPresetTag('Bathroom Cleaning')">+ Bathroom Cleaning</span>
                 <span class="tag-preset" onclick="addPresetTag('Maid Service')">+ Maid Service</span>
-                <span class="tag-preset" onclick="addPresetTag('High Value')">+ High Value</span>
+                <span class="tag-preset" onclick="addPresetTag('Repeat Customer')">+ Repeat Customer</span>
+                <span class="tag-preset" onclick="addPresetTag('High Value Lead')">+ High Value Lead</span>
+                <span class="tag-preset" onclick="addPresetTag('Society Lead')">+ Society Lead</span>
             </div>
         </div>
 
