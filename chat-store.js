@@ -227,7 +227,7 @@ async function getAbandonedLeads() {
   try {
     const { data, error } = await supabase.from('contacts')
       .select('*')
-      .not('lead_status', 'in', '("Booked", "Canceled", "Not Interested", "Service Completed", "Follow-up Required")')
+      .not('lead_status', 'in', ['Booked', 'Canceled', 'Not Interested', 'Service Completed', 'Follow-up Required'])
       .lt('abandonment_drip_stage', 15);
       
     if (error) console.error('[chat-store] error fetching abandoned leads:', error);
