@@ -73,9 +73,13 @@ function saveProgress(session) {
   if (!session || !session.data || !session.data.whatsappNumber) return;
   const d = session.data;
 
-  // Sync explicitly provided name to the CRM Database
-  if (d.contactName && d.contactName !== 'there') {
-    chatStore.updateContactCRM(d.whatsappNumber, { name: d.contactName }).catch(()=>{});
+  // Sync explicitly provided name and service category to the CRM Database
+  const crmUpdates = {};
+  if (d.contactName && d.contactName !== 'there') crmUpdates.name = d.contactName;
+  if (d.serviceCategory) crmUpdates.service_category = d.serviceCategory;
+
+  if (Object.keys(crmUpdates).length > 0) {
+    chatStore.updateContactCRM(d.whatsappNumber, crmUpdates).catch(()=>{});
   }
 
   // MAID CUSTOMERS sheet is for maid leads only. Cleaning customers go

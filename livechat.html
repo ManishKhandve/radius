@@ -112,7 +112,7 @@
                 <input type="text" id="searchInput" placeholder="Search name or phone" onkeyup="renderContacts()" style="flex:1;">
                 <button id="filterUnreadBtn" onclick="toggleUnreadFilter()" style="padding: 8px 12px; border: 1px solid #d1d7db; border-radius: 8px; background: white; cursor: pointer; color: #54656f; font-size: 13px;">Unread</button>
             </div>
-            <select id="filterStatus" onchange="renderContacts()">
+            <select id="filterStatus" onchange="renderContacts()" style="flex:1;">
                 <option value="all">All Statuses</option>
                 <option value="New Lead">New Lead</option>
                 <option value="Interested">Interested</option>
@@ -122,10 +122,17 @@
                 <option value="Service Completed">Service Completed</option>
                 <option value="Not Interested">Not Interested</option>
             </select>
-            <select id="filterAgent" onchange="renderContacts()">
-                <option value="all">All Agents</option>
-                <option value="Unassigned">Unassigned</option>
-            </select>
+            <div style="display: flex; gap: 5px; width: 100%;">
+                <select id="filterCategory" onchange="renderContacts()" style="flex:1;">
+                    <option value="all">All Services</option>
+                    <option value="cleaning">Cleaning</option>
+                    <option value="maid">Maid</option>
+                </select>
+                <select id="filterAgent" onchange="renderContacts()" style="flex:1;">
+                    <option value="all">All Agents</option>
+                    <option value="Unassigned">Unassigned</option>
+                </select>
+            </div>
         </div>
 
         <div class="contact-list" id="contactList"></div>
@@ -362,6 +369,7 @@
         list.innerHTML = '';
         
         const filterStatus = document.getElementById('filterStatus').value;
+        const filterCategory = document.getElementById('filterCategory').value;
         const filterAgentValue = document.getElementById('filterAgent').value;
         const searchVal = document.getElementById('searchInput').value.toLowerCase();
         
@@ -369,13 +377,15 @@
             const name = (c.name || '').toLowerCase();
             const phone = (c.phone || '').toLowerCase();
             const status = c.lead_status || 'New Lead';
+            const category = c.service_category || '';
             const agent = c.assigned_agent || 'Unassigned';
 
             const matchesStatus = filterStatus === 'all' || status === filterStatus;
+            const matchesCategory = filterCategory === 'all' || category === filterCategory;
             const matchesAgent = filterAgentValue === 'all' || agent === filterAgentValue;
             const matchesSearch = !searchVal || name.includes(searchVal) || phone.includes(searchVal);
 
-            if (!matchesStatus || !matchesAgent || !matchesSearch) return;
+            if (!matchesStatus || !matchesCategory || !matchesAgent || !matchesSearch) return;
 
             const isOverdue = status === 'Follow-up Required' && c.follow_up_time && new Date(c.follow_up_time) <= new Date();
             const isUnread = c.label === 'unread';
