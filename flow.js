@@ -77,6 +77,7 @@ function saveProgress(session) {
   const crmUpdates = {};
   if (d.contactName && d.contactName !== 'there') crmUpdates.name = d.contactName;
   if (d.serviceCategory) crmUpdates.service_category = d.serviceCategory;
+  if (d.leadTemperature) crmUpdates.lead_temperature = d.leadTemperature;
 
   if (Object.keys(crmUpdates).length > 0) {
     chatStore.updateContactCRM(d.whatsappNumber, crmUpdates).catch(()=>{});
@@ -858,10 +859,12 @@ async function processState(session, body, senderId, msg) {
     case "MAIN_MENU": {
       if (body === "1") {
         session.data.serviceCategory = "cleaning";
+        session.data.leadTemperature = "Cold Lead";
         session.state = "CLEANING_NAME";
         return [config.cleaningNameMessage[session.data.lang]];
       } else if (body === "2") {
         session.data.serviceCategory = "maid";
+        session.data.leadTemperature = "Cold Lead";
         session.state = "WORK_TYPE";
         return [workTypePrompt(session.data.lang)];
       } else {
@@ -875,6 +878,7 @@ async function processState(session, body, senderId, msg) {
         return [config.cleaningNameMessage[session.data.lang]];
       }
       session.data.contactName = trimmed;
+      session.data.leadTemperature = "Warm Lead";
       session.state = "CLEANING_SERVICE_TYPE";
       return [cleaningServicePrompt(session.data.lang)];
     }
@@ -1031,6 +1035,7 @@ async function processState(session, body, senderId, msg) {
         if (body === "4") p = "Inspection Required";
         session.data.cleaningPrice = p;
 
+        session.data.leadTemperature = "Hot Lead";
         session.state = "CLEANING_CONTINUE";
         const lang = session.data.lang;
         const priceBody = config.flatDeepCleaningPriceMessage(session.data.cleaningFlatStatus, body, lang);
@@ -1075,6 +1080,7 @@ async function processState(session, body, senderId, msg) {
       if (count > 0) {
         session.data.cleaningDetails = `${count} Bathrooms 3-Month Subscription`;
         session.data.cleaningPrice = `₹${price} (3 months, 3 visits)`;
+        session.data.leadTemperature = "Hot Lead";
         session.state = "CLEANING_BATHROOM_ACTION";
         return [{
           type: 'buttons',
@@ -1096,6 +1102,7 @@ async function processState(session, body, senderId, msg) {
         if (body === "1") p = "₹550"; else if (body === "2") p = "₹1100"; else if (body === "3") p = "₹1650"; else if (body === "4") p = "₹2200";
         session.data.cleaningDetails = `${body} Bathroom(s) One-Time`;
         session.data.cleaningPrice = p;
+        session.data.leadTemperature = "Hot Lead";
         session.state = "CLEANING_BATHROOM_ACTION";
         return [{
           type: 'buttons',
@@ -1271,6 +1278,7 @@ async function processState(session, body, senderId, msg) {
         // Minimum met — finalise
         session.data.cleaningDetails = "Mini Services: " + cart.items.join(', ');
         session.data.cleaningPrice = `₹${cart.total}`;
+        session.data.leadTemperature = "Hot Lead";
         delete session.data.miniCart;
         return getDiscountOrAddressPrompt(session);
 
@@ -1325,6 +1333,7 @@ async function processState(session, body, senderId, msg) {
       } else {
         // Maid flow
         session.data.flat = body;
+        session.data.leadTemperature = "Warm Lead";
         session.state = "COLLECT_DATE";
         return [config.collectDateMessage[session.data.lang || "en"]];
       }
@@ -1366,6 +1375,7 @@ async function processState(session, body, senderId, msg) {
               estimatedPrice: d.cleaningPrice,
               status: "Payment Pending",
               paymentStatus: "Pending",
+              leadTemperature: d.leadTemperature,
             });
           } catch (e) { console.error("[flow] cleaning booking confirm err:", e.message); }
         })();
@@ -1549,7 +1559,7 @@ async function processState(session, body, senderId, msg) {
         // Store the maid list for validation
         session.data.availableMaids = topMaids;
         session.data.selectedMaids = [];
-        
+        session.data.leadTemperature = "Hot Lead";
         session.state = "MAID_CHOICE";
         return [resultMsg];
 

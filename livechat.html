@@ -122,12 +122,20 @@
                 <option value="Service Completed">Service Completed</option>
                 <option value="Not Interested">Not Interested</option>
             </select>
-            <div style="display: flex; gap: 5px; width: 100%;">
+            <div style="display: flex; gap: 5px; width: 100%; margin-bottom: 5px;">
                 <select id="filterCategory" onchange="renderContacts()" style="flex:1;">
                     <option value="all">All Services</option>
                     <option value="cleaning">Cleaning</option>
                     <option value="maid">Maid</option>
                 </select>
+                <select id="filterTemperature" onchange="renderContacts()" style="flex:1;">
+                    <option value="all">All Temps</option>
+                    <option value="Hot Lead">🔥 Hot Lead</option>
+                    <option value="Warm Lead">☀️ Warm Lead</option>
+                    <option value="Cold Lead">❄️ Cold Lead</option>
+                </select>
+            </div>
+            <div style="display: flex; gap: 5px; width: 100%;">
                 <select id="filterTag" onchange="renderContacts()" style="flex:1;">
                     <option value="all">All Tags</option>
                 </select>
@@ -397,6 +405,7 @@
         
         const filterStatus = document.getElementById('filterStatus').value;
         const filterCategory = document.getElementById('filterCategory').value;
+        const filterTemperature = document.getElementById('filterTemperature').value;
         const filterTagValue = document.getElementById('filterTag').value;
         const filterAgentValue = document.getElementById('filterAgent').value;
         const searchVal = document.getElementById('searchInput').value.toLowerCase();
@@ -406,10 +415,12 @@
             const phone = (c.phone || '').toLowerCase();
             const status = c.lead_status || 'New Lead';
             const category = c.service_category || '';
+            const temperature = c.lead_temperature || '';
             const agent = c.assigned_agent || 'Unassigned';
 
             const matchesStatus = filterStatus === 'all' || status === filterStatus;
             const matchesCategory = filterCategory === 'all' || category === filterCategory;
+            const matchesTemperature = filterTemperature === 'all' || temperature === filterTemperature;
             const matchesAgent = filterAgentValue === 'all' || agent === filterAgentValue;
             const matchesSearch = !searchVal || name.includes(searchVal) || phone.includes(searchVal);
             
@@ -421,12 +432,17 @@
                 } catch(e) { matchesTag = false; }
             }
 
-            if (!matchesStatus || !matchesCategory || !matchesTag || !matchesAgent || !matchesSearch) return;
+            if (!matchesStatus || !matchesCategory || !matchesTemperature || !matchesTag || !matchesAgent || !matchesSearch) return;
 
             const isOverdue = status === 'Follow-up Required' && c.follow_up_time && new Date(c.follow_up_time) <= new Date();
             const isUnread = c.label === 'unread';
             
             if (showUnreadOnly && !isUnread) return;
+
+            let tempBadge = '';
+            if (temperature === 'Hot Lead') tempBadge = '🔥 ';
+            else if (temperature === 'Warm Lead') tempBadge = '☀️ ';
+            else if (temperature === 'Cold Lead') tempBadge = '❄️ ';
 
             const el = document.createElement('div');
             el.className = 'contact-item' + (c.phone === currentPhone ? ' active' : '');
@@ -445,7 +461,7 @@
                     <div class="contact-name-row">
                         <span class="contact-name" style="${isUnread ? 'font-weight:bold; color:#111b21;' : ''}">
                             <span class="status-dot ${getStatusDot(status)}"></span>
-                            ${c.name || c.phone}
+                            ${tempBadge}${c.name || c.phone}
                         </span>
                         <div style="display:flex; flex-direction:column; align-items:flex-end;">
                             <span class="contact-time" style="${isUnread ? 'color:#25d366;font-weight:bold;' : ''}">${time}</span>
