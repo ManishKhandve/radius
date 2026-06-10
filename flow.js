@@ -5,6 +5,7 @@
 const config = require("./config");
 const sheets = require("./sheets");
 const { isInvited, removeInvite, uploadReceipt } = require("./invite-store");
+const chatStore = require("./chat-store");
 
 const sessions = new Map();
 
@@ -71,6 +72,11 @@ function activeSessionCount() {
 function saveProgress(session) {
   if (!session || !session.data || !session.data.whatsappNumber) return;
   const d = session.data;
+
+  // Sync explicitly provided name to the CRM Database
+  if (d.contactName && d.contactName !== 'there') {
+    chatStore.updateContactCRM(d.whatsappNumber, { name: d.contactName }).catch(()=>{});
+  }
 
   // MAID CUSTOMERS sheet is for maid leads only. Cleaning customers go
   // to CLEANING_BOOKINGS (below). Pre-category contacts (just opened
