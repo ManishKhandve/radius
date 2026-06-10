@@ -128,6 +128,9 @@
                     <option value="cleaning">Cleaning</option>
                     <option value="maid">Maid</option>
                 </select>
+                <select id="filterTag" onchange="renderContacts()" style="flex:1;">
+                    <option value="all">All Tags</option>
+                </select>
                 <select id="filterAgent" onchange="renderContacts()" style="flex:1;">
                     <option value="all">All Agents</option>
                     <option value="Unassigned">Unassigned</option>
@@ -289,6 +292,25 @@
 
         allContacts = data.contacts;
         
+        // Dynamically build list of all unique tags
+        const tagSet = new Set();
+        allContacts.forEach(c => {
+            if (c.tags) {
+                try {
+                    const parsed = typeof c.tags === 'string' ? JSON.parse(c.tags) : c.tags;
+                    parsed.forEach(t => tagSet.add(t));
+                } catch(e) {}
+            }
+        });
+        
+        const filterTag = document.getElementById('filterTag');
+        const currentTagVal = filterTag.value;
+        filterTag.innerHTML = '<option value="all">All Tags</option>';
+        Array.from(tagSet).sort().forEach(t => {
+            filterTag.add(new Option(t, t));
+        });
+        if (tagSet.has(currentTagVal)) filterTag.value = currentTagVal;
+
         if (currentRole === 'admin') {
             document.getElementById('totalUsersCount').innerText = `${allContacts.length} Users`;
         } else {
@@ -370,6 +392,7 @@
         
         const filterStatus = document.getElementById('filterStatus').value;
         const filterCategory = document.getElementById('filterCategory').value;
+        const filterTagValue = document.getElementById('filterTag').value;
         const filterAgentValue = document.getElementById('filterAgent').value;
         const searchVal = document.getElementById('searchInput').value.toLowerCase();
         
@@ -384,8 +407,16 @@
             const matchesCategory = filterCategory === 'all' || category === filterCategory;
             const matchesAgent = filterAgentValue === 'all' || agent === filterAgentValue;
             const matchesSearch = !searchVal || name.includes(searchVal) || phone.includes(searchVal);
+            
+            let matchesTag = true;
+            if (filterTagValue !== 'all') {
+                try {
+                    const parsed = typeof c.tags === 'string' ? JSON.parse(c.tags) : (c.tags || []);
+                    matchesTag = parsed.includes(filterTagValue);
+                } catch(e) { matchesTag = false; }
+            }
 
-            if (!matchesStatus || !matchesCategory || !matchesAgent || !matchesSearch) return;
+            if (!matchesStatus || !matchesCategory || !matchesTag || !matchesAgent || !matchesSearch) return;
 
             const isOverdue = status === 'Follow-up Required' && c.follow_up_time && new Date(c.follow_up_time) <= new Date();
             const isUnread = c.label === 'unread';
