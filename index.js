@@ -491,8 +491,12 @@ function clearNudge(phone) {
 
 function scheduleNudge(phone) {
   clearNudge(phone);
-  const t = setTimeout(() => {
+  const t = setTimeout(async () => {
     nudgeTimers.delete(phone);
+    
+    // Do not nudge if an admin agent has taken over the chat
+    if (await isPaused(phone)) return;
+
     const sess = flow.sessions.get(phone);
     if (!sess) return; // session already ended — nothing to nudge
     const lang = (sess.data && sess.data.lang) || 'en';
