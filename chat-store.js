@@ -24,6 +24,7 @@ async function upsertContact(phone, name, direction) {
     
     if (direction === 'inbound') {
       payload.label = 'unread';
+      payload.abandonment_drip_stage = 0;
     }
 
     const { data, error } = await supabase
@@ -219,6 +220,24 @@ async function getContacts(role = 'admin', username = '') {
 }
 
 /**
+ * Fetches leads that have abandoned the flow and are eligible for the Drip Campaign.
+ */
+async function getAbandonedLeads() {
+  if (!supabase) return [];
+  try {
+    const { data, error } = await supabase.from('contacts')
+      .select('*')
+      .not('lead_status', 'in', '("Booked", "Canceled", "Not Interested", "Service Completed", "Follow-up Required")')
+      .lt('abandonment_drip_stage', 15);
+      
+    if (error) console.error('[chat-store] error fetching abandoned leads:', error);
+    return data || [];
+  } catch (err) {
+    return [];
+  }
+}
+
+/**
  * Fetches a single contact by phone.
  */
 async function getContactByPhone(phone) {
@@ -384,6 +403,7 @@ module.exports = {
   isBotPaused,
   setBotPause,
   getContacts,
+  getAbandonedLeads,
   getContactByPhone,
   getMessages,
   updateContactLabel,

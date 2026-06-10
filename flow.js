@@ -678,7 +678,37 @@ async function handleMessage(msg) {
 
   const cleanBody = body.toLowerCase().trim();
   const isGetCode = cleanBody === 'getcode' || cleanBody === 'get code' || cleanBody === 'get quote';
-  const isConnectTeam = cleanBody === 'connect_team' || cleanBody === 'connect with team' || cleanBody === 'request call back';
+  const isConnectTeam = cleanBody === 'connect_team' || cleanBody === 'connect with team';
+  
+  // --- Abandonment Drip Campaign Interceptions ---
+  const isDripBook = cleanBody === 'drip_book' || cleanBody === 'book';
+  const isDripCancel = cleanBody === 'drip_cancel' || cleanBody === 'cancel';
+  const isDripCallback = cleanBody === 'drip_callback' || cleanBody === 'request call back';
+
+  if (isDripCancel) {
+      clearSession(senderId);
+      chatStore.updateContactCRM(senderId, { lead_status: 'Canceled' }).catch(()=>{});
+      return ["No problem! We have canceled your request. Feel free to reach out anytime if you need help!"];
+  }
+
+  if (isDripCallback) {
+      clearSession(senderId);
+      chatStore.updateContactCRM(senderId, { lead_status: 'Follow-up Required' }).catch(()=>{});
+      return [
+         "We have notified our team! Someone will call you shortly.",
+         { _adminAlert: `🚨 *Callback Request!*\nPhone: +${senderId}\n_Requested a callback from the automated follow-up._` }
+      ];
+  }
+
+  if (isDripBook) {
+      const sess = sessions.get(senderId) || createSession(senderId);
+      sess.state = "CLEANING_NAME";
+      sess.data.serviceCategory = "cleaning";
+      sess.data.leadTemperature = "Warm Lead";
+      sess.data.lang = sess.data.lang || "en";
+      sessions.set(senderId, sess);
+      return [config.cleaningNameMessage[sess.data.lang]];
+  }
 
   if (isGetCode) {
     clearSession(senderId);

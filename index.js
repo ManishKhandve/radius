@@ -1238,7 +1238,46 @@ setInterval(async () => {
   }
 }, 60000); // Check every minute
 
-// ─── Start ──────────────────────────────────────────────────
+// Background Cron: Abandonment Drip Campaign (Runs every hour)
+setInterval(async () => {
+  try {
+    const abandoned = await chatStore.getAbandonedLeads();
+    const now = Date.now();
+    for (const c of abandoned) {
+      if (!c.last_message_at) continue;
+      
+      const diffDays = (now - new Date(c.last_message_at)) / (1000 * 60 * 60 * 24);
+      const stage = c.abandonment_drip_stage || 0;
+      
+      let template = null;
+      let nextStage = stage;
+
+      if (diffDays >= 15 && stage < 15) {
+        template = "drip_campaign_day15"; // Placeholder, change later
+        nextStage = 15;
+      } else if (diffDays >= 7 && stage < 7) {
+        template = "drip_campaign_day7"; // Placeholder, change later
+        nextStage = 7;
+      } else if (diffDays >= 3 && stage < 3) {
+        template = "drip_campaign_day3"; // Placeholder, change later
+        nextStage = 3;
+      }
+
+      if (template) {
+        console.log(`[drip] Sending ${template} to ${c.phone} (Stage: ${nextStage})`);
+        const name = c.name && c.name !== 'there' ? c.name : 'Customer';
+        const result = await watiSendTemplate(c.phone, template, "en", [name]);
+        if (result.ok) {
+           await chatStore.updateContactCRM(c.phone, { abandonment_drip_stage: nextStage }).catch(()=>{});
+        }
+      }
+    }
+  } catch (err) {
+    console.error('[cron] Drip campaign check failed', err.message);
+  }
+}, 60000 * 60); // Check every hour
+
+// --- Start ---──────────────────────────────────────────────────
 app.listen(PORT, () => {
   console.log(`[server] Meta Cloud API bot ready on :${PORT}`);
   console.log(`[server] build: ${process.env.RENDER_GIT_COMMIT?.slice(0,7) || 'local'} | phoneId: ${META_PHONE_NUMBER_ID || 'MISSING'} | verifyToken: ${META_VERIFY_TOKEN ? 'set' : 'MISSING'}`);
