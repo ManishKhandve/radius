@@ -1255,6 +1255,7 @@ setInterval(async () => {
 
       if (diffDays >= 15 && stage < 15) {
         template = "day15_follow_up"; 
+        headerUrl = "https://ikwyrrzipzfbyzmkrfmu.supabase.co/storage/v1/object/public/media/WhatsApp%20Image%202026-06-10%20at%205.13.53%20PM.jpeg";
         nextStage = 15;
       } else if (diffDays >= 7 && stage < 7) {
         template = "day7_follow_up"; 
