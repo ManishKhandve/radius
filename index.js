@@ -690,6 +690,10 @@ async function handleMetaMessage(m, senderName) {
   const phone = (m.from || '').toString();
   const msgId = m.id;
   const msgType = (m.type || '').toLowerCase();
+  
+  // Ignore WhatsApp reactions and unsupported types quietly
+  if (msgType === 'reaction' || msgType === 'unknown') return;
+
   if (!phone) { console.warn('[meta] message missing from'); return; }
   if (alreadyProcessed(msgId)) { console.log('[meta] dedup', msgId); return; }
 
@@ -758,7 +762,7 @@ async function handleMetaMessage(m, senderName) {
   // Hand off to the flow inside the per-user queue
   runQueued(phone, async () => {
     const t0 = Date.now();
-    const wrapped = buildWrappedMsg(phone, text, msgType === 'image' ? 'image' : 'chat', mediaId, senderName);
+    const wrapped = buildWrappedMsg(phone, text, msgType, mediaId, senderName);
     try {
       const replies = await flow.handleMessage(wrapped);
       console.log('[task]', phone, 'flow:', Date.now() - t0, 'ms, replies:', replies.length);

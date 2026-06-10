@@ -713,13 +713,16 @@ async function handleMessage(msg) {
     return [config.supportMessage[savedLang]];
   }
 
-  // Images are only accepted in PAYMENT_RECEIPT or CLEANING_PAYMENT_RECEIPT state. Anywhere else
-  // we ignore them — log it so silent drops are visible in debug logs.
-  if (msg.type === "image") {
+  // Ignore non-text messages unless it's an image at the receipt upload step
+  if (msg.type !== "text" && msg.type !== "chat" && msg.type !== "interactive" && msg.type !== "button") {
+    if (msg.type === "image") {
     const existing = sessions.get(senderId);
     if (!existing || (existing.state !== "PAYMENT_RECEIPT" && existing.state !== "CLEANING_PAYMENT_RECEIPT")) {
       console.log('[flow] ignored image from', senderId, '(state:', existing?.state || 'none', ')');
       return [];
+    }
+    } else {
+        return [];
     }
   }
 
