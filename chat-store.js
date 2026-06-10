@@ -219,6 +219,22 @@ async function getContacts(role = 'admin', username = '') {
 }
 
 /**
+ * Fetches a single contact by phone.
+ */
+async function getContactByPhone(phone) {
+  if (!supabase) return null;
+  try {
+    const { data, error } = await supabase.from('contacts').select('*').eq('phone', phone).single();
+    if (error && error.code !== 'PGRST116') {
+       console.error('[chat-store] error fetching contact:', error);
+    }
+    return data;
+  } catch (err) {
+    return null;
+  }
+}
+
+/**
  * Log in a user.
  */
 async function loginUser(username, password) {
@@ -275,7 +291,7 @@ async function updateBroadcastMetric(campaign_name, metric_type) {
     let currentVal = data ? data[metric_type] || 0 : 0;
     
     if (!data) {
-      const insertData = { campaign_name, sent: 0, delivered: 0, read: 0, replied: 0 };
+      const insertData = { campaign_name, sent: 0, delivered: 0, read: 0, replied: 0, booked: 0 };
       insertData[metric_type] = 1;
       await supabase.from('broadcast_metrics').insert([insertData]);
     } else {
@@ -368,6 +384,7 @@ module.exports = {
   isBotPaused,
   setBotPause,
   getContacts,
+  getContactByPhone,
   getMessages,
   updateContactLabel,
   updateContactCRM,

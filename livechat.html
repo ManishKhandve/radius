@@ -157,11 +157,13 @@
                         <th style="padding: 12px; color: #54656f;">Sent</th>
                         <th style="padding: 12px; color: #54656f;">Delivered</th>
                         <th style="padding: 12px; color: #54656f;">Read</th>
+                        <th style="padding: 12px; color: #54656f;">Replied</th>
+                        <th style="padding: 12px; color: #54656f;">Booked</th>
                         <th style="padding: 12px; color: #54656f;">Read Rate</th>
                     </tr>
                 </thead>
                 <tbody id="analyticsTableBody">
-                    <tr><td colspan="5" style="padding: 12px; text-align: center;">Loading analytics...</td></tr>
+                    <tr><td colspan="7" style="padding: 12px; text-align: center;">Loading analytics...</td></tr>
                 </tbody>
             </table>
         </div>
@@ -361,21 +363,21 @@
         tbody.innerHTML = '';
         
         if (!data.metrics || data.metrics.length === 0) {
-            tbody.innerHTML = '<tr><td colspan="5" style="padding: 12px; text-align: center;">No broadcast data yet.</td></tr>';
+            tbody.innerHTML = '<tr><td colspan="7" style="padding: 12px; text-align: center;">No broadcast data yet.</td></tr>';
             return;
         }
 
         data.metrics.forEach(m => {
-            const readRate = m.sent > 0 ? Math.round((m.read / m.sent) * 100) : 0;
+            const readRate = m.delivered > 0 ? Math.round((m.read / m.delivered) * 100) + '%' : '-';
             tbody.innerHTML += `
-                <tr style="border-bottom: 1px solid #f0f2f5;">
-                    <td style="padding: 12px;"><b>${m.campaign_name}</b></td>
-                    <td style="padding: 12px;">${m.sent}</td>
-                    <td style="padding: 12px; color: #00a884;">${m.delivered}</td>
-                    <td style="padding: 12px; color: #0284c7;">${m.read}</td>
-                    <td style="padding: 12px;">
-                        <div style="background: #e0f2fe; border-radius: 4px; padding: 4px 8px; display: inline-block; font-weight: bold; color: #0284c7;">${readRate}%</div>
-                    </td>
+                <tr style="border-bottom: 1px solid #f2f2f2;">
+                    <td style="padding: 12px; font-weight: 500;">${m.campaign_name}</td>
+                    <td style="padding: 12px;">${m.sent || 0}</td>
+                    <td style="padding: 12px;">${m.delivered || 0}</td>
+                    <td style="padding: 12px; color: #25d366; font-weight: bold;">${m.read || 0}</td>
+                    <td style="padding: 12px; color: #00a884; font-weight: bold;">${m.replied || 0}</td>
+                    <td style="padding: 12px; color: #dc3545; font-weight: bold;">${m.booked || 0}</td>
+                    <td style="padding: 12px;">${readRate}</td>
                 </tr>
             `;
         });

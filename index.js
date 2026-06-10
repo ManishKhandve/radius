@@ -693,6 +693,13 @@ async function handleMetaMessage(m, senderName) {
   if (!phone) { console.warn('[meta] message missing from'); return; }
   if (alreadyProcessed(msgId)) { console.log('[meta] dedup', msgId); return; }
 
+  // Track Broadcast "Replied" Attribution
+  const contactInfo = await chatStore.getContactByPhone(phone);
+  if (contactInfo && contactInfo.attribution_campaign && !contactInfo.campaign_replied) {
+     await chatStore.updateBroadcastMetric(contactInfo.attribution_campaign, 'replied');
+     await chatStore.updateContactCRM(phone, { campaign_replied: true });
+  }
+
   // Extract text + media-id depending on message type
   let text = '';
   let mediaId = null;
@@ -914,7 +921,16 @@ app.post('/api/chat/crm', authMiddleware, async (req, res) => {
   if (!phone) return res.status(400).json({ error: 'Missing phone' });
   
   const updates = {};
-  if (lead_status !== undefined) updates.lead_status = lead_status;
+  if (lead_status !== undefined) {
+      updates.lead_status = lead_status;
+      if (lead_status === 'Booked') {
+         const c = await chatStore.getContactByPhone(phone);
+         if (c && c.attribution_campaign && !c.campaign_booked) {
+             await chatStore.updateBroadcastMetric(c.attribution_campaign, 'booked');
+             updates.campaign_booked = true;
+         }
+      }
+  }
   if (assigned_agent !== undefined) updates.assigned_agent = assigned_agent;
   if (follow_up_time !== undefined) updates.follow_up_time = follow_up_time;
   if (tags !== undefined) updates.tags = tags;
@@ -1138,6 +1154,14 @@ app.post('/api/broadcast', (req, res) => {
              wamidToCampaign.set(result.body.messages[0].id, templateName);
              await chatStore.updateBroadcastMetric(templateName, 'sent').catch(()=>{});
           }
+          
+          // Add attribution tracking to CRM
+          await chatStore.updateContactCRM(cleanPhone, {
+             attribution_campaign: templateName,
+             campaign_replied: false,
+             campaign_booked: false
+          }).catch(()=>{});
+          
         } else {
           activeCampaign.failed++;
           let errMsg = result.error?.message || 'Rejected by WhatsApp';
