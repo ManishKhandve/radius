@@ -1251,6 +1251,7 @@ setInterval(async () => {
       
       let template = null;
       let nextStage = stage;
+      let headerUrl = null;
 
       if (diffDays >= 15 && stage < 15) {
         template = "drip_campaign_day15"; // Placeholder, change later
@@ -1259,14 +1260,15 @@ setInterval(async () => {
         template = "drip_campaign_day7"; // Placeholder, change later
         nextStage = 7;
       } else if (diffDays >= 3 && stage < 3) {
-        template = "drip_campaign_day3"; // Placeholder, change later
+        template = "day3_follow_up"; 
+        headerUrl = "https://ikwyrrzipzfbyzmkrfmu.supabase.co/storage/v1/object/public/media/Untitled%20design%20(1).mp4";
         nextStage = 3;
       }
 
       if (template) {
         console.log(`[drip] Sending ${template} to ${c.phone} (Stage: ${nextStage})`);
         const name = c.name && c.name !== 'there' ? c.name : 'Customer';
-        const result = await watiSendTemplate(c.phone, template, "en", [name]);
+        const result = await watiSendTemplate(c.phone, template, "en", [name], headerUrl);
         if (result.ok) {
            await chatStore.updateContactCRM(c.phone, { abandonment_drip_stage: nextStage }).catch(()=>{});
         }
