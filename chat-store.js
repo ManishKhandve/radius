@@ -227,9 +227,12 @@ async function getAbandonedLeads() {
   try {
     const { data, error } = await supabase.from('contacts')
       .select('*')
-      .not('lead_status', 'in', ['Booked', 'Canceled', 'Not Interested', 'Service Completed', 'Follow-up Required'])
+      .neq('lead_status', 'Booked')
+      .neq('lead_status', 'Canceled')
+      .neq('lead_status', 'Not Interested')
+      .neq('lead_status', 'Service Completed')
+      .neq('lead_status', 'Follow-up Required')
       .lt('abandonment_drip_stage', 15);
-      
     if (error) console.error('[chat-store] error fetching abandoned leads:', error);
     return data || [];
   } catch (err) {
