@@ -1328,7 +1328,8 @@ async function processState(session, body, senderId, msg) {
       const lang = session.data.lang || "en";
       if (body === "apply_discount") {
         const currentPriceStr = session.data.cleaningPrice || "";
-        const numericPrice = parseInt(currentPriceStr.replace(/[^0-9]/g, "")) || 0;
+        const match = currentPriceStr.match(/[\d,]+/);
+        const numericPrice = match ? parseInt(match[0].replace(/,/g, "")) : 0;
         let discountMsg = "";
         if (numericPrice > 0) {
           const discount = Math.round(numericPrice * 0.10);
