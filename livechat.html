@@ -234,6 +234,11 @@
 
             <div class="crm-label">Follow-up Date</div>
             <input type="datetime-local" class="crm-input" id="crmFollowUp" onchange="updateCRM()">
+
+            <div style="margin-top: 15px; display: flex; align-items: center; gap: 8px;">
+                <input type="checkbox" id="crmDripDisable" onchange="updateCRM()" style="width:16px;height:16px;cursor:pointer;">
+                <label for="crmDripDisable" style="font-size: 13px; color: #54656f; cursor:pointer;">Disable Auto Follow-ups</label>
+            </div>
         </div>
 
         <div class="crm-section">
@@ -517,6 +522,8 @@
         } else {
             document.getElementById('crmFollowUp').value = '';
         }
+        
+        document.getElementById('crmDripDisable').checked = (contact.abandonment_drip_stage === 99);
 
         // Handle Tags
         try { currentTags = typeof contact.tags === 'string' ? JSON.parse(contact.tags) : (contact.tags || []); }
@@ -532,9 +539,18 @@
         const status = document.getElementById('crmStatus').value;
         const agent = document.getElementById('crmAgent').value;
         const followup = document.getElementById('crmFollowUp').value;
+        const dripDisable = document.getElementById('crmDripDisable').checked;
         
         const payload = { phone: currentPhone, lead_status: status, assigned_agent: agent, tags: JSON.stringify(currentTags) };
         if (followup) payload.follow_up_time = new Date(followup).toISOString();
+        else payload.follow_up_time = null;
+
+        const c = allContacts.find(x => x.phone === currentPhone);
+        if (dripDisable) {
+            payload.abandonment_drip_stage = 99;
+        } else if (c && c.abandonment_drip_stage === 99) {
+            payload.abandonment_drip_stage = 0; // Resume timer if they uncheck it
+        }
 
         await authFetch('/api/chat/crm', {
             method: 'POST',
@@ -543,12 +559,15 @@
         });
         
         // update local state
-        const c = allContacts.find(x => x.phone === currentPhone);
         if (c) {
             c.lead_status = status;
             c.assigned_agent = agent;
             if (followup) c.follow_up_time = payload.follow_up_time;
+            else c.follow_up_time = null;
             c.tags = payload.tags;
+            if (payload.abandonment_drip_stage !== undefined) {
+                c.abandonment_drip_stage = payload.abandonment_drip_stage;
+            }
         }
         renderContacts();
     }

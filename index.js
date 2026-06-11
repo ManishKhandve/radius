@@ -925,7 +925,7 @@ app.post('/api/chat/label', authMiddleware, async (req, res) => {
 });
 
 app.post('/api/chat/crm', authMiddleware, async (req, res) => {
-  const { phone, lead_status, assigned_agent, follow_up_time, tags } = req.body;
+  const { phone, lead_status, assigned_agent, follow_up_time, tags, abandonment_drip_stage } = req.body;
   if (!phone) return res.status(400).json({ error: 'Missing phone' });
   
   const updates = {};
@@ -942,6 +942,7 @@ app.post('/api/chat/crm', authMiddleware, async (req, res) => {
   if (assigned_agent !== undefined) updates.assigned_agent = assigned_agent;
   if (follow_up_time !== undefined) updates.follow_up_time = follow_up_time;
   if (tags !== undefined) updates.tags = tags;
+  if (abandonment_drip_stage !== undefined) updates.abandonment_drip_stage = abandonment_drip_stage;
 
   await chatStore.updateContactCRM(phone, updates);
   res.json({ success: true });
