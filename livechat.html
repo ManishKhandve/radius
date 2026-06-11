@@ -152,7 +152,7 @@
             </div>
             <div style="display: flex; gap: 5px; width: 100%;">
                 <select id="filterTag" onchange="renderContacts()" style="flex:1;">
-                    <option value="all">All Tags</option>
+                    <option value="all">Service Type (All)</option>
                 </select>
                 <select id="filterAgent" onchange="renderContacts()" style="flex:1;">
                     <option value="all">All Agents</option>
@@ -338,7 +338,11 @@
         
         const filterTag = document.getElementById('filterTag');
         const currentTagVal = filterTag.value;
-        filterTag.innerHTML = '<option value="all">All Tags</option>';
+        filterTag.innerHTML = '<option value="all">Service Type (All)</option>';
+        
+        // Ensure static Service Types are always visible in the filter
+        ['Deep Cleaning', 'Bathroom Cleaning', 'Maid Service', 'Kitchen Cleaning', 'Sofa Cleaning'].forEach(t => tagSet.add(t));
+        
         Array.from(tagSet).sort().forEach(t => {
             filterTag.add(new Option(t, t));
         });
