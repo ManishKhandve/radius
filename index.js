@@ -158,7 +158,8 @@ async function watiSendButtons(phone, bodyText, buttons) {
     if (res.ok && metaOk) {
       console.log(`[meta] ✓ buttons sent to ${phone}${metaInfo ? ' — ' + metaInfo : ''}`);
       sendMetrics.sent++;
-      chatStore.saveMessage(phone, null, 'outbound', `[Buttons] ${bodyText}`);
+      const btnStr = buttons.map(b => `\n[Btn: ${b.title}]`).join('');
+      chatStore.saveMessage(phone, null, 'outbound', `${bodyText}${btnStr}`);
       return { ok: true, status: res.status, body };
     }
     console.error(`[meta] ✗ buttons HTTP ${res.status} to ${phone}: ${metaInfo || body.slice(0, 200)}`);
@@ -231,7 +232,8 @@ async function watiSendList(phone, body, buttonLabel, sections, opts = {}) {
     if (res.ok && metaOk) {
       console.log(`[meta] ✓ list sent to ${phone}${metaInfo ? ' — ' + metaInfo : ''}`);
       sendMetrics.sent++;
-      chatStore.saveMessage(phone, null, 'outbound', `[List] ${body}`);
+      const listStr = sections.flatMap(s => (s.rows || []).map(r => `\n[Btn: 📄 ${r.title}]`)).join('');
+      chatStore.saveMessage(phone, null, 'outbound', `${body}${listStr}`);
       return { ok: true, status: res.status, body: respBody };
     }
     console.error(`[meta] ✗ list HTTP ${res.status} to ${phone}: ${metaInfo || respBody.slice(0, 200)}`);

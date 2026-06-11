@@ -6,6 +6,21 @@
     <title>WhatsApp CRM Dashboard</title>
     <style>
         * { box-sizing: border-box; margin: 0; padding: 0; font-family: "Segoe UI", "Helvetica Neue", Helvetica, Arial, sans-serif; }
+        
+        .crm-chat-btn {
+            display: inline-block;
+            margin-top: 6px;
+            margin-right: 6px;
+            padding: 5px 12px;
+            background: #dcf8c6;
+            border: 1px solid #b8e0a3;
+            border-radius: 12px;
+            font-size: 11.5px;
+            color: #111b21;
+            cursor: default;
+            box-shadow: 0 1px 1px rgba(0,0,0,0.05);
+        }
+        
         body { background-color: #d1d7db; height: 100vh; display: flex; justify-content: center; align-items: center; }
         
         .app-container { width: 100%; height: 100%; display: flex; background: #ffffff; box-shadow: 0 1px 1px 0 rgba(0,0,0,0.06), 0 2px 5px 0 rgba(0,0,0,0.2); }
@@ -659,7 +674,11 @@
             
             if (item._type === 'message') {
                 div.className = 'msg-bubble ' + (item.direction === 'inbound' ? 'msg-in' : 'msg-out');
-                let textHtml = item.content.replace(/\\n/g, '<br>');
+                let textHtml = item.content
+                    .replace(/</g, '&lt;').replace(/>/g, '&gt;')
+                    .replace(/\\n/g, '<br>')
+                    .replace(/\n/g, '<br>')
+                    .replace(/\[Btn:\s*(.*?)\]/g, '<br><button class="crm-chat-btn">$1</button>');
                 div.innerHTML = `${textHtml} <span class="msg-time">${time}</span>`;
             } else {
                 div.className = 'msg-bubble';
