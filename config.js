@@ -497,22 +497,25 @@ const villaPriceMessage = (sqft, price, rate, condition, lang) => {
 const flatDeepCleaningPriceMessage = (status, bhk, lang) => {
   let price = "";
   if (status === "Furnished") {
-    if (bhk === "1") price = "₹3199";
-    else if (bhk === "2") price = "₹3,599";
-    else if (bhk === "3") price = "₹4,799";
+    if (bhk === "1") price = "₹3,999";
+    else if (bhk === "2") price = "₹4,599";
+    else if (bhk === "3") price = "₹5,100";
+    else if (bhk === "4") price = "₹7,099";
   } else if (status === "Empty / Vacant") {
-    if (bhk === "1") price = "₹2999";
-    else if (bhk === "2") price = "₹3,499";
-    else if (bhk === "3") price = "₹4,499";
+    if (bhk === "1") price = "₹3,499";
+    else if (bhk === "2") price = "₹3,999";
+    else if (bhk === "3") price = "₹4,899";
+    else if (bhk === "4") price = "₹6,299";
   } else if (status === "Post Interior Cleaning") {
-    if (bhk === "1") price = "₹5999";
+    if (bhk === "1") price = "₹5,999";
     else if (bhk === "2") price = "₹6,999";
     else if (bhk === "3") price = "₹7,999";
+    else if (bhk === "4") price = "Inspection Required";
   }
 
-  let priceTextEn = bhk === "4" ? "Inspection Required" : price;
-  let priceTextHi = bhk === "4" ? "इंस्पेक्शन जरूरी" : price;
-  let priceTextMr = bhk === "4" ? "इन्स्पेक्शन आवश्यक" : price;
+  let priceTextEn = price;
+  let priceTextHi = price === "Inspection Required" ? "इंस्पेक्शन जरूरी" : price;
+  let priceTextMr = price === "Inspection Required" ? "इन्स्पेक्शन आवश्यक" : price;
 
   let noteEn = bhk === "1" ? "\nNote: This price includes all scope of work." : "";
   let noteHi = bhk === "1" ? "\nनोट: इस कीमत में सारा काम शामिल है।" : "";
@@ -526,7 +529,7 @@ const flatDeepCleaningPriceMessage = (status, bhk, lang) => {
   // For 4 BHK ("Inspection Required") the price isn't determined yet,
   // so we can't sum a percent over an unknown base — show plain
   // proceed/cancel only.
-  const canOfferAddons = (status === "Furnished" || status === "Post Interior Cleaning") && bhk !== "4";
+  const canOfferAddons = (status === "Furnished" || status === "Post Interior Cleaning") && price !== "Inspection Required";
   if (canOfferAddons) {
     addOnsEn = `\n\n✨ *Available Add-ons:*
 • Kitchen Internal: ₹450

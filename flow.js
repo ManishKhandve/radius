@@ -1064,13 +1064,12 @@ async function processState(session, body, senderId, msg) {
         let p = "";
         let st = session.data.cleaningFlatStatus;
         if (st === "Furnished") {
-          if (body === "1") p = "₹3,199"; else if (body === "2") p = "₹3,599"; else if (body === "3") p = "₹4,799";
+          if (body === "1") p = "₹3,999"; else if (body === "2") p = "₹4,599"; else if (body === "3") p = "₹5,100"; else if (body === "4") p = "₹7,099";
         } else if (st === "Empty / Vacant") {
-          if (body === "1") p = "₹2,999"; else if (body === "2") p = "₹3,499"; else if (body === "3") p = "₹4,499";
+          if (body === "1") p = "₹3,499"; else if (body === "2") p = "₹3,999"; else if (body === "3") p = "₹4,899"; else if (body === "4") p = "₹6,299";
         } else if (st === "Post Interior Cleaning") {
-          if (body === "1") p = "₹5,999"; else if (body === "2") p = "₹6,999"; else if (body === "3") p = "₹7,999";
+          if (body === "1") p = "₹5,999"; else if (body === "2") p = "₹6,999"; else if (body === "3") p = "₹7,999"; else if (body === "4") p = "Inspection Required";
         }
-        if (body === "4") p = "Inspection Required";
         session.data.cleaningPrice = p;
 
         session.data.leadTemperature = "Hot Lead";
