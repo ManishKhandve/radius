@@ -677,13 +677,14 @@ async function handleMessage(msg) {
   const body = (msg.body || "").trim();
 
   const cleanBody = body.toLowerCase().trim();
-  const isGetCode = cleanBody === 'getcode' || cleanBody === 'get code' || cleanBody === 'get quote';
-  const isConnectTeam = cleanBody === 'connect_team' || cleanBody === 'connect with team';
+  const title = (msg.title || "").toLowerCase().trim();
+  const isGetCode = cleanBody === 'getcode' || cleanBody === 'get code' || cleanBody === 'get quote' || title === 'get code' || title === 'get quote';
+  const isConnectTeam = cleanBody === 'connect_team' || cleanBody === 'connect with team' || title === 'connect with team';
   
   // --- Abandonment Drip Campaign Interceptions ---
-  const isDripBook = cleanBody === 'drip_book' || cleanBody === 'book';
-  const isDripCancel = cleanBody === 'drip_cancel' || cleanBody === 'cancel';
-  const isDripCallback = cleanBody === 'drip_callback' || cleanBody === 'request call back';
+  const isDripBook = cleanBody === 'drip_book' || cleanBody === 'book' || title === 'book';
+  const isDripCancel = cleanBody === 'drip_cancel' || cleanBody === 'cancel' || title === 'cancel';
+  const isDripCallback = cleanBody === 'drip_callback' || cleanBody === 'request call back' || title === 'request call back';
 
   if (isDripCancel) {
       clearSession(senderId);
@@ -740,7 +741,11 @@ async function handleMessage(msg) {
   if (isConnectTeam) {
     const savedLang = userLanguages.get(senderId) || 'en';
     clearSession(senderId);
-    return [config.supportMessage[savedLang]];
+    chatStore.updateContactCRM(senderId, { lead_status: 'Follow-up Required' }).catch(()=>{});
+    return [
+      config.supportMessage[savedLang],
+      { _adminAlert: `🚨 *Agent Requested!*\nPhone: +${senderId}\n_A customer clicked "Connect with Team" from the main menu._` }
+    ];
   }
 
   // Ignore non-text messages unless it's an image at the receipt upload step

@@ -581,8 +581,11 @@ function runQueued(jid, task) {
 // ─── Build the wrappedMsg flow.js expects ───────────────────
 // flow.handleMessage was written for whatsapp-web.js / Baileys
 // message objects. We give it the same shape from WATI's payload.
-function buildWrappedMsg(phone, text, type, mediaId, senderName) {
+function buildWrappedMsg(phone, text, type, mediaId, senderName, title = '') {
   return {
+    from: phone,
+    body: text || '',
+    title: title || '',
     from: phone,
     body: text || '',
     type: type === 'image' ? 'image' : 'chat',
@@ -706,6 +709,7 @@ async function handleMetaMessage(m, senderName) {
 
   // Extract text + media-id depending on message type
   let text = '';
+  let title = '';
   let mediaId = null;
   if (msgType === 'text') {
     text = m.text?.body || '';
@@ -762,7 +766,7 @@ async function handleMetaMessage(m, senderName) {
   // Hand off to the flow inside the per-user queue
   runQueued(phone, async () => {
     const t0 = Date.now();
-    const wrapped = buildWrappedMsg(phone, text, msgType, mediaId, senderName);
+    const wrapped = buildWrappedMsg(phone, text, msgType, mediaId, senderName, title);
     try {
       const replies = await flow.handleMessage(wrapped);
       console.log('[task]', phone, 'flow:', Date.now() - t0, 'ms, replies:', replies.length);
