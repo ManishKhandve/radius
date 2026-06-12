@@ -101,7 +101,7 @@ async function _metaSendOnce(phone, text) {
     } catch { /* not JSON — rely on HTTP status */ }
 
     if (res.ok && metaOk) {
-      chatStore.saveMessage(phone, null, 'outbound', text);
+      chatStore.saveMessage(phone, null, 'outbound', text, waMessageId, 'sent');
     }
 
     return { ok: res.ok, status: res.status, body, metaOk, metaInfo, waMessageId };
@@ -159,8 +159,9 @@ async function watiSendButtons(phone, bodyText, buttons) {
       console.log(`[meta] ✓ buttons sent to ${phone}${metaInfo ? ' — ' + metaInfo : ''}`);
       sendMetrics.sent++;
       const btnStr = buttons.map(b => `\n[Btn: ${b.title}]`).join('');
-      chatStore.saveMessage(phone, null, 'outbound', `${bodyText}${btnStr}`);
-      return { ok: true, status: res.status, body };
+      const wamid = j?.messages?.[0]?.id || null;
+      chatStore.saveMessage(phone, null, 'outbound', `${bodyText}${btnStr}`, wamid, 'sent');
+      return { ok: true, status: res.status, body, waMessageId: wamid };
     }
     console.error(`[meta] ✗ buttons HTTP ${res.status} to ${phone}: ${metaInfo || body.slice(0, 200)}`);
     recordFailure(phone, `buttons: ${metaInfo || 'HTTP ' + res.status}`, bodyText);
@@ -233,8 +234,9 @@ async function watiSendList(phone, body, buttonLabel, sections, opts = {}) {
       console.log(`[meta] ✓ list sent to ${phone}${metaInfo ? ' — ' + metaInfo : ''}`);
       sendMetrics.sent++;
       const listStr = sections.flatMap(s => (s.rows || []).map(r => `\n[Btn: 📄 ${r.title}]`)).join('');
-      chatStore.saveMessage(phone, null, 'outbound', `${body}${listStr}`);
-      return { ok: true, status: res.status, body: respBody };
+      const wamid = j?.messages?.[0]?.id || null;
+      chatStore.saveMessage(phone, null, 'outbound', `${body}${listStr}`, wamid, 'sent');
+      return { ok: true, status: res.status, body: respBody, waMessageId: wamid };
     }
     console.error(`[meta] ✗ list HTTP ${res.status} to ${phone}: ${metaInfo || respBody.slice(0, 200)}`);
     recordFailure(phone, `list: ${metaInfo || 'HTTP ' + res.status}`, body);
@@ -359,8 +361,9 @@ async function watiSendImage(phone, mediaId, caption = '') {
     if (res.ok && metaOk) {
       console.log(`[meta] ✓ image sent to ${phone}${metaInfo ? ' — ' + metaInfo : ''}`);
       sendMetrics.sent++;
-      chatStore.saveMessage(phone, null, 'outbound', `[Image] ${caption || ''}`);
-      return { ok: true, status: res.status, body };
+      const wamid = j?.messages?.[0]?.id || null;
+      chatStore.saveMessage(phone, null, 'outbound', `[Image] ${caption || ''}`, wamid, 'sent');
+      return { ok: true, status: res.status, body, waMessageId: wamid };
     }
     console.error(`[meta] ✗ image HTTP ${res.status} to ${phone}: ${metaInfo || body.slice(0, 200)}`);
     recordFailure(phone, `image: ${metaInfo || 'HTTP ' + res.status}`, caption);
@@ -454,8 +457,9 @@ async function watiSendTemplate(phone, templateName, langCode = 'en', variables 
     try { j = JSON.parse(textBody); } catch {}
     
     if (res.ok && !j.error) {
-      chatStore.saveMessage(phone, null, 'outbound', `[Template] ${templateName}`);
-      return { ok: true, body: j };
+      const wamid = j?.messages?.[0]?.id || null;
+      chatStore.saveMessage(phone, null, 'outbound', `[Template] ${templateName}`, wamid, 'sent');
+      return { ok: true, body: j, waMessageId: wamid };
     }
     return { ok: false, error: j.error || { message: `HTTP ${res.status}: ${textBody}` } };
   } catch (err) {
@@ -588,8 +592,6 @@ function buildWrappedMsg(phone, text, type, mediaId, senderName, title = '') {
     from: phone,
     body: text || '',
     title: title || '',
-    from: phone,
-    body: text || '',
     type: type === 'image' ? 'image' : 'chat',
     mediaId: mediaId,
     getContact: async () => ({
@@ -670,6 +672,7 @@ app.post('/wati-webhook', async (req, res) => {
         for (const st of value.statuses) {
           const wamid = st.id;
           const statusVal = st.status; // sent, delivered, read, failed
+          chatStore.updateMessageStatus(wamid, statusVal).catch(() => {});
           const campaignName = wamidToCampaign.get(wamid);
           if (campaignName && ['sent', 'delivered', 'read'].includes(statusVal)) {
             chatStore.updateBroadcastMetric(campaignName, statusVal).catch(() => {});
@@ -737,6 +740,9 @@ async function handleMetaMessage(m, senderName) {
         || m.interactive?.button_reply?.title
         || m.interactive?.list_reply?.title
         || '';
+    title = m.interactive?.button_reply?.title
+         || m.interactive?.list_reply?.title
+         || '';
   } else {
     text = '';
   }
@@ -745,7 +751,7 @@ async function handleMetaMessage(m, senderName) {
   // The customer gets a single "an agent will help you" notice the first
   // time they message while paused, then nothing until /release is hit.
   const paused = await isPaused(phone);
-  await chatStore.saveMessage(phone, senderName, 'inbound', msgType === 'image' || msgType === 'document' ? `[${msgType}] ${text}` : text);
+  await chatStore.saveMessage(phone, senderName, 'inbound', msgType === 'image' || msgType === 'document' ? `[${msgType}] ${text}` : text, m.id || null, 'delivered');
 
   if (paused) {
     if (flow.restartIntent(text) || flow.isAdMessage(text)) {
@@ -839,6 +845,13 @@ app.get('/login', (req, res) => {
 const crypto = require('crypto');
 const authTokens = new Map();
 const wamidToCampaign = new Map();
+function setWamidCampaign(wamid, campaignName) {
+  wamidToCampaign.set(wamid, campaignName);
+  if (wamidToCampaign.size > 10000) {
+    const oldestKey = wamidToCampaign.keys().next().value;
+    wamidToCampaign.delete(oldestKey);
+  }
+}
 
 app.post('/api/login', async (req, res) => {
   const { username, password } = req.body;
@@ -1162,7 +1175,7 @@ app.post('/api/broadcast', (req, res) => {
           activeCampaign.log.push(`[${new Date().toLocaleTimeString()}] Sent to ${displayName} (${cleanPhone}) — Success`);
           
           if (result.body && result.body.messages && result.body.messages[0]) {
-             wamidToCampaign.set(result.body.messages[0].id, templateName);
+             setWamidCampaign(result.body.messages[0].id, templateName);
              await chatStore.updateBroadcastMetric(templateName, 'sent').catch(()=>{});
           }
           
@@ -1233,9 +1246,19 @@ const notifiedFollowups = new Set();
 setInterval(async () => {
   try {
     const dues = await chatStore.getDueFollowups();
+    const currentDueKeys = new Set(dues.map(d => `${d.phone}_${d.follow_up_time}`));
+    
+    // Clean up keys that are no longer active/due to prevent memory leaks and support rescheduled follow-ups
+    for (const key of notifiedFollowups) {
+      if (!currentDueKeys.has(key)) {
+        notifiedFollowups.delete(key);
+      }
+    }
+    
     for (const d of dues) {
-      if (!notifiedFollowups.has(d.phone)) {
-        notifiedFollowups.add(d.phone);
+      const key = `${d.phone}_${d.follow_up_time}`;
+      if (!notifiedFollowups.has(key)) {
+        notifiedFollowups.add(key);
         const alertMsg = `⏰ *Follow-up Reminder*\nCustomer: ${d.name || 'Unknown'}\nPhone: +${d.phone}\nAssigned: ${d.assigned_agent || 'Unassigned'}\n\n_Please check the CRM._`;
         watiSend(OWNER_PHONE, alertMsg).catch(()=>{});
       }

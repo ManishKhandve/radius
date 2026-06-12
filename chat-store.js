@@ -24,7 +24,12 @@ async function upsertContact(phone, name, direction) {
     
     if (direction === 'inbound') {
       payload.label = 'unread';
-      payload.abandonment_drip_stage = 0;
+      const existing = await getContactByPhone(phone);
+      if (existing && existing.abandonment_drip_stage === 99) {
+        payload.abandonment_drip_stage = 99;
+      } else {
+        payload.abandonment_drip_stage = 0;
+      }
     }
 
     const { data, error } = await supabase
@@ -41,7 +46,7 @@ async function upsertContact(phone, name, direction) {
  * Saves a message to the database.
  * direction: 'inbound' or 'outbound'
  */
-async function saveMessage(phone, name, direction, content) {
+async function saveMessage(phone, name, direction, content, wamid = null, status = null) {
   if (!supabase) return;
   try {
     await upsertContact(phone, name, direction);
@@ -51,12 +56,31 @@ async function saveMessage(phone, name, direction, content) {
       .insert({
         phone: phone,
         direction: direction,
-        content: content
+        content: content,
+        wamid: wamid,
+        status: status
       });
 
     if (error) console.error('[chat-store] error saving message:', error);
   } catch (err) {
     console.error('[chat-store] exception in saveMessage:', err.message);
+  }
+}
+
+/**
+ * Updates the delivery/read status of a specific message.
+ */
+async function updateMessageStatus(wamid, status) {
+  if (!supabase || !wamid) return;
+  try {
+    const { error } = await supabase
+      .from('messages')
+      .update({ status: status })
+      .eq('wamid', wamid);
+
+    if (error) console.error('[chat-store] error updating message status:', error);
+  } catch (err) {
+    console.error('[chat-store] exception updating message status:', err.message);
   }
 }
 
@@ -303,25 +327,40 @@ async function getUsers() {
   }
 }
 
-/**
- * Updates a broadcast metric (sent, delivered, read, replied).
- */
+const metricUpdateQueue = [];
+let processingQueue = false;
+
+async function processMetricQueue() {
+  if (processingQueue) return;
+  processingQueue = true;
+  while (metricUpdateQueue.length > 0) {
+    const { campaign_name, metric_type, resolve, reject } = metricUpdateQueue[0];
+    try {
+      let { data } = await supabase.from('broadcast_metrics').select(metric_type).eq('campaign_name', campaign_name).single();
+      let currentVal = data ? data[metric_type] || 0 : 0;
+      
+      if (!data) {
+        const insertData = { campaign_name, sent: 0, delivered: 0, read: 0, replied: 0, booked: 0 };
+        insertData[metric_type] = 1;
+        await supabase.from('broadcast_metrics').insert([insertData]);
+      } else {
+        await supabase.from('broadcast_metrics').update({ [metric_type]: currentVal + 1 }).eq('campaign_name', campaign_name);
+      }
+      resolve();
+    } catch (err) {
+      reject(err);
+    }
+    metricUpdateQueue.shift();
+  }
+  processingQueue = false;
+}
+
 async function updateBroadcastMetric(campaign_name, metric_type) {
   if (!supabase) return;
-  try {
-    let { data } = await supabase.from('broadcast_metrics').select(metric_type).eq('campaign_name', campaign_name).single();
-    let currentVal = data ? data[metric_type] || 0 : 0;
-    
-    if (!data) {
-      const insertData = { campaign_name, sent: 0, delivered: 0, read: 0, replied: 0, booked: 0 };
-      insertData[metric_type] = 1;
-      await supabase.from('broadcast_metrics').insert([insertData]);
-    } else {
-      await supabase.from('broadcast_metrics').update({ [metric_type]: currentVal + 1 }).eq('campaign_name', campaign_name);
-    }
-  } catch (err) {
-    // If table doesn't exist, ignore (user will create it soon)
-  }
+  return new Promise((resolve, reject) => {
+    metricUpdateQueue.push({ campaign_name, metric_type, resolve, reject });
+    processMetricQueue().catch(reject);
+  });
 }
 
 async function getBroadcastMetrics() {
@@ -340,7 +379,7 @@ async function getDueFollowups() {
   try {
     const { data } = await supabase
       .from('contacts')
-      .select('phone, name, assigned_agent')
+      .select('phone, name, assigned_agent, follow_up_time')
       .eq('lead_status', 'Follow-up Required')
       .lte('follow_up_time', new Date().toISOString());
     return data || [];
@@ -420,5 +459,6 @@ module.exports = {
   getDueFollowups,
   getQuickReplies,
   addQuickReply,
-  deleteQuickReply
+  deleteQuickReply,
+  updateMessageStatus
 };

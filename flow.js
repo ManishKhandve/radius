@@ -185,12 +185,12 @@ function langPrompt() {
 }
 
 function mainMenuPrompt(lang) {
-  const labels = {
+  const allLabels = {
     en: { home: '🏠 Home Cleaning', maid: '🧹 Maid Service' },
     hi: { home: '🏠 घर की क्लीनिंग', maid: '🧹 मेड सर्विस' },
     mr: { home: '🏠 घराची क्लीनिंग', maid: '🧹 मेड सर्विस' },
-  }[lang] || { en: '', home: '🏠 Home Cleaning', maid: '🧹 Maid Service' }.en;
-  const L = labels.home ? labels : { home: '🏠 Home Cleaning', maid: '🧹 Maid Service' };
+  };
+  const L = allLabels[lang] || allLabels.en;
   return {
     type: 'buttons',
     body: config.mainMenuMessage[lang] || config.mainMenuMessage.en,
@@ -251,10 +251,10 @@ function getDiscountOrAddressPrompt(session, prefixMsg = "") {
   if (session.data.isBroadcast && !session.data.discountApplied) {
     session.state = "CLEANING_DISCOUNT_PROMPT";
     const discountTitles = {
-      en: '🎁 Apply 10% Discount',
-      hi: '🎁 10% छूट लागू करें',
-      mr: '🎁 10% सवलत लागू करा'
-    }[lang] || '🎁 Apply 10% Discount';
+      en: '🎁 10% Discount',
+      hi: '🎁 10% की छूट',
+      mr: '🎁 10% ची सवलत'
+    }[lang] || '🎁 10% Discount';
 
     const skipTitles = {
       en: '➡️ Continue',

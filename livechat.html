@@ -4,6 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>WhatsApp CRM Dashboard</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <style>
         * { box-sizing: border-box; margin: 0; padding: 0; font-family: "Segoe UI", "Helvetica Neue", Helvetica, Arial, sans-serif; }
         
@@ -152,7 +153,7 @@
             </div>
             <div style="display: flex; gap: 5px; width: 100%;">
                 <select id="filterTag" onchange="renderContacts()" style="flex:1;">
-                    <option value="all">Service Type (All)</option>
+                    <option value="all">All Tags</option>
                 </select>
                 <select id="filterAgent" onchange="renderContacts()" style="flex:1;">
                     <option value="all">All Agents</option>
@@ -170,25 +171,35 @@
     </div>
 
     <!-- Analytics Dashboard View -->
-    <div class="chat-area" id="analyticsView" style="display: none; background: #f0f2f5; padding: 30px; overflow-y: auto;">
-        <h2 style="margin-bottom: 20px; color: #111b21;">Broadcast Analytics</h2>
-        <div style="background: white; border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); padding: 20px;">
-            <table style="width: 100%; border-collapse: collapse; text-align: left;">
-                <thead>
-                    <tr style="border-bottom: 1px solid #e9edef;">
-                        <th style="padding: 12px; color: #54656f;">Campaign Name</th>
-                        <th style="padding: 12px; color: #54656f;">Sent</th>
-                        <th style="padding: 12px; color: #54656f;">Delivered</th>
-                        <th style="padding: 12px; color: #54656f;">Read</th>
-                        <th style="padding: 12px; color: #54656f;">Replied</th>
-                        <th style="padding: 12px; color: #54656f;">Booked</th>
-                        <th style="padding: 12px; color: #54656f;">Read Rate</th>
-                    </tr>
-                </thead>
-                <tbody id="analyticsTableBody">
-                    <tr><td colspan="7" style="padding: 12px; text-align: center;">Loading analytics...</td></tr>
-                </tbody>
-            </table>
+    <div class="chat-area" id="analyticsView" style="display: none; background: #f4f6f8; padding: 40px; overflow-y: auto;">
+        <div style="max-width: 1000px; margin: 0 auto;">
+            <h2 style="margin-bottom: 24px; color: #111b21; font-size: 28px; font-weight: 700; letter-spacing: -0.5px;">📈 Broadcast Analytics</h2>
+            
+            <!-- Graph Container -->
+            <div style="background: white; border-radius: 12px; box-shadow: 0 4px 20px rgba(0,0,0,0.05); padding: 20px; margin-bottom: 24px;">
+                <canvas id="analyticsChart" style="max-height: 300px; width: 100%;"></canvas>
+            </div>
+            
+            <div style="background: white; border-radius: 12px; box-shadow: 0 4px 20px rgba(0,0,0,0.05); padding: 0; overflow: hidden;">
+                <div style="overflow-x: auto;">
+                    <table style="width: 100%; border-collapse: collapse; text-align: left; white-space: nowrap;">
+                        <thead style="background: #f8f9fa;">
+                            <tr>
+                                <th style="padding: 16px 24px; color: #54656f; font-weight: 600; font-size: 13px; text-transform: uppercase; letter-spacing: 0.5px;">Campaign Name</th>
+                                <th style="padding: 16px 24px; color: #54656f; font-weight: 600; font-size: 13px; text-transform: uppercase; letter-spacing: 0.5px;">Sent</th>
+                                <th style="padding: 16px 24px; color: #54656f; font-weight: 600; font-size: 13px; text-transform: uppercase; letter-spacing: 0.5px;">Delivered</th>
+                                <th style="padding: 16px 24px; color: #54656f; font-weight: 600; font-size: 13px; text-transform: uppercase; letter-spacing: 0.5px;">Read</th>
+                                <th style="padding: 16px 24px; color: #54656f; font-weight: 600; font-size: 13px; text-transform: uppercase; letter-spacing: 0.5px;">Replied</th>
+                                <th style="padding: 16px 24px; color: #54656f; font-weight: 600; font-size: 13px; text-transform: uppercase; letter-spacing: 0.5px;">Booked</th>
+                                <th style="padding: 16px 24px; color: #54656f; font-weight: 600; font-size: 13px; text-transform: uppercase; letter-spacing: 0.5px;">Read Rate</th>
+                            </tr>
+                        </thead>
+                        <tbody id="analyticsTableBody">
+                            <tr><td colspan="7" style="padding: 30px; text-align: center; color: #888;">Loading analytics...</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
         </div>
     </div>
 
@@ -204,6 +215,7 @@
                 </div>
             </div>
             <div class="bot-control">
+                <button onclick="markAsUnread()" style="margin-right: 15px; padding: 6px 12px; background: white; border: 1px solid #d1d7db; border-radius: 6px; cursor: pointer; color: #54656f; font-weight: 500;">Mark Unread</button>
                 <span style="font-size: 13px; font-weight: 500; color: #54656f;" id="botStatusLabel">Bot Active</span>
                 <label class="toggle-switch">
                     <input type="checkbox" id="pauseBotToggle">
@@ -259,7 +271,10 @@
         <div class="crm-section">
             <div class="crm-label">Tags & Labels</div>
             <div class="tags-container" id="tagsContainer"></div>
-            <input type="text" id="tagInput" class="crm-input" placeholder="Type tag and press Enter" style="margin-bottom: 5px;" onkeypress="if(event.key==='Enter') addTag()">
+            <div style="display: flex; gap: 5px; margin-bottom: 5px;">
+                <input type="text" id="tagInput" class="crm-input" placeholder="Type custom tag..." style="margin-bottom: 0; flex: 1;" onkeypress="if(event.key==='Enter') addTag()">
+                <button class="btn-save" style="margin-top: 0; padding: 6px 12px; width: auto;" onclick="addTag()">Save</button>
+            </div>
             <div style="display: flex; gap: 5px; flex-wrap: wrap;">
                 <span class="tag-preset" onclick="addPresetTag('Deep Cleaning')">+ Deep Cleaning</span>
                 <span class="tag-preset" onclick="addPresetTag('Bathroom Cleaning')">+ Bathroom Cleaning</span>
@@ -326,7 +341,8 @@
         allContacts = data.contacts;
         
         // Dynamically build list of all unique tags
-        const tagSet = new Set();
+        const presetTags = ['Deep Cleaning', 'Bathroom Cleaning', 'Maid Service', 'Repeat Customer', 'High Value Lead', 'Society Lead'];
+        const tagSet = new Set(presetTags);
         allContacts.forEach(c => {
             if (c.tags) {
                 try {
@@ -338,11 +354,7 @@
         
         const filterTag = document.getElementById('filterTag');
         const currentTagVal = filterTag.value;
-        filterTag.innerHTML = '<option value="all">Service Type (All)</option>';
-        
-        // Ensure static Service Types are always visible in the filter
-        ['Deep Cleaning', 'Bathroom Cleaning', 'Maid Service', 'Kitchen Cleaning', 'Sofa Cleaning'].forEach(t => tagSet.add(t));
-        
+        filterTag.innerHTML = '<option value="all">All Tags</option>';
         Array.from(tagSet).sort().forEach(t => {
             filterTag.add(new Option(t, t));
         });
@@ -395,23 +407,110 @@
         tbody.innerHTML = '';
         
         if (!data.metrics || data.metrics.length === 0) {
-            tbody.innerHTML = '<tr><td colspan="7" style="padding: 12px; text-align: center;">No broadcast data yet.</td></tr>';
+            tbody.innerHTML = '<tr><td colspan="7" style="padding: 40px; text-align: center; color: #888; font-size: 15px;">No broadcast data yet. Launch a campaign to see stats here!</td></tr>';
             return;
         }
 
         data.metrics.forEach(m => {
-            const readRate = m.delivered > 0 ? Math.round((m.read / m.delivered) * 100) + '%' : '-';
+            const rateVal = m.delivered > 0 ? Math.round((m.read / m.delivered) * 100) : 0;
+            const readRate = m.delivered > 0 ? rateVal + '%' : '-';
+            
+            let rateColor = '#8696a0';
+            if (rateVal >= 50) rateColor = '#25d366'; // Green
+            else if (rateVal >= 20) rateColor = '#fbc02d'; // Yellow
+            else if (m.delivered > 0) rateColor = '#f15c6d'; // Red
+            
             tbody.innerHTML += `
-                <tr style="border-bottom: 1px solid #f2f2f2;">
-                    <td style="padding: 12px; font-weight: 500;">${m.campaign_name}</td>
-                    <td style="padding: 12px;">${m.sent || 0}</td>
-                    <td style="padding: 12px;">${m.delivered || 0}</td>
-                    <td style="padding: 12px; color: #25d366; font-weight: bold;">${m.read || 0}</td>
-                    <td style="padding: 12px; color: #00a884; font-weight: bold;">${m.replied || 0}</td>
-                    <td style="padding: 12px; color: #dc3545; font-weight: bold;">${m.booked || 0}</td>
-                    <td style="padding: 12px;">${readRate}</td>
+                <tr style="border-bottom: 1px solid #f0f2f5; transition: background 0.2s;" onmouseover="this.style.background='#f8f9fa'" onmouseout="this.style.background='transparent'">
+                    <td style="padding: 16px 24px; font-weight: 600; color: #111b21;">${m.campaign_name}</td>
+                    <td style="padding: 16px 24px; color: #54656f; font-weight: 500;">${m.sent || 0}</td>
+                    <td style="padding: 16px 24px; color: #54656f; font-weight: 500;">${m.delivered || 0}</td>
+                    <td style="padding: 16px 24px;">
+                        <span style="background: #e8f9f0; color: #00a884; padding: 4px 10px; border-radius: 12px; font-weight: 600; font-size: 13px;">${m.read || 0}</span>
+                    </td>
+                    <td style="padding: 16px 24px;">
+                        <span style="background: #e1f5fe; color: #0288d1; padding: 4px 10px; border-radius: 12px; font-weight: 600; font-size: 13px;">${m.replied || 0}</span>
+                    </td>
+                    <td style="padding: 16px 24px;">
+                        <span style="background: #fce4e4; color: #dc3545; padding: 4px 10px; border-radius: 12px; font-weight: 600; font-size: 13px;">${m.booked || 0}</span>
+                    </td>
+                    <td style="padding: 16px 24px; font-weight: 700; color: ${rateColor};">${readRate}</td>
                 </tr>
             `;
+        });
+        
+        renderChart(data.metrics);
+    }
+    
+    let analyticsChartInstance = null;
+    function renderChart(metrics) {
+        const ctx = document.getElementById('analyticsChart').getContext('2d');
+        if (analyticsChartInstance) {
+            analyticsChartInstance.destroy();
+        }
+        
+        // Take top 10 most recent/relevant campaigns for chart readability
+        const chartData = metrics.slice(0, 10);
+        
+        analyticsChartInstance = new Chart(ctx, {
+            type: 'bar',
+            data: {
+                labels: chartData.map(m => m.campaign_name),
+                datasets: [
+                    {
+                        label: 'Sent',
+                        data: chartData.map(m => m.sent || 0),
+                        backgroundColor: '#8696a0',
+                        borderRadius: 4
+                    },
+                    {
+                        label: 'Read',
+                        data: chartData.map(m => m.read || 0),
+                        backgroundColor: '#25d366',
+                        borderRadius: 4
+                    },
+                    {
+                        label: 'Replied',
+                        data: chartData.map(m => m.replied || 0),
+                        backgroundColor: '#0288d1',
+                        borderRadius: 4
+                    },
+                    {
+                        label: 'Booked',
+                        data: chartData.map(m => m.booked || 0),
+                        backgroundColor: '#dc3545',
+                        borderRadius: 4
+                    }
+                ]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                interaction: {
+                    mode: 'index',
+                    intersect: false,
+                },
+                plugins: {
+                    legend: {
+                        position: 'top',
+                    },
+                    title: {
+                        display: true,
+                        text: 'Campaign Performance Overview',
+                        font: { size: 16 }
+                    }
+                },
+                scales: {
+                    x: {
+                        stacked: false,
+                        grid: { display: false }
+                    },
+                    y: {
+                        stacked: false,
+                        beginAtZero: true
+                    }
+                }
+            }
         });
     }
 
@@ -670,29 +769,63 @@
         timeline.sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
 
         const msgList = document.getElementById('messageList');
+        // Check if it's the first load (empty list)
+        const isFirstLoad = msgList.innerHTML === '';
+        // Save current scroll position from the top
+        const currentScrollTop = msgList.scrollTop;
+        
+        // Check if timeline data actually changed to avoid scroll interruption
+        const timelineStr = JSON.stringify(timeline);
+        if (msgList.dataset.timeline === timelineStr) {
+            // No changes, just update bot toggle and return
+            document.getElementById('pauseBotToggle').checked = msgData.isBotPaused;
+            document.getElementById('botStatusLabel').innerText = msgData.isBotPaused ? 'Bot Paused' : 'Bot Active';
+            return;
+        }
+        msgList.dataset.timeline = timelineStr;
+        
         msgList.innerHTML = '';
         
+        const getMsgStatusIcon = (status) => {
+            if (status === 'read') return '<span style="color: #53bdeb; margin-left: 4px; font-size: 11px;">✓✓</span>';
+            if (status === 'delivered') return '<span style="color: #8696a0; margin-left: 4px; font-size: 11px;">✓✓</span>';
+            if (status === 'sent' || status === 'queued' || !status) return '<span style="color: #8696a0; margin-left: 4px; font-size: 11px;">✓</span>';
+            if (status === 'failed') return '<span style="color: #f15c6d; margin-left: 4px; font-size: 11px;">!</span>';
+            return '<span style="color: #8696a0; margin-left: 4px; font-size: 10px;">🕒</span>';
+        };
+
+        let newHtml = '';
         timeline.forEach(item => {
             const time = new Date(item.created_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
-            const div = document.createElement('div');
             
             if (item._type === 'message') {
-                div.className = 'msg-bubble ' + (item.direction === 'inbound' ? 'msg-in' : 'msg-out');
+                const className = 'msg-bubble ' + (item.direction === 'inbound' ? 'msg-in' : 'msg-out');
                 let textHtml = item.content
+                    .replace(/^\[(Buttons|List|Image|Template)\]\s*/i, function(match, type) {
+                        if (type.toLowerCase() === 'image') return '🖼️ ';
+                        if (type.toLowerCase() === 'template') return '📄 ';
+                        return `<span style="font-size: 10px; background: #e1f5fe; color: #0288d1; padding: 2px 6px; border-radius: 4px; margin-bottom: 6px; display: inline-block; font-weight: bold; text-transform: uppercase;">${type}</span><br>`;
+                    })
                     .replace(/</g, '&lt;').replace(/>/g, '&gt;')
                     .replace(/\\n/g, '<br>')
                     .replace(/\n/g, '<br>')
-                    .replace(/\[Btn:\s*(.*?)\]/g, '<br><button class="crm-chat-btn">$1</button>');
-                div.innerHTML = `${textHtml} <span class="msg-time">${time}</span>`;
+                    .replace(/\[Btn:\s*(.*?)\]/g, '<br><button class="crm-chat-btn" disabled>$1</button>');
+                
+                const tickHtml = item.direction === 'outbound' ? getMsgStatusIcon(item.status) : '';
+                newHtml += `<div class="${className}">${textHtml} <span class="msg-time">${time}${tickHtml}</span></div>`;
             } else {
-                div.className = 'msg-bubble';
-                div.style = "align-self: center; background: #fff9c4; color: #54656f; font-size: 12px; max-width: 90%; text-align: center; border: 1px dashed #fbc02d; box-shadow: none;";
-                div.innerHTML = `<strong>📝 Note by ${item.created_by}:</strong> ${item.note.replace(/\\n/g, '<br>')} <span class="msg-time">${time}</span>`;
+                const style = "align-self: center; background: #fff9c4; color: #54656f; font-size: 12px; max-width: 90%; text-align: center; border: 1px dashed #fbc02d; box-shadow: none;";
+                newHtml += `<div class="msg-bubble" style="${style}"><strong>📝 Note by ${item.created_by}:</strong> ${item.note.replace(/\\n/g, '<br>')} <span class="msg-time">${time}</span></div>`;
             }
-            msgList.appendChild(div);
         });
         
-        msgList.scrollTop = msgList.scrollHeight; 
+        msgList.innerHTML = newHtml;
+        
+        if (isFirstLoad) {
+            msgList.scrollTop = msgList.scrollHeight; 
+        } else {
+            msgList.scrollTop = currentScrollTop;
+        }
         
         document.getElementById('pauseBotToggle').checked = msgData.isBotPaused;
         document.getElementById('botStatusLabel').innerText = msgData.isBotPaused ? 'Bot Paused' : 'Bot Active';
@@ -782,6 +915,24 @@
         input.value = text;
         document.getElementById('qrPopup').style.display = 'none';
         input.focus();
+    }
+
+    async function markAsUnread() {
+        if (!currentPhone) return;
+        const contact = allContacts.find(c => c.phone === currentPhone);
+        if (contact) contact.label = 'unread';
+        
+        await authFetch('/api/chat/label', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ phone: currentPhone, label: 'unread' })
+        });
+        
+        renderContacts();
+        document.getElementById('activeChat').style.display = 'none';
+        document.getElementById('profilePanel').style.display = 'none';
+        document.getElementById('emptyState').style.display = 'flex';
+        currentPhone = null;
     }
 
     document.getElementById('pauseBotToggle').onchange = async (e) => {
