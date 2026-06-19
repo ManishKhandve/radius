@@ -1283,7 +1283,7 @@ setInterval(async () => {
 // back to false (or remove it) to restore production timing.
 const DRIP_TEST_MODE   = process.env.DRIP_TEST_MODE === 'true';
 const DRIP_TEST_PHONE  = (process.env.DRIP_TEST_PHONE || '').replace(/[^0-9]/g, ''); // optional whitelist
-const DRIP_TEST_MAX_AGE_HOURS = 6; // in test mode, ignore leads older than this so old customers are never messaged
+const DRIP_TEST_MAX_AGE_HOURS = 48; // in test mode, ignore leads older than this so old customers are never messaged
 const DAY3_THRESHOLD   = DRIP_TEST_MODE ? (30 / (60 * 24)) : 3;   // 30 min vs 3 days (in days)
 const DRIP_INTERVAL_MS = DRIP_TEST_MODE ? 60_000 : 60_000 * 60;  // 1 min vs 1 hour
 console.log(`[drip] mode: ${DRIP_TEST_MODE ? `TEST (first follow-up @ 30 min, check every 1 min${DRIP_TEST_PHONE ? `, only ${DRIP_TEST_PHONE}` : ', recent leads only'})` : 'PRODUCTION (3/7/15 days, hourly)'}`);
@@ -1292,22 +1292,42 @@ setInterval(async () => {
   try {
     const abandoned = await chatStore.getAbandonedLeads();
     const now = Date.now();
+    if (DRIP_TEST_MODE) console.log(`[drip] tick — ${abandoned.length} eligible lead(s) from getAbandonedLeads`);
     for (const c of abandoned) {
-      if (!c.last_message_at) continue;
+      if (!c.last_message_at) {
+        if (DRIP_TEST_MODE) console.log(`[drip] skip ${c.phone}: no last_message_at`);
+        continue;
+      }
 
       // Never drip the business owner/admin. The follow-up reminder cron
       // messages OWNER_PHONE, which creates a recent contact row for it —
       // without this guard the owner would receive its own follow-ups.
-      if (c.phone === OWNER_PHONE) continue;
+      if (c.phone === OWNER_PHONE) {
+        if (DRIP_TEST_MODE) console.log(`[drip] skip ${c.phone}: owner number`);
+        continue;
+      }
+
+      // Test-mode visibility: show how each lead is evaluated so it's
+      // obvious why a number is or isn't being followed up.
+      if (DRIP_TEST_MODE) {
+        const ageH = ((now - new Date(c.last_message_at)) / (1000 * 60 * 60)).toFixed(2);
+        console.log(`[drip] eval ${c.phone}: ageHours=${ageH} stage=${c.abandonment_drip_stage ?? 'null'} lead_status=${c.lead_status ?? 'null'}`);
+      }
 
       // ── Test-mode safety guard ──────────────────────────────
       // Never message existing/old customers while testing. Only target
       // the whitelisted test number (if set) and only leads that were
       // active very recently.
       if (DRIP_TEST_MODE) {
-        if (DRIP_TEST_PHONE && c.phone !== DRIP_TEST_PHONE) continue;
+        if (DRIP_TEST_PHONE && c.phone !== DRIP_TEST_PHONE) {
+          console.log(`[drip] skip ${c.phone}: not the whitelisted test number`);
+          continue;
+        }
         const ageHours = (now - new Date(c.last_message_at)) / (1000 * 60 * 60);
-        if (ageHours > DRIP_TEST_MAX_AGE_HOURS) continue;
+        if (ageHours > DRIP_TEST_MAX_AGE_HOURS) {
+          console.log(`[drip] skip ${c.phone}: older than ${DRIP_TEST_MAX_AGE_HOURS}h (age=${ageHours.toFixed(1)}h)`);
+          continue;
+        }
       }
 
       const diffDays = (now - new Date(c.last_message_at)) / (1000 * 60 * 60 * 24);
@@ -1329,6 +1349,10 @@ setInterval(async () => {
         template = "day3_follow_up"; 
         headerUrl = "https://ikwyrrzipzfbyzmkrfmu.supabase.co/storage/v1/object/public/media/Untitled%20design%20(1).mp4";
         nextStage = 3;
+      }
+
+      if (!template && DRIP_TEST_MODE) {
+        console.log(`[drip] no template for ${c.phone}: stage=${stage} already past current threshold (day3 needs stage<3; reset stage to 0 to re-test)`);
       }
 
       if (template) {
