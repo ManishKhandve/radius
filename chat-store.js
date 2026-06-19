@@ -249,17 +249,31 @@ async function getContacts(role = 'admin', username = '') {
 async function getAbandonedLeads() {
   if (!supabase) return [];
   try {
+    // Pull leads still eligible for the drip (stage < 15, or never set).
+    // NOTE: lead_status exclusion is done in JS below — chaining `.neq()`
+    // filters in PostgREST silently drops rows where lead_status IS NULL
+    // (since `NULL <> 'x'` is not TRUE), which would exclude almost every
+    // brand-new abandoned lead and stop follow-ups from ever sending.
     const { data, error } = await supabase.from('contacts')
       .select('*')
-      .neq('lead_status', 'Booked')
-      .neq('lead_status', 'Canceled')
-      .neq('lead_status', 'Not Interested')
-      .neq('lead_status', 'Service Completed')
-      .neq('lead_status', 'Follow-up Required')
-      .lt('abandonment_drip_stage', 15);
-    if (error) console.error('[chat-store] error fetching abandoned leads:', error);
-    return data || [];
+      .or('abandonment_drip_stage.is.null,abandonment_drip_stage.lt.15');
+    if (error) {
+      console.error('[chat-store] error fetching abandoned leads:', error);
+      return [];
+    }
+
+    const EXCLUDED_STATUSES = new Set([
+      'Booked', 'Canceled', 'Not Interested',
+      'Service Completed', 'Follow-up Required',
+    ]);
+    return (data || []).filter(c => {
+      const stage = c.abandonment_drip_stage || 0;
+      if (stage >= 15) return false;                          // drip done / disabled (99)
+      if (c.lead_status && EXCLUDED_STATUSES.has(c.lead_status)) return false;
+      return true;                                            // NULL lead_status → still a lead
+    });
   } catch (err) {
+    console.error('[chat-store] exception fetching abandoned leads:', err.message);
     return [];
   }
 }

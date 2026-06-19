@@ -150,8 +150,9 @@ async function watiSendButtons(phone, bodyText, buttons) {
     const body = await res.text();
     let metaOk = res.ok;
     let metaInfo = '';
+    let j = null;
     try {
-      const j = JSON.parse(body);
+      j = JSON.parse(body);
       if (j?.error) { metaOk = false; metaInfo = `${j.error.code || '?'}: ${j.error.message || ''}`; }
       else if (j?.messages?.[0]?.id) { metaInfo = j.messages[0].id.slice(0, 40); }
     } catch {}
@@ -225,8 +226,9 @@ async function watiSendList(phone, body, buttonLabel, sections, opts = {}) {
     const respBody = await res.text();
     let metaOk = res.ok;
     let metaInfo = '';
+    let j = null;
     try {
-      const j = JSON.parse(respBody);
+      j = JSON.parse(respBody);
       if (j?.error) { metaOk = false; metaInfo = `${j.error.code || '?'}: ${j.error.message || ''}`; }
       else if (j?.messages?.[0]?.id) { metaInfo = j.messages[0].id.slice(0, 40); }
     } catch {}
@@ -353,8 +355,9 @@ async function watiSendImage(phone, mediaId, caption = '') {
     const body = await res.text();
     let metaOk = res.ok;
     let metaInfo = '';
+    let j = null;
     try {
-      const j = JSON.parse(body);
+      j = JSON.parse(body);
       if (j?.error) { metaOk = false; metaInfo = `${j.error.code || '?'}: ${j.error.message || ''}`; }
       else if (j?.messages?.[0]?.id) { metaInfo = j.messages[0].id.slice(0, 40); }
     } catch {}
@@ -1069,13 +1072,13 @@ app.get('/send', async (req, res) => {
 // /takeover  → bot stops auto-replying to PHONE (default 4h, configurable)
 // /release   → bot resumes auto-replying
 // /paused    → list currently paused conversations
-app.get('/takeover', (req, res) => {
+app.get('/takeover', async (req, res) => {
   const { phone, token, hours } = req.query;
   if (!token || token !== process.env.ADMIN_TOKEN) return res.status(401).send('Unauthorized');
   if (!phone) return res.status(400).send('Missing ?phone=');
   const cleanPhone = String(phone).replace(/[^0-9]/g, '');
   const durationHours = Math.max(1, Math.min(48, parseInt(hours) || PAUSE_DEFAULT_HOURS));
-  pauseUser(cleanPhone, durationHours);
+  await pauseUser(cleanPhone, durationHours);
   res.json({
     ok: true,
     phone: cleanPhone,
@@ -1084,12 +1087,12 @@ app.get('/takeover', (req, res) => {
   });
 });
 
-app.get('/release', (req, res) => {
+app.get('/release', async (req, res) => {
   const { phone, token } = req.query;
   if (!token || token !== process.env.ADMIN_TOKEN) return res.status(401).send('Unauthorized');
   if (!phone) return res.status(400).send('Missing ?phone=');
   const cleanPhone = String(phone).replace(/[^0-9]/g, '');
-  const wasReleased = resumeUser(cleanPhone);
+  const wasReleased = await resumeUser(cleanPhone);
   res.json({ ok: true, phone: cleanPhone, wasPaused: wasReleased });
 });
 
@@ -1268,7 +1271,16 @@ setInterval(async () => {
   }
 }, 60000); // Check every minute
 
-// Background Cron: Abandonment Drip Campaign (Runs every hour)
+// Background Cron: Abandonment Drip Campaign
+// Production: first follow-up after 3 days, checked hourly.
+// Test mode (env DRIP_TEST_MODE=true): first follow-up after 30 minutes,
+// checked every minute — so it can be verified quickly. Set the env var
+// back to false (or remove it) to restore production timing.
+const DRIP_TEST_MODE   = process.env.DRIP_TEST_MODE === 'true';
+const DAY3_THRESHOLD   = DRIP_TEST_MODE ? (30 / (60 * 24)) : 3;   // 30 min vs 3 days (in days)
+const DRIP_INTERVAL_MS = DRIP_TEST_MODE ? 60_000 : 60_000 * 60;  // 1 min vs 1 hour
+console.log(`[drip] mode: ${DRIP_TEST_MODE ? 'TEST (first follow-up @ 30 min, check every 1 min)' : 'PRODUCTION (3/7/15 days, hourly)'}`);
+
 setInterval(async () => {
   try {
     const abandoned = await chatStore.getAbandonedLeads();
@@ -1291,7 +1303,7 @@ setInterval(async () => {
         template = "day7_follow_up"; 
         headerUrl = "https://ikwyrrzipzfbyzmkrfmu.supabase.co/storage/v1/object/public/media/WhatsApp%20Video%202026-06-10%20at%204.08.29%20PM.mp4";
         nextStage = 7;
-      } else if (diffDays >= 3 && stage < 3) {
+      } else if (diffDays >= DAY3_THRESHOLD && stage < 3) {
         template = "day3_follow_up"; 
         headerUrl = "https://ikwyrrzipzfbyzmkrfmu.supabase.co/storage/v1/object/public/media/Untitled%20design%20(1).mp4";
         nextStage = 3;
@@ -1309,7 +1321,7 @@ setInterval(async () => {
   } catch (err) {
     console.error('[cron] Drip campaign check failed', err.message);
   }
-}, 60000 * 60); // Check every hour
+}, DRIP_INTERVAL_MS); // hourly in production, every minute in test mode
 
 // --- Start ---──────────────────────────────────────────────────
 app.listen(PORT, () => {
