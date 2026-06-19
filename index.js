@@ -1333,8 +1333,11 @@ setInterval(async () => {
 
       if (template) {
         console.log(`[drip] Sending ${template} to ${c.phone} (Stage: ${nextStage})`);
-        const name = c.name && c.name !== 'there' ? c.name : 'Customer';
-        const result = await watiSendTemplate(c.phone, template, "en", [name], headerUrl);
+        // These follow-up templates use a media header with static body
+        // text (no {{1}} variables), so they take ZERO body parameters.
+        // Passing a name here caused Meta error #132000 (param count
+        // mismatch). If you later add a {{1}} to a template, pass [name].
+        const result = await watiSendTemplate(c.phone, template, "en", [], headerUrl);
         // Advance the stage whether or not the send succeeded, so a broken
         // template, bad number, or rejected send is never retried in a tight
         // loop (which previously caused the same number to be re-sent every
