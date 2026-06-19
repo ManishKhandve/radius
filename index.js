@@ -1277,9 +1277,11 @@ setInterval(async () => {
 // checked every minute — so it can be verified quickly. Set the env var
 // back to false (or remove it) to restore production timing.
 const DRIP_TEST_MODE   = process.env.DRIP_TEST_MODE === 'true';
+const DRIP_TEST_PHONE  = (process.env.DRIP_TEST_PHONE || '').replace(/[^0-9]/g, ''); // optional whitelist
+const DRIP_TEST_MAX_AGE_HOURS = 6; // in test mode, ignore leads older than this so old customers are never messaged
 const DAY3_THRESHOLD   = DRIP_TEST_MODE ? (30 / (60 * 24)) : 3;   // 30 min vs 3 days (in days)
 const DRIP_INTERVAL_MS = DRIP_TEST_MODE ? 60_000 : 60_000 * 60;  // 1 min vs 1 hour
-console.log(`[drip] mode: ${DRIP_TEST_MODE ? 'TEST (first follow-up @ 30 min, check every 1 min)' : 'PRODUCTION (3/7/15 days, hourly)'}`);
+console.log(`[drip] mode: ${DRIP_TEST_MODE ? `TEST (first follow-up @ 30 min, check every 1 min${DRIP_TEST_PHONE ? `, only ${DRIP_TEST_PHONE}` : ', recent leads only'})` : 'PRODUCTION (3/7/15 days, hourly)'}`);
 
 setInterval(async () => {
   try {
@@ -1287,7 +1289,17 @@ setInterval(async () => {
     const now = Date.now();
     for (const c of abandoned) {
       if (!c.last_message_at) continue;
-      
+
+      // ── Test-mode safety guard ──────────────────────────────
+      // Never message existing/old customers while testing. Only target
+      // the whitelisted test number (if set) and only leads that were
+      // active very recently.
+      if (DRIP_TEST_MODE) {
+        if (DRIP_TEST_PHONE && c.phone !== DRIP_TEST_PHONE) continue;
+        const ageHours = (now - new Date(c.last_message_at)) / (1000 * 60 * 60);
+        if (ageHours > DRIP_TEST_MAX_AGE_HOURS) continue;
+      }
+
       const diffDays = (now - new Date(c.last_message_at)) / (1000 * 60 * 60 * 24);
       const stage = c.abandonment_drip_stage || 0;
       
