@@ -1166,7 +1166,12 @@ app.post('/api/broadcast', (req, res) => {
         break;
       }
 
-      const cleanPhone = String(r.phone).replace(/\D/g, '');
+      let cleanPhone = String(r.phone).replace(/\D/g, '');
+      // India-only service: a bare 10-digit number is missing its country
+      // code, which Meta rejects. Prepend 91. Also handle a leading 0
+      // (e.g. 0XXXXXXXXXX → 91XXXXXXXXXX).
+      if (cleanPhone.length === 10) cleanPhone = '91' + cleanPhone;
+      else if (cleanPhone.length === 11 && cleanPhone.startsWith('0')) cleanPhone = '91' + cleanPhone.slice(1);
       const displayName = String(r.name || 'Customer').trim();
       activeCampaign.sent++;
 
@@ -1290,6 +1295,11 @@ setInterval(async () => {
     for (const c of abandoned) {
       if (!c.last_message_at) continue;
 
+      // Never drip the business owner/admin. The follow-up reminder cron
+      // messages OWNER_PHONE, which creates a recent contact row for it —
+      // without this guard the owner would receive its own follow-ups.
+      if (c.phone === OWNER_PHONE) continue;
+
       // ── Test-mode safety guard ──────────────────────────────
       // Never message existing/old customers while testing. Only target
       // the whitelisted test number (if set) and only leads that were
@@ -1325,8 +1335,15 @@ setInterval(async () => {
         console.log(`[drip] Sending ${template} to ${c.phone} (Stage: ${nextStage})`);
         const name = c.name && c.name !== 'there' ? c.name : 'Customer';
         const result = await watiSendTemplate(c.phone, template, "en", [name], headerUrl);
+        // Advance the stage whether or not the send succeeded, so a broken
+        // template, bad number, or rejected send is never retried in a tight
+        // loop (which previously caused the same number to be re-sent every
+        // minute). Each drip stage is a best-effort one-shot.
+        await chatStore.updateContactCRM(c.phone, { abandonment_drip_stage: nextStage }).catch(()=>{});
         if (result.ok) {
-           await chatStore.updateContactCRM(c.phone, { abandonment_drip_stage: nextStage }).catch(()=>{});
+          console.log(`[drip] ✓ ${template} sent to ${c.phone}`);
+        } else {
+          console.error(`[drip] ✗ ${template} FAILED to ${c.phone}: ${result.error?.message || JSON.stringify(result.error)}`);
         }
       }
     }
