@@ -1451,6 +1451,22 @@ app.get('/run-followups', async (req, res) => {
   }
 });
 
+// Same trigger, but using the CRM's session auth (auth-token header).
+// Used by the "Run Follow-Ups" button in /chat. Admin-only.
+app.post('/api/run-followups', authMiddleware, async (req, res) => {
+  if (req.user.role !== 'admin') return res.status(403).json({ ok: false, error: 'Admin only' });
+  const t0 = Date.now();
+  try {
+    const { summary, details } = await runFollowupsBatch();
+    summary.durationMs = Date.now() - t0;
+    console.log(`[drip] manual run (CRM) by ${req.user.username}: ${JSON.stringify(summary)}`);
+    res.json({ ok: true, summary, details });
+  } catch (err) {
+    console.error('[drip] manual run (CRM) failed:', err.message);
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
 // --- Start ---──────────────────────────────────────────────────
 app.listen(PORT, () => {
   console.log(`[server] Meta Cloud API bot ready on :${PORT}`);

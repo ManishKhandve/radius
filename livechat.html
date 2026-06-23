@@ -121,6 +121,7 @@
             <div style="display: flex; gap: 10px; width: 100%;">
                 <button onclick="showChatView()" class="btn-login" style="padding: 6px; font-size: 12px; margin-top: 0; background: #00a884;">Chats</button>
                 <button onclick="showAnalyticsView()" class="btn-login" id="analyticsNavBtn" style="padding: 6px; font-size: 12px; margin-top: 0; background: #54656f; display: none;">Analytics</button>
+                <button onclick="runFollowUps()" class="btn-login" id="followupsBtn" style="padding: 6px; font-size: 12px; margin-top: 0; background: #f59e0b; display: none;" title="Send Day 3 / 7 / 15 follow-up templates to leads who are due">Run Follow-Ups</button>
             </div>
         </div>
         <div class="search-bar">
@@ -305,11 +306,47 @@
 
     if (currentRole === 'admin') {
         document.getElementById('analyticsNavBtn').style.display = 'block';
+        document.getElementById('followupsBtn').style.display = 'block';
     }
 
     function logout() {
         localStorage.clear();
         window.location.href = '/login';
+    }
+
+    async function runFollowUps() {
+        if (!confirm('Run follow-ups now?\n\nThis sends Day 3 / 7 / 15 templates to all leads who are due. Leads already messaged for that day will be skipped. Run this once per day.')) return;
+        const btn = document.getElementById('followupsBtn');
+        const originalText = btn.innerText;
+        btn.disabled = true;
+        btn.innerText = 'Running…';
+        try {
+            const res = await authFetch('/api/run-followups', { method: 'POST' });
+            const j = await res.json();
+            if (!res.ok || !j.ok) {
+                alert('❌ Failed: ' + (j.error || res.statusText));
+            } else {
+                const s = j.summary;
+                let msg = `✅ Follow-ups complete (${s.durationMs}ms)\n\n` +
+                          `Total leads checked: ${s.totalLeadsChecked}\n` +
+                          `Follow-ups sent:     ${s.followUpsSent}\n` +
+                          `Skipped:             ${s.followUpsSkipped}\n` +
+                          `Errors:              ${s.errors}`;
+                const sent = (j.details || []).filter(d => d.action === 'sent');
+                const errs = (j.details || []).filter(d => d.action === 'error');
+                if (sent.length) {
+                    msg += '\n\nSent:\n' + sent.map(d => `  • ${d.phone} → ${d.template} (Day ${d.stage})`).join('\n');
+                }
+                if (errs.length) {
+                    msg += '\n\nErrors:\n' + errs.map(d => `  • ${d.phone}: ${(d.reason || '').slice(0, 100)}`).join('\n');
+                }
+                alert(msg);
+            }
+        } catch (e) {
+            alert('❌ Network error: ' + e.message);
+        }
+        btn.disabled = false;
+        btn.innerText = originalText;
     }
 
     let allContacts = [];
