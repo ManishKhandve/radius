@@ -1025,9 +1025,12 @@ app.get('/admin', (req, res) => {
 h2{margin-bottom:1.5rem;font-size:1.2rem}label{display:block;font-size:.85rem;color:#94a3b8;margin-bottom:.4rem}
 input{width:100%;padding:.75rem 1rem;border-radius:.5rem;border:1px solid #334155;background:#0f172a;color:#f1f5f9;font-size:1rem;margin-bottom:1rem;outline:none}
 input:focus{border-color:#38bdf8}button{width:100%;padding:.85rem;border-radius:.5rem;border:none;background:#22c55e;color:#fff;font-size:1rem;font-weight:600;cursor:pointer}
-button:hover{background:#16a34a}.result{margin-top:1rem;padding:.75rem 1rem;border-radius:.5rem;font-size:.9rem;display:none}
+button:hover{background:#16a34a}button.secondary{background:#3b82f6}button.secondary:hover{background:#2563eb}
+button:disabled{opacity:.5;cursor:not-allowed}
+.result{margin-top:1rem;padding:.75rem 1rem;border-radius:.5rem;font-size:.9rem;display:none;white-space:pre-wrap;text-align:left;font-family:ui-monospace,monospace}
 .result.ok{background:#14532d;color:#86efac}.result.err{background:#4c0519;color:#fca5a5}
-.hint{font-size:.78rem;color:#64748b;margin-top:-.5rem;margin-bottom:1rem}</style>
+.hint{font-size:.78rem;color:#64748b;margin-top:-.5rem;margin-bottom:1rem}
+.divider{height:1px;background:#334155;margin:2rem 0 1.5rem}</style>
 </head><body><div class="card">
 <h2>📤 Send Intro Message</h2>
 <label>Country Code + Number</label>
@@ -1035,6 +1038,13 @@ button:hover{background:#16a34a}.result{margin-top:1rem;padding:.75rem 1rem;bord
 <p class="hint">Customer must have messaged the bot within the last 24 hours.</p>
 <button id="btn" onclick="send()">Send Message</button>
 <div class="result" id="result"></div>
+
+<div class="divider"></div>
+
+<h2>⏰ Run Follow-Ups</h2>
+<p class="hint">Sends Day 3 / 7 / 15 follow-up templates to leads who are due. Skips anyone already messaged for that day. Run this once per day.</p>
+<button id="btnFollowups" class="secondary" onclick="runFollowups()">Run Follow-Ups Now</button>
+<div class="result" id="resultFollowups"></div>
 </div>
 <script>
 async function send(){
@@ -1049,6 +1059,35 @@ async function send(){
   document.getElementById('phone').value='';
 }
 document.getElementById('phone').addEventListener('keydown',e=>{if(e.key==='Enter')send();});
+
+async function runFollowups(){
+  const btn=document.getElementById('btnFollowups'),result=document.getElementById('resultFollowups');
+  btn.disabled=true;btn.textContent='Running…';result.style.display='none';
+  try{
+    const res=await fetch('/run-followups?token=${token}');
+    const j=await res.json();
+    if(!res.ok||!j.ok){
+      result.textContent='❌ '+(j.error||'Failed');
+      result.className='result err';
+    }else{
+      const s=j.summary;
+      let lines=['✅ Done in '+s.durationMs+'ms','','Total leads checked: '+s.totalLeadsChecked,'Follow-ups sent: '+s.followUpsSent,'Skipped: '+s.followUpsSkipped,'Errors: '+s.errors];
+      if(j.details && j.details.length){
+        lines.push('');
+        const sent=j.details.filter(d=>d.action==='sent');
+        const errs=j.details.filter(d=>d.action==='error');
+        if(sent.length){lines.push('Sent:');sent.forEach(d=>lines.push('  • '+d.phone+' → '+d.template+' (Day '+d.stage+')'));}
+        if(errs.length){lines.push('');lines.push('Errors:');errs.forEach(d=>lines.push('  • '+d.phone+' → '+(d.template||'?')+': '+(d.reason||'').slice(0,80)));}
+      }
+      result.textContent=lines.join('\\n');
+      result.className='result '+(s.errors>0?'err':'ok');
+    }
+  }catch(e){
+    result.textContent='❌ Network error: '+e.message;
+    result.className='result err';
+  }
+  result.style.display='block';btn.disabled=false;btn.textContent='Run Follow-Ups Now';
+}
 </script></body></html>`);
 });
 
@@ -1277,107 +1316,140 @@ setInterval(async () => {
 }, 60000); // Check every minute
 
 // Background Cron: Abandonment Drip Campaign
+// AUTO is OFF by default — the auto scheduler proved unreliable, so the
+// admin now runs the drip manually via the "Run Follow-Ups" button on
+// /admin (which calls GET /run-followups). Set env DRIP_AUTO_ENABLED=true
+// to re-enable the automatic scheduler when the timing logic is solid.
+//
 // Production: first follow-up after 3 days, checked hourly.
 // Test mode (env DRIP_TEST_MODE=true): first follow-up after 30 minutes,
-// checked every minute — so it can be verified quickly. Set the env var
-// back to false (or remove it) to restore production timing.
+// checked every minute — so it can be verified quickly.
+const DRIP_AUTO_ENABLED = process.env.DRIP_AUTO_ENABLED === 'true';
 const DRIP_TEST_MODE   = process.env.DRIP_TEST_MODE === 'true';
 const DRIP_TEST_PHONE  = (process.env.DRIP_TEST_PHONE || '').replace(/[^0-9]/g, ''); // optional whitelist
 const DRIP_TEST_MAX_AGE_HOURS = 48; // in test mode, ignore leads older than this so old customers are never messaged
 const DAY3_THRESHOLD   = DRIP_TEST_MODE ? (30 / (60 * 24)) : 3;   // 30 min vs 3 days (in days)
 const DRIP_INTERVAL_MS = DRIP_TEST_MODE ? 60_000 : 60_000 * 60;  // 1 min vs 1 hour
-console.log(`[drip] mode: ${DRIP_TEST_MODE ? `TEST (first follow-up @ 30 min, check every 1 min${DRIP_TEST_PHONE ? `, only ${DRIP_TEST_PHONE}` : ', recent leads only'})` : 'PRODUCTION (3/7/15 days, hourly)'}`);
+console.log(`[drip] mode: ${DRIP_TEST_MODE ? `TEST (first follow-up @ 30 min${DRIP_TEST_PHONE ? `, only ${DRIP_TEST_PHONE}` : ', recent leads only'})` : 'PRODUCTION (3/7/15 days)'}`);
+console.log(`[drip] auto scheduler: ${DRIP_AUTO_ENABLED ? `ENABLED (every ${DRIP_INTERVAL_MS / 1000}s)` : 'DISABLED — use /admin → Run Follow-Ups'}`);
 
-setInterval(async () => {
-  try {
-    const abandoned = await chatStore.getAbandonedLeads();
-    const now = Date.now();
-    if (DRIP_TEST_MODE) console.log(`[drip] tick — ${abandoned.length} eligible lead(s) from getAbandonedLeads`);
-    for (const c of abandoned) {
-      if (!c.last_message_at) {
-        if (DRIP_TEST_MODE) console.log(`[drip] skip ${c.phone}: no last_message_at`);
-        continue;
-      }
+// Templates and their media headers, indexed by drip day. All three are
+// approved with a media header and a static body (no {{1}} variables —
+// passing body params triggers Meta error #132000).
+const DRIP_TEMPLATES = {
+  3:  { name: 'day3_follow_up',  header: 'https://ikwyrrzipzfbyzmkrfmu.supabase.co/storage/v1/object/public/media/Untitled%20design%20(1).mp4' },
+  7:  { name: 'day7_follow_up',  header: 'https://ikwyrrzipzfbyzmkrfmu.supabase.co/storage/v1/object/public/media/WhatsApp%20Video%202026-06-10%20at%204.08.29%20PM.mp4' },
+  15: { name: 'day15_follow_up', header: 'https://ikwyrrzipzfbyzmkrfmu.supabase.co/storage/v1/object/public/media/WhatsApp%20Image%202026-06-10%20at%205.13.53%20PM.jpeg' },
+};
 
-      // Never drip the business owner/admin. The follow-up reminder cron
-      // messages OWNER_PHONE, which creates a recent contact row for it —
-      // without this guard the owner would receive its own follow-ups.
-      if (c.phone === OWNER_PHONE) {
-        if (DRIP_TEST_MODE) console.log(`[drip] skip ${c.phone}: owner number`);
-        continue;
-      }
+// Process a single lead. Returns one of:
+//   { action: 'sent',    template, stage }
+//   { action: 'skipped', reason }
+//   { action: 'error',   template?, reason }
+async function processOneLeadForDrip(c, opts = {}) {
+  const now = opts.now || Date.now();
 
-      // Test-mode visibility: show how each lead is evaluated so it's
-      // obvious why a number is or isn't being followed up.
-      if (DRIP_TEST_MODE) {
-        const ageH = ((now - new Date(c.last_message_at)) / (1000 * 60 * 60)).toFixed(2);
-        console.log(`[drip] eval ${c.phone}: ageHours=${ageH} stage=${c.abandonment_drip_stage ?? 'null'} lead_status=${c.lead_status ?? 'null'}`);
-      }
+  if (!c.last_message_at) return { action: 'skipped', reason: 'no last_message_at' };
+  if (c.phone === OWNER_PHONE) return { action: 'skipped', reason: 'owner number' };
 
-      // ── Test-mode safety guard ──────────────────────────────
-      // Never message existing/old customers while testing. Only target
-      // the whitelisted test number (if set) and only leads that were
-      // active very recently.
-      if (DRIP_TEST_MODE) {
-        if (DRIP_TEST_PHONE && c.phone !== DRIP_TEST_PHONE) {
-          console.log(`[drip] skip ${c.phone}: not the whitelisted test number`);
-          continue;
-        }
-        const ageHours = (now - new Date(c.last_message_at)) / (1000 * 60 * 60);
-        if (ageHours > DRIP_TEST_MAX_AGE_HOURS) {
-          console.log(`[drip] skip ${c.phone}: older than ${DRIP_TEST_MAX_AGE_HOURS}h (age=${ageHours.toFixed(1)}h)`);
-          continue;
-        }
-      }
-
-      const diffDays = (now - new Date(c.last_message_at)) / (1000 * 60 * 60 * 24);
-      const stage = c.abandonment_drip_stage || 0;
-      
-      let template = null;
-      let nextStage = stage;
-      let headerUrl = null;
-
-      if (diffDays >= 15 && stage < 15) {
-        template = "day15_follow_up"; 
-        headerUrl = "https://ikwyrrzipzfbyzmkrfmu.supabase.co/storage/v1/object/public/media/WhatsApp%20Image%202026-06-10%20at%205.13.53%20PM.jpeg";
-        nextStage = 15;
-      } else if (diffDays >= 7 && stage < 7) {
-        template = "day7_follow_up"; 
-        headerUrl = "https://ikwyrrzipzfbyzmkrfmu.supabase.co/storage/v1/object/public/media/WhatsApp%20Video%202026-06-10%20at%204.08.29%20PM.mp4";
-        nextStage = 7;
-      } else if (diffDays >= DAY3_THRESHOLD && stage < 3) {
-        template = "day3_follow_up"; 
-        headerUrl = "https://ikwyrrzipzfbyzmkrfmu.supabase.co/storage/v1/object/public/media/Untitled%20design%20(1).mp4";
-        nextStage = 3;
-      }
-
-      if (!template && DRIP_TEST_MODE) {
-        console.log(`[drip] no template for ${c.phone}: stage=${stage} already past current threshold (day3 needs stage<3; reset stage to 0 to re-test)`);
-      }
-
-      if (template) {
-        console.log(`[drip] Sending ${template} to ${c.phone} (Stage: ${nextStage})`);
-        // These follow-up templates use a media header with static body
-        // text (no {{1}} variables), so they take ZERO body parameters.
-        // Passing a name here caused Meta error #132000 (param count
-        // mismatch). If you later add a {{1}} to a template, pass [name].
-        const result = await watiSendTemplate(c.phone, template, "en", [], headerUrl);
-        // Advance the stage whether or not the send succeeded, so a broken
-        // template, bad number, or rejected send is never retried in a tight
-        // loop (which previously caused the same number to be re-sent every
-        // minute). Each drip stage is a best-effort one-shot.
-        await chatStore.updateContactCRM(c.phone, { abandonment_drip_stage: nextStage }).catch(()=>{});
-        if (result.ok) {
-          console.log(`[drip] ✓ ${template} sent to ${c.phone}`);
-        } else {
-          console.error(`[drip] ✗ ${template} FAILED to ${c.phone}: ${result.error?.message || JSON.stringify(result.error)}`);
-        }
-      }
+  if (DRIP_TEST_MODE) {
+    if (DRIP_TEST_PHONE && c.phone !== DRIP_TEST_PHONE) {
+      return { action: 'skipped', reason: 'not the whitelisted test number' };
     }
-  } catch (err) {
-    console.error('[cron] Drip campaign check failed', err.message);
+    const ageHours = (now - new Date(c.last_message_at)) / (1000 * 60 * 60);
+    if (ageHours > DRIP_TEST_MAX_AGE_HOURS) {
+      return { action: 'skipped', reason: `older than ${DRIP_TEST_MAX_AGE_HOURS}h (age=${ageHours.toFixed(1)}h)` };
+    }
   }
-}, DRIP_INTERVAL_MS); // hourly in production, every minute in test mode
+
+  const diffDays = (now - new Date(c.last_message_at)) / (1000 * 60 * 60 * 24);
+  const stage = c.abandonment_drip_stage || 0;
+
+  // Pick the highest applicable threshold, but only if not yet sent for
+  // that stage. This is what enforces "If a lead has already received
+  // that day's follow-up, do not send it again."
+  let dripDay = null;
+  if (diffDays >= 15 && stage < 15) dripDay = 15;
+  else if (diffDays >= 7 && stage < 7) dripDay = 7;
+  else if (diffDays >= DAY3_THRESHOLD && stage < 3) dripDay = 3;
+
+  if (!dripDay) {
+    if (stage >= 15) return { action: 'skipped', reason: 'all follow-ups already sent' };
+    if (diffDays < DAY3_THRESHOLD) return { action: 'skipped', reason: `too recent (${diffDays.toFixed(1)} days)` };
+    return { action: 'skipped', reason: `already received day${stage} follow-up` };
+  }
+
+  const tpl = DRIP_TEMPLATES[dripDay];
+  console.log(`[drip] Sending ${tpl.name} to ${c.phone} (Stage: ${dripDay})`);
+  const result = await watiSendTemplate(c.phone, tpl.name, 'en', [], tpl.header);
+  // Advance the stage whether or not the send succeeded — each drip stage
+  // is a best-effort one-shot. This prevents a broken template, bad number,
+  // or rejected send from being retried on every run.
+  await chatStore.updateContactCRM(c.phone, { abandonment_drip_stage: dripDay }).catch(() => {});
+
+  if (result.ok) {
+    console.log(`[drip] ✓ ${tpl.name} sent to ${c.phone}`);
+    return { action: 'sent', template: tpl.name, stage: dripDay };
+  }
+  const reason = result.error?.message || JSON.stringify(result.error || {});
+  console.error(`[drip] ✗ ${tpl.name} FAILED to ${c.phone}: ${reason}`);
+  return { action: 'error', template: tpl.name, reason };
+}
+
+// One full drip pass over every active lead. Used by both the manual
+// /run-followups endpoint and (optionally) the auto cron.
+async function runFollowupsBatch() {
+  const abandoned = await chatStore.getAbandonedLeads();
+  const now = Date.now();
+  const summary = {
+    totalLeadsChecked: abandoned.length,
+    followUpsSent: 0,
+    followUpsSkipped: 0,
+    errors: 0,
+  };
+  const details = [];
+  for (const c of abandoned) {
+    const res = await processOneLeadForDrip(c, { now });
+    if (res.action === 'sent') summary.followUpsSent++;
+    else if (res.action === 'skipped') summary.followUpsSkipped++;
+    else if (res.action === 'error') summary.errors++;
+    details.push({ phone: c.phone, name: c.name || null, ...res });
+  }
+  return { summary, details };
+}
+
+// Auto cron — disabled by default (see DRIP_AUTO_ENABLED above).
+if (DRIP_AUTO_ENABLED) {
+  setInterval(async () => {
+    try {
+      const { summary } = await runFollowupsBatch();
+      if (summary.followUpsSent > 0 || DRIP_TEST_MODE) {
+        console.log('[drip] auto-run summary:', JSON.stringify(summary));
+      }
+    } catch (err) {
+      console.error('[cron] Drip campaign check failed', err.message);
+    }
+  }, DRIP_INTERVAL_MS);
+}
+
+// Manual trigger — admin clicks "Run Follow-Ups" on /admin (or curl this).
+// Auth: ADMIN_TOKEN query param, same pattern as /send.
+app.get('/run-followups', async (req, res) => {
+  const { token } = req.query;
+  if (!token || token !== process.env.ADMIN_TOKEN) {
+    return res.status(401).json({ ok: false, error: 'Unauthorized' });
+  }
+  const t0 = Date.now();
+  try {
+    const { summary, details } = await runFollowupsBatch();
+    summary.durationMs = Date.now() - t0;
+    console.log(`[drip] manual run done in ${summary.durationMs}ms:`, JSON.stringify(summary));
+    res.json({ ok: true, summary, details });
+  } catch (err) {
+    console.error('[drip] manual run failed:', err.message);
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
 
 // --- Start ---──────────────────────────────────────────────────
 app.listen(PORT, () => {
