@@ -1321,16 +1321,10 @@ setInterval(async () => {
 // /admin (which calls GET /run-followups). Set env DRIP_AUTO_ENABLED=true
 // to re-enable the automatic scheduler when the timing logic is solid.
 //
-// Production: first follow-up after 3 days, checked hourly.
-// Test mode (env DRIP_TEST_MODE=true): first follow-up after 30 minutes,
-// checked every minute — so it can be verified quickly.
+// Thresholds: first follow-up after 3 days, then 7, then 15.
 const DRIP_AUTO_ENABLED = process.env.DRIP_AUTO_ENABLED === 'true';
-const DRIP_TEST_MODE   = process.env.DRIP_TEST_MODE === 'true';
-const DRIP_TEST_PHONE  = (process.env.DRIP_TEST_PHONE || '').replace(/[^0-9]/g, ''); // optional whitelist
-const DRIP_TEST_MAX_AGE_HOURS = 48; // in test mode, ignore leads older than this so old customers are never messaged
-const DAY3_THRESHOLD   = DRIP_TEST_MODE ? (30 / (60 * 24)) : 3;   // 30 min vs 3 days (in days)
-const DRIP_INTERVAL_MS = DRIP_TEST_MODE ? 60_000 : 60_000 * 60;  // 1 min vs 1 hour
-console.log(`[drip] mode: ${DRIP_TEST_MODE ? `TEST (first follow-up @ 30 min${DRIP_TEST_PHONE ? `, only ${DRIP_TEST_PHONE}` : ', recent leads only'})` : 'PRODUCTION (3/7/15 days)'}`);
+const DAY3_THRESHOLD    = 3;            // days
+const DRIP_INTERVAL_MS  = 60_000 * 60;  // hourly when auto is enabled
 console.log(`[drip] auto scheduler: ${DRIP_AUTO_ENABLED ? `ENABLED (every ${DRIP_INTERVAL_MS / 1000}s)` : 'DISABLED — use /admin → Run Follow-Ups'}`);
 
 // Templates and their media headers, indexed by drip day. All three are
@@ -1351,20 +1345,6 @@ async function processOneLeadForDrip(c, opts = {}) {
 
   if (!c.last_message_at) return { action: 'skipped', reason: 'no last_message_at' };
   if (c.phone === OWNER_PHONE) return { action: 'skipped', reason: 'owner number' };
-
-  if (DRIP_TEST_MODE) {
-    if (DRIP_TEST_PHONE && c.phone !== DRIP_TEST_PHONE) {
-      return { action: 'skipped', reason: 'not the whitelisted test number' };
-    }
-    const ageHours = (now - new Date(c.last_message_at)) / (1000 * 60 * 60);
-    if (ageHours > DRIP_TEST_MAX_AGE_HOURS) {
-      return {
-        action: 'skipped',
-        reason: `older than ${DRIP_TEST_MAX_AGE_HOURS}h (test mode cap)`,
-        ageHours: +ageHours.toFixed(1),
-      };
-    }
-  }
 
   const diffDays = (now - new Date(c.last_message_at)) / (1000 * 60 * 60 * 24);
   const stage = c.abandonment_drip_stage || 0;
@@ -1433,7 +1413,7 @@ if (DRIP_AUTO_ENABLED) {
   setInterval(async () => {
     try {
       const { summary } = await runFollowupsBatch();
-      if (summary.followUpsSent > 0 || DRIP_TEST_MODE) {
+      if (summary.followUpsSent > 0 || summary.errors > 0) {
         console.log('[drip] auto-run summary:', JSON.stringify(summary));
       }
     } catch (err) {
