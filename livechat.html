@@ -332,10 +332,25 @@
                           `Follow-ups sent:     ${s.followUpsSent}\n` +
                           `Skipped:             ${s.followUpsSkipped}\n` +
                           `Errors:              ${s.errors}`;
-                const sent = (j.details || []).filter(d => d.action === 'sent');
-                const errs = (j.details || []).filter(d => d.action === 'error');
+
+                const sent    = (j.details || []).filter(d => d.action === 'sent');
+                const skipped = (j.details || []).filter(d => d.action === 'skipped');
+                const errs    = (j.details || []).filter(d => d.action === 'error');
+
                 if (sent.length) {
                     msg += '\n\nSent:\n' + sent.map(d => `  • ${d.phone} → ${d.template} (Day ${d.stage})`).join('\n');
+                }
+                if (skipped.length) {
+                    // Group by reason so 100s of skips compress to a readable summary
+                    const buckets = {};
+                    skipped.forEach(d => {
+                        const r = d.reason || 'unknown';
+                        buckets[r] = (buckets[r] || 0) + 1;
+                    });
+                    msg += '\n\nSkip reasons:\n' + Object.entries(buckets)
+                        .sort((a, b) => b[1] - a[1])
+                        .map(([r, n]) => `  • ${n}× ${r}`)
+                        .join('\n');
                 }
                 if (errs.length) {
                     msg += '\n\nErrors:\n' + errs.map(d => `  • ${d.phone}: ${(d.reason || '').slice(0, 100)}`).join('\n');

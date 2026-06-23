@@ -1358,7 +1358,11 @@ async function processOneLeadForDrip(c, opts = {}) {
     }
     const ageHours = (now - new Date(c.last_message_at)) / (1000 * 60 * 60);
     if (ageHours > DRIP_TEST_MAX_AGE_HOURS) {
-      return { action: 'skipped', reason: `older than ${DRIP_TEST_MAX_AGE_HOURS}h (age=${ageHours.toFixed(1)}h)` };
+      return {
+        action: 'skipped',
+        reason: `older than ${DRIP_TEST_MAX_AGE_HOURS}h (test mode cap)`,
+        ageHours: +ageHours.toFixed(1),
+      };
     }
   }
 
@@ -1375,7 +1379,13 @@ async function processOneLeadForDrip(c, opts = {}) {
 
   if (!dripDay) {
     if (stage >= 15) return { action: 'skipped', reason: 'all follow-ups already sent' };
-    if (diffDays < DAY3_THRESHOLD) return { action: 'skipped', reason: `too recent (${diffDays.toFixed(1)} days)` };
+    if (diffDays < DAY3_THRESHOLD) {
+      return {
+        action: 'skipped',
+        reason: 'too recent (not yet day 3)',
+        ageDays: +diffDays.toFixed(1),
+      };
+    }
     return { action: 'skipped', reason: `already received day${stage} follow-up` };
   }
 
