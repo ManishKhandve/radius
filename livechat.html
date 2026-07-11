@@ -1409,8 +1409,10 @@
                 <option value="Unassigned">Unassigned</option>
             </select>
 
-            <div class="crm-label">Follow-up Schedule</div>
-            <input type="datetime-local" class="crm-input" id="crmFollowUp" onchange="updateCRM()">
+            <div class="crm-label">Follow-up Schedule (up to 5)</div>
+            <div id="crmFollowUpList"></div>
+            <button type="button" id="crmAddFollowUp" onclick="addFollowUpRow()"
+                    style="margin-top:4px; padding:7px 12px; border-radius:8px; border:1px dashed var(--border-color); background:#fff; color:var(--primary); font-size:12.5px; font-weight:600; cursor:pointer;">+ Add follow-up date</button>
 
             <div style="margin-top: 10px; display: flex; align-items: center; gap: 8px;">
                 <input type="checkbox" id="crmDripDisable" onchange="updateCRM()" style="width:16px;height:16px;cursor:pointer;">
@@ -2115,18 +2117,42 @@
             </div>`).join('');
         }
 
-        // 2) Due follow-up reminders (live)
-        html += '<h3 style="font-family:\'Outfit\',sans-serif; font-size:14px; text-transform:uppercase; letter-spacing:0.5px; color:var(--text-muted); margin:24px 0 12px;">⏰ Due Follow-ups</h3>';
+        // 2) Due follow-up reminders — grouped by service, with select + bulk send
+        html += `<div style="display:flex; align-items:center; gap:12px; margin:24px 0 12px; flex-wrap:wrap;">
+            <h3 style="font-family:'Outfit',sans-serif; font-size:14px; text-transform:uppercase; letter-spacing:0.5px; color:var(--text-muted); margin:0;">⏰ Due Follow-ups</h3>
+            <div id="notifBulkBar" style="display:none; align-items:center; gap:10px;">
+                <span id="notifSelCount" style="font-size:13px; font-weight:600; color:var(--primary);"></span>
+                <button class="pmsg-btn" onclick="openNotifBulkMsg()">📨 Send Template to Selected</button>
+                <button class="pmsg-btn" style="border-color:var(--border-color); color:var(--text-muted); background:#fff;" onclick="notifSel.clear(); renderNotifications();">Clear</button>
+            </div>
+        </div>`;
+
         if (!notifData.length) {
             html += '<div class="notif-card" style="justify-content:center; color:var(--text-muted); font-size:13.5px;">🎉 No follow-ups due. All caught up!</div>';
-        } else {
-            const sorted = [...notifData].sort((a, b) => new Date(a.follow_up_time) - new Date(b.follow_up_time));
-            html += sorted.map(n => {
+            list.innerHTML = html;
+            updateNotifBulkBar();
+            return;
+        }
+
+        const SERVICE_LABEL = { cleaning: '🧹 Cleaning / Flat Customers', maid: '🧺 Maid Customers', worker: '👩‍🔧 Maids', other: '📋 Other / Unspecified' };
+        const groups = {};
+        notifData.forEach(n => { const g = SERVICE_LABEL[n.service_category] ? n.service_category : 'other'; (groups[g] = groups[g] || []).push(n); });
+
+        Object.keys(SERVICE_LABEL).filter(g => groups[g]).forEach(g => {
+            const rows = groups[g].sort((a, b) => new Date(a.follow_up_time) - new Date(b.follow_up_time));
+            const allSel = rows.every(n => notifSel.has(n.phone));
+            html += `<div style="display:flex; align-items:center; gap:8px; margin:16px 0 8px;">
+                <input type="checkbox" ${allSel ? 'checked' : ''} onchange="toggleNotifGroup('${g}', this.checked)" style="width:16px;height:16px;cursor:pointer;">
+                <span style="font-weight:600; font-size:13.5px; color:var(--text-main);">${SERVICE_LABEL[g]}</span>
+                <span style="font-size:12px; color:var(--text-muted);">(${rows.length})</span>
+            </div>`;
+            html += rows.map(n => {
                 const due = new Date(n.follow_up_time);
                 const hrsOver = Math.max(0, (Date.now() - due) / 36e5);
                 const overdueTxt = hrsOver >= 24 ? `${Math.floor(hrsOver/24)}d ${Math.floor(hrsOver%24)}h overdue`
                                   : `${Math.floor(hrsOver)}h ${Math.floor((hrsOver%1)*60)}m overdue`;
                 return `<div class="notif-card overdue">
+                    <input type="checkbox" ${notifSel.has(n.phone) ? 'checked' : ''} onchange="toggleNotifSel('${esc(n.phone)}', this.checked)" style="width:16px;height:16px;cursor:pointer;">
                     <div class="avatar" style="width:42px;height:42px;border-radius:50%;display:flex;align-items:center;justify-content:center;color:#fff;font-weight:600;background:hsl(${(n.phone||'0').slice(-3) * 37 % 360},55%,45%)">${esc((n.name||'C').substring(0,1).toUpperCase())}</div>
                     <div class="notif-info">
                         <div class="notif-name">${esc(n.name || n.phone)}</div>
@@ -2136,8 +2162,48 @@
                     <button class="pmsg-btn" onclick="openNotifChat('${esc(n.phone)}')">💬 Open Chat</button>
                 </div>`;
             }).join('');
-        }
+        });
+
         list.innerHTML = html;
+        updateNotifBulkBar();
+    }
+
+    // ── Notifications selection + bulk send ──
+    let notifSel = new Set();
+
+    function toggleNotifSel(phone, checked) {
+        if (checked) notifSel.add(phone); else notifSel.delete(phone);
+        updateNotifBulkBar();
+    }
+
+    function toggleNotifGroup(group, checked) {
+        const SERVICE_LABEL = { cleaning: 1, maid: 1, worker: 1, other: 1 };
+        notifData.forEach(n => {
+            const g = SERVICE_LABEL[n.service_category] ? n.service_category : 'other';
+            if (g === group) { if (checked) notifSel.add(n.phone); else notifSel.delete(n.phone); }
+        });
+        renderNotifications();
+    }
+
+    function updateNotifBulkBar() {
+        const bar = document.getElementById('notifBulkBar');
+        if (!bar) return;
+        // Keep only still-visible selections
+        const visible = new Set(notifData.map(n => n.phone));
+        [...notifSel].forEach(p => { if (!visible.has(p)) notifSel.delete(p); });
+        if (notifSel.size > 0) {
+            document.getElementById('notifSelCount').innerText = `${notifSel.size} selected`;
+            bar.style.display = 'flex';
+        } else {
+            bar.style.display = 'none';
+        }
+    }
+
+    function openNotifBulkMsg() {
+        if (!notifSel.size) { alert('Select at least one contact.'); return; }
+        bulkTargets = [...notifSel].map(ph => { const n = notifData.find(x => x.phone === ph); return { phone: ph, name: n && n.name }; });
+        bulkOnDone = () => { notifSel.clear(); renderNotifications(); };
+        openBulkModal(`${bulkTargets.length} selected follow-up contacts`);
     }
 
     function showNotifView() {
@@ -2185,14 +2251,24 @@
         pmToggleCustom();
     }
 
-    function openBulkMsg() {
-        if (!peopleSel.size) { alert('Select at least one person first.'); return; }
-        document.getElementById('pmTo').innerText = `${peopleSel.size} selected ${PEOPLE_META[peopleGroup].title.toLowerCase()}`;
+    // Generic bulk target list [{phone, name}] + a callback to run after sending.
+    let bulkTargets = [];
+    let bulkOnDone = null;
+
+    function openBulkModal(label) {
+        document.getElementById('pmTo').innerText = label;
         const modal = document.getElementById('peopleMsgModal');
         modal.dataset.phone = '';
         modal.dataset.bulk = '1';
         modal.style.display = 'flex';
         pmToggleCustom();
+    }
+
+    function openBulkMsg() {
+        if (!peopleSel.size) { alert('Select at least one person first.'); return; }
+        bulkTargets = [...peopleSel].map(ph => { const p = peopleData.find(x => x.phone === ph); return { phone: ph, name: p && p.name }; });
+        bulkOnDone = () => { peopleSel.clear(); renderPeople(); };
+        openBulkModal(`${bulkTargets.length} selected ${PEOPLE_META[peopleGroup].title.toLowerCase()}`);
     }
 
     function closePeopleMsg() {
@@ -2284,22 +2360,22 @@
 
         if (modal.dataset.bulk === '1') {
             // Bulk: each recipient gets the template personalized with THEIR name.
-            const targets = [...peopleSel];
+            const targets = bulkTargets;
+            if (!targets.length) { btn.disabled = false; return; }
             if (!confirm(`Send "${templateName}" to ${targets.length} selected people?`)) {
                 btn.disabled = false; return;
             }
             let sent = 0; const failed = [];
             for (let i = 0; i < targets.length; i++) {
                 btn.innerText = `Sending ${i + 1}/${targets.length}…`;
-                const person = peopleData.find(p => p.phone === targets[i]);
-                const { headerUrl, bodyParams } = resolveSend(templateName, person && person.name);
-                const r = await sendOneTemplate(targets[i], templateName, languageCode, headerUrl, bodyParams);
-                if (r.ok) sent++; else failed.push(`${targets[i]}: ${(r.error || '').slice(0, 90)}`);
+                const { headerUrl, bodyParams } = resolveSend(templateName, targets[i].name);
+                const r = await sendOneTemplate(targets[i].phone, templateName, languageCode, headerUrl, bodyParams);
+                if (r.ok) sent++; else failed.push(`${targets[i].phone}: ${(r.error || '').slice(0, 90)}`);
             }
             let msg = `✅ Bulk send complete\n\nSent: ${sent}\nFailed: ${failed.length}`;
             if (failed.length) msg += '\n\nFailures:\n' + failed.slice(0, 15).map(f => '  • ' + f).join('\n');
             alert(msg);
-            if (sent > 0) { peopleSel.clear(); renderPeople(); }
+            if (sent > 0 && bulkOnDone) bulkOnDone();
             closePeopleMsg();
         } else {
             const phone = modal.dataset.phone;
@@ -2585,14 +2661,14 @@
         document.getElementById('crmStatus').value = contact.lead_status || '';
         document.getElementById('crmAgent').value = contact.assigned_agent || 'Unassigned';
         
-        if (contact.follow_up_time) {
-            const d = new Date(contact.follow_up_time);
-            d.setMinutes(d.getMinutes() - d.getTimezoneOffset());
-            document.getElementById('crmFollowUp').value = d.toISOString().slice(0,16);
-        } else {
-            document.getElementById('crmFollowUp').value = '';
-        }
-        
+        // Load up to 5 follow-up dates (falls back to the single legacy field).
+        let fus = [];
+        try { fus = typeof contact.follow_up_times === 'string' ? JSON.parse(contact.follow_up_times) : (contact.follow_up_times || []); }
+        catch { fus = []; }
+        if ((!fus || !fus.length) && contact.follow_up_time) fus = [contact.follow_up_time];
+        currentFollowUps = (fus || []).filter(Boolean).slice(0, 5);
+        renderFollowUpRows();
+
         document.getElementById('crmDripDisable').checked = (contact.abandonment_drip_stage === 99);
 
         // Handle Tags
@@ -2604,16 +2680,53 @@
         loadMessages();
     }
 
+    // ── Up to 5 follow-up dates ──
+    let currentFollowUps = [];  // ISO strings
+
+    function toLocalInput(iso) {
+        const d = new Date(iso);
+        d.setMinutes(d.getMinutes() - d.getTimezoneOffset());
+        return d.toISOString().slice(0, 16);
+    }
+
+    function renderFollowUpRows() {
+        const list = document.getElementById('crmFollowUpList');
+        list.innerHTML = currentFollowUps.map((iso, i) => `
+            <div style="display:flex; gap:6px; align-items:center; margin-bottom:6px;">
+                <input type="datetime-local" class="crm-input" style="flex:1; margin:0;" value="${iso ? toLocalInput(iso) : ''}" onchange="editFollowUpRow(${i}, this.value)">
+                <button type="button" onclick="removeFollowUpRow(${i})" title="Remove" style="border:none; background:var(--indigo-glow); color:var(--error); width:28px; height:28px; border-radius:8px; cursor:pointer; font-weight:700;">×</button>
+            </div>`).join('');
+        document.getElementById('crmAddFollowUp').style.display = currentFollowUps.length >= 5 ? 'none' : 'inline-block';
+    }
+
+    function addFollowUpRow() {
+        if (currentFollowUps.length >= 5) return;
+        currentFollowUps.push('');   // empty row; saved once a date is picked
+        renderFollowUpRows();
+    }
+
+    function editFollowUpRow(i, localVal) {
+        currentFollowUps[i] = localVal ? new Date(localVal).toISOString() : '';
+        updateCRM();
+    }
+
+    function removeFollowUpRow(i) {
+        currentFollowUps.splice(i, 1);
+        renderFollowUpRows();
+        updateCRM();
+    }
+
     async function updateCRM() {
         if (!currentPhone) return;
         const status = document.getElementById('crmStatus').value;
         const agent = document.getElementById('crmAgent').value;
-        const followup = document.getElementById('crmFollowUp').value;
         const dripDisable = document.getElementById('crmDripDisable').checked;
-        
-        const payload = { phone: currentPhone, lead_status: status, assigned_agent: agent, tags: JSON.stringify(currentTags) };
-        if (followup) payload.follow_up_time = new Date(followup).toISOString();
-        else payload.follow_up_time = null;
+
+        const followUps = currentFollowUps.filter(Boolean);
+        const payload = {
+            phone: currentPhone, lead_status: status, assigned_agent: agent,
+            tags: JSON.stringify(currentTags), follow_up_times: followUps,
+        };
 
         const c = allContacts.find(x => x.phone === currentPhone);
         if (dripDisable) {
@@ -2631,8 +2744,8 @@
         if (c) {
             c.lead_status = status;
             c.assigned_agent = agent;
-            if (followup) c.follow_up_time = payload.follow_up_time;
-            else c.follow_up_time = null;
+            c.follow_up_times = followUps;
+            c.follow_up_time = followUps.slice().sort((a, b) => new Date(a) - new Date(b))[0] || null;
             c.tags = payload.tags;
             if (payload.abandonment_drip_stage !== undefined) {
                 c.abandonment_drip_stage = payload.abandonment_drip_stage;

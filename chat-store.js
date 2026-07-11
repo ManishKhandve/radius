@@ -367,12 +367,37 @@ async function getBroadcastMetrics() {
  */
 async function getDueFollowups() {
   try {
-    const { data } = await supabase
+    // Pull all Follow-up Required contacts and compute "due" in JS, because a
+    // contact can now have up to 5 scheduled dates in follow_up_times (jsonb).
+    let { data, error } = await supabase
       .from('contacts')
-      .select('phone, name, assigned_agent, follow_up_time')
-      .eq('lead_status', 'Follow-up Required')
-      .lte('follow_up_time', new Date().toISOString());
-    return data || [];
+      .select('phone, name, assigned_agent, follow_up_time, follow_up_times, service_category')
+      .eq('lead_status', 'Follow-up Required');
+    if (error) {
+      // follow_up_times column not added yet — fall back to the single field.
+      ({ data } = await supabase
+        .from('contacts')
+        .select('phone, name, assigned_agent, follow_up_time, service_category')
+        .eq('lead_status', 'Follow-up Required'));
+    }
+    const now = Date.now();
+    const due = [];
+    for (const c of (data || [])) {
+      const times = Array.isArray(c.follow_up_times) ? c.follow_up_times : [];
+      const all = [...times, c.follow_up_time].filter(Boolean);
+      const dueDates = all.filter(t => new Date(t).getTime() <= now);
+      if (dueDates.length) {
+        const soonest = dueDates.sort((a, b) => new Date(a) - new Date(b))[0];
+        due.push({
+          phone: c.phone,
+          name: c.name,
+          assigned_agent: c.assigned_agent,
+          service_category: c.service_category || null,
+          follow_up_time: soonest,
+        });
+      }
+    }
+    return due;
   } catch (err) {
     return [];
   }

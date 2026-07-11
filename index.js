@@ -1081,10 +1081,10 @@ app.post('/api/chat/label', authMiddleware, async (req, res) => {
 });
 
 app.post('/api/chat/crm', authMiddleware, async (req, res) => {
-  const { phone, lead_status, assigned_agent, follow_up_time, tags, abandonment_drip_stage } = req.body;
+  const { phone, lead_status, assigned_agent, follow_up_time, follow_up_times, tags, abandonment_drip_stage } = req.body;
   if (!phone) return res.status(400).json({ ok: false, error: 'Missing phone' });
   if (!isValidPhone(phone)) return res.status(400).json({ ok: false, error: 'Invalid phone number format' });
-  
+
   const updates = {};
   if (lead_status !== undefined) {
       updates.lead_status = lead_status;
@@ -1097,7 +1097,17 @@ app.post('/api/chat/crm', authMiddleware, async (req, res) => {
       }
   }
   if (assigned_agent !== undefined) updates.assigned_agent = assigned_agent;
-  if (follow_up_time !== undefined) updates.follow_up_time = follow_up_time;
+  if (follow_up_times !== undefined) {
+      // Up to 5 scheduled follow-up dates; keep follow_up_time synced to the
+      // soonest so the reminder cron and any legacy readers still work.
+      const arr = (Array.isArray(follow_up_times) ? follow_up_times : [])
+        .filter(Boolean).map(String).slice(0, 5)
+        .sort((a, b) => new Date(a) - new Date(b));
+      updates.follow_up_times = arr;
+      updates.follow_up_time = arr[0] || null;
+  } else if (follow_up_time !== undefined) {
+      updates.follow_up_time = follow_up_time;
+  }
   if (tags !== undefined) updates.tags = tags;
   if (abandonment_drip_stage !== undefined) updates.abandonment_drip_stage = abandonment_drip_stage;
 
