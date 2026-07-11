@@ -2207,10 +2207,10 @@
     const VID2 = 'https://ikwyrrzipzfbyzmkrfmu.supabase.co/storage/v1/object/public/media/WhatsApp%20Video%202026-06-10%20at%204.08.29%20PM.mp4';
     const IMG1 = 'https://ikwyrrzipzfbyzmkrfmu.supabase.co/storage/v1/object/public/media/WhatsApp%20Image%202026-06-10%20at%205.13.53%20PM.jpeg';
     const TEMPLATE_SPEC = {
-        cleanly_deep_cleaning_offer: { nameParam: true,  header: '' },
-        day3_follow_up:  { nameParam: false, header: VID1 },
-        day7_follow_up:  { nameParam: false, header: VID2 },
-        day15_follow_up: { nameParam: false, header: IMG1 },
+        cleanly_deep_cleaning_offer: { nameParam: true,  header: '',   lang: 'en_US' },
+        day3_follow_up:  { nameParam: false, header: VID1, lang: 'en' },
+        day7_follow_up:  { nameParam: false, header: VID2, lang: 'en' },
+        day15_follow_up: { nameParam: false, header: IMG1, lang: 'en' },
     };
 
     function selectedTemplateName() {
@@ -2228,18 +2228,22 @@
 
         const spec = TEMPLATE_SPEC[tSel];
         const hint = document.getElementById('pmHint');
+        const langSel = document.getElementById('pmLang');
         if (spec) {
-            // Known template — auto-configure; hide the manual header/body fields.
+            // Known template — auto-configure language, header and variables.
+            langSel.value = spec.lang;
+            langSel.disabled = true;
             document.getElementById('pmHeaderRow').style.display = 'none';
             document.getElementById('pmBodyRow').style.display = 'none';
             const hdr = spec.header ? (spec.header.endsWith('.jpeg') || spec.header.endsWith('.jpg') || spec.header.endsWith('.png') ? 'image header' : 'video header') : 'no header';
-            hint.innerText = `Auto: ${hdr}${spec.nameParam ? " · personalized with the contact's name ({{1}})" : ' · no text variables'}.`;
+            hint.innerText = `Auto: ${spec.lang} · ${hdr}${spec.nameParam ? " · personalized with the contact's name ({{1}})" : ' · no text variables'}.`;
             hint.style.display = 'block';
         } else {
-            // Custom template — you control header + variables.
+            // Custom template — you control language, header + variables.
+            langSel.disabled = false;
             document.getElementById('pmHeaderRow').style.display = 'block';
             document.getElementById('pmBodyRow').style.display = 'block';
-            hint.innerText = 'Custom: set the header + body variables to EXACTLY match your approved template, or Meta returns #132000.';
+            hint.innerText = 'Custom: set the language, header + body variables to EXACTLY match your approved template, or Meta returns #132000.';
             hint.style.display = 'block';
         }
     }
