@@ -8,7 +8,7 @@
 require('dotenv').config();
 
 // ─── Business Details ────────────────────────────────────────
-const businessName     = process.env.BUSINESS_NAME || "CLEANLY Services";
+const businessName     = process.env.BUSINESS_NAME || "Cleanly WhatsApp";
 const contactNumber    = process.env.CONTACT_NUMBER || "+91 9975233763";                       
 
 // ─── Session ─────────────────────────────────────────────────

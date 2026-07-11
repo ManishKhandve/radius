@@ -3,225 +3,1372 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>WhatsApp CRM Dashboard</title>
+    <title>Cleanly WhatsApp - Workspace</title>
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@500;600;700&display=swap" rel="stylesheet">
+    <!-- Chart.js -->
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <!-- SheetJS (Excel/CSV parsing for Campaigns) -->
+    <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+
     <style>
-        * { box-sizing: border-box; margin: 0; padding: 0; font-family: "Segoe UI", "Helvetica Neue", Helvetica, Arial, sans-serif; }
-        
+        :root {
+            --bg-main: #f1f5f9;
+            --bg-sidebar: #ffffff;
+            --bg-panel: #ffffff;
+            --bg-chat: #f8fafc;
+            --border-color: #94a3b8;
+            --text-main: #0f172a;
+            --text-muted: #334155;
+            --primary: #10b981; /* Emerald / WhatsApp Green */
+            --primary-hover: #059669;
+            --primary-glow: rgba(16, 185, 129, 0.08);
+            --indigo: #4f46e5;
+            --indigo-glow: rgba(79, 70, 229, 0.08);
+            --error: #e11d48;
+            --warning: #d97706;
+            --card-bg: #ffffff;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            scrollbar-width: thin;
+            scrollbar-color: rgba(0, 0, 0, 0.1) transparent;
+        }
+
+        /* Custom Scrollbars */
+        ::-webkit-scrollbar {
+            width: 6px;
+            height: 6px;
+        }
+        ::-webkit-scrollbar-track {
+            background: transparent;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: rgba(0, 0, 0, 0.1);
+            border-radius: 4px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: rgba(0, 0, 0, 0.2);
+        }
+
+        body {
+            font-family: 'Inter', system-ui, sans-serif;
+            background-color: var(--bg-main);
+            color: var(--text-main);
+            height: 100vh;
+            display: flex;
+            overflow: hidden;
+        }
+
+        /* Main SaaS Grid */
+        .app-container {
+            display: flex;
+            width: 100vw;
+            height: 100vh;
+            overflow: hidden;
+            background: var(--bg-main);
+        }
+
+        /* Far-Left Sidebar Navigation (260px) */
+        .sidebar {
+            width: 260px;
+            background: var(--bg-sidebar);
+            border-right: 1px solid var(--border-color);
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            flex-shrink: 0;
+        }
+
+        .sidebar-brand {
+            padding: 24px;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        .brand-logo {
+            width: 38px;
+            height: 38px;
+            background: linear-gradient(135deg, var(--primary) 0%, #047857 100%);
+            border-radius: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            box-shadow: 0 4px 12px rgba(16, 185, 129, 0.3);
+            transform: rotate(-3deg);
+        }
+
+        .brand-logo svg {
+            fill: white;
+            width: 20px;
+            height: 20px;
+        }
+
+        .brand-name {
+            font-family: 'Outfit', sans-serif;
+            font-size: 20px;
+            font-weight: 700;
+            background: linear-gradient(to right, #0f172a, #475569);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .sidebar-menu {
+            flex: 1;
+            padding: 24px 16px;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .menu-item {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 12px 16px;
+            border-radius: 12px;
+            color: var(--text-muted);
+            text-decoration: none;
+            font-weight: 500;
+            font-size: 14.5px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            background: transparent;
+            border: none;
+            text-align: left;
+            width: 100%;
+        }
+
+        .menu-item svg {
+            width: 20px;
+            height: 20px;
+            transition: stroke 0.2s;
+        }
+
+        .menu-item:hover {
+            color: var(--text-main);
+            background: #f1f5f9;
+        }
+
+        .menu-item.active {
+            color: var(--primary);
+            background: var(--primary-glow);
+            font-weight: 600;
+        }
+
+        .menu-item.active svg {
+            stroke: var(--primary);
+        }
+
+        .menu-item.btn-followups {
+            margin-top: 16px;
+            color: #d97706;
+            background: rgba(217, 119, 6, 0.08);
+        }
+        .menu-item.btn-followups:hover {
+            background: rgba(217, 119, 6, 0.15);
+            color: #b45309;
+        }
+
+        .sidebar-footer {
+            padding: 20px 16px;
+            border-top: 1px solid var(--border-color);
+            background: #f8fafc;
+        }
+
+        .user-profile {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            margin-bottom: 16px;
+        }
+
+        .user-avatar {
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            background: #e2e8f0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 600;
+            color: #0f172a;
+            font-size: 16px;
+        }
+
+        .user-details {
+            flex: 1;
+            min-width: 0;
+        }
+
+        .user-name {
+            font-size: 14px;
+            font-weight: 600;
+            color: var(--text-main);
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .user-role {
+            font-size: 11px;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .btn-logout {
+            width: 100%;
+            padding: 10px;
+            border-radius: 8px;
+            background: rgba(225, 29, 72, 0.06);
+            border: 1px solid rgba(225, 29, 72, 0.1);
+            color: var(--error);
+            font-size: 13px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+        }
+
+        .btn-logout:hover {
+            background: var(--error);
+            color: white;
+        }
+
+        /* Column 2: CRM Leads List (360px) */
+        .leads-pane {
+            width: 360px;
+            background: var(--bg-panel);
+            border-right: 1px solid var(--border-color);
+            display: flex;
+            flex-direction: column;
+            flex-shrink: 0;
+        }
+
+        .leads-header {
+            padding: 24px;
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        .leads-header-title {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 16px;
+        }
+
+        .leads-header-title h2 {
+            font-family: 'Outfit', sans-serif;
+            font-size: 18px;
+            font-weight: 600;
+        }
+
+        .leads-count-badge {
+            background: #f1f5f9;
+            padding: 4px 10px;
+            border-radius: 99px;
+            font-size: 12px;
+            font-weight: 600;
+            color: var(--text-muted);
+        }
+
+        .search-filters {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        .search-input-wrapper {
+            position: relative;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .search-input-wrapper input {
+            flex: 1;
+            background: #ffffff;
+            border: 1px solid var(--border-color);
+            border-radius: 10px;
+            padding: 10px 12px 10px 38px;
+            color: var(--text-main);
+            outline: none;
+            font-size: 13.5px;
+            transition: border-color 0.2s;
+        }
+
+        .search-input-wrapper input:focus {
+            border-color: var(--primary);
+        }
+
+        .search-icon {
+            position: absolute;
+            left: 12px;
+            width: 18px;
+            height: 18px;
+            color: var(--text-muted);
+            pointer-events: none;
+        }
+
+        .btn-unread-filter {
+            padding: 10px 14px;
+            border-radius: 10px;
+            border: 1px solid var(--border-color);
+            background: #ffffff;
+            color: var(--text-muted);
+            font-size: 13px;
+            cursor: pointer;
+            font-weight: 500;
+            transition: all 0.2s;
+        }
+
+        .btn-unread-filter:hover {
+            color: var(--text-main);
+            background: #f1f5f9;
+        }
+
+        .filter-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 8px;
+        }
+
+        .leads-pane select {
+            background: #ffffff;
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            padding: 8px 10px;
+            color: var(--text-main);
+            font-size: 12px;
+            outline: none;
+            cursor: pointer;
+            transition: border-color 0.2s;
+            width: 100%;
+        }
+
+        .leads-pane select:focus {
+            border-color: var(--primary);
+        }
+
+        .contact-list {
+            flex: 1;
+            overflow-y: auto;
+            padding: 8px 0;
+        }
+
+        .contact-item {
+            display: flex;
+            padding: 16px 24px;
+            cursor: pointer;
+            border-bottom: 1px solid #f1f5f9;
+            align-items: center;
+            transition: all 0.2s;
+            position: relative;
+        }
+
+        .contact-item:hover {
+            background: #f8fafc;
+        }
+
+        .contact-item.active {
+            background: rgba(16, 185, 129, 0.06);
+            border-left: 4px solid var(--primary);
+        }
+
+        .avatar {
+            width: 44px;
+            height: 44px;
+            border-radius: 12px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            margin-right: 14px;
+            font-size: 16px;
+            color: #fff;
+            font-weight: bold;
+            flex-shrink: 0;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.08);
+        }
+
+        .contact-info {
+            flex: 1;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+        }
+
+        .contact-name-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .contact-name {
+            font-size: 14.5px;
+            color: var(--text-main);
+            font-weight: 600;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .contact-time {
+            font-size: 11px;
+            color: var(--text-muted);
+        }
+
+        .contact-sub-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            font-size: 12px;
+            color: var(--text-muted);
+        }
+
+        .status-badge {
+            font-size: 10px;
+            padding: 2px 8px;
+            border-radius: 6px;
+            font-weight: 600;
+            background: #f1f5f9;
+            color: var(--text-muted);
+        }
+
+        .status-badge.new { background: rgba(59, 130, 246, 0.1); color: #2563eb; }
+        .status-badge.interested { background: rgba(245, 158, 11, 0.1); color: #d97706; }
+        .status-badge.booked { background: rgba(16, 185, 129, 0.1); color: #059669; }
+        .status-badge.closed { background: rgba(244, 63, 94, 0.1); color: #e11d48; }
+
+        .status-dot {
+            width: 7px;
+            height: 7px;
+            border-radius: 50%;
+            display: inline-block;
+        }
+        .dot-new { background: #3b82f6; }
+        .dot-interested { background: #f59e0b; }
+        .dot-booked { background: #10b981; }
+        .dot-closed { background: #f43f5e; }
+        .dot-none { background: #64748b; }
+
+        /* Column 3: Active Chat View */
+        .chat-area {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            background: var(--bg-chat);
+            position: relative;
+            border-right: 1px solid var(--border-color);
+        }
+
+        .chat-bg {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            opacity: 0.05;
+            pointer-events: none;
+            background-image: url('https://upload.wikimedia.org/wikipedia/commons/8/82/WhatsApp_background.png');
+            background-repeat: repeat;
+        }
+
+        .chat-header {
+            background: var(--bg-panel);
+            height: 72px;
+            padding: 12px 24px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            z-index: 2;
+            border-bottom: 1px solid var(--border-color);
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.03);
+        }
+
+        .chat-header-user {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .chat-header-user .avatar {
+            width: 42px;
+            height: 42px;
+            border-radius: 12px;
+            margin: 0;
+        }
+
+        .chat-header-details {
+            display: flex;
+            flex-direction: column;
+        }
+
+        .chat-header-details .contact-name {
+            font-size: 16px;
+            font-weight: 600;
+        }
+
+        .chat-header-details .contact-time {
+            font-size: 12px;
+            color: var(--text-muted);
+            margin-top: 2px;
+        }
+
+        .bot-control {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+        }
+
+        .btn-header-action {
+            background: #ffffff;
+            border: 1px solid var(--border-color);
+            padding: 8px 16px;
+            border-radius: 10px;
+            color: var(--text-main);
+            font-size: 13px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .btn-header-action:hover {
+            background: #f1f5f9;
+        }
+
+        /* Modern Toggle Switch */
+        .toggle-container {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .bot-status-txt {
+            font-size: 13px;
+            font-weight: 600;
+            color: var(--text-muted);
+        }
+
+        .toggle-switch {
+            position: relative;
+            display: inline-block;
+            width: 46px;
+            height: 24px;
+        }
+
+        .toggle-switch input {
+            opacity: 0;
+            width: 0;
+            height: 0;
+        }
+
+        .slider {
+            position: absolute;
+            cursor: pointer;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background-color: var(--primary);
+            transition: .3s cubic-bezier(0.4, 0, 0.2, 1);
+            border-radius: 24px;
+        }
+
+        .slider:before {
+            position: absolute;
+            content: "";
+            height: 16px;
+            width: 16px;
+            left: 4px;
+            bottom: 4px;
+            background-color: white;
+            transition: .3s cubic-bezier(0.4, 0, 0.2, 1);
+            border-radius: 50%;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        }
+
+        input:checked + .slider {
+            background-color: var(--error);
+        }
+
+        input:checked + .slider:before {
+            transform: translateX(22px);
+        }
+
+        /* Message Log list */
+        .messages {
+            flex: 1;
+            padding: 24px;
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+            z-index: 2;
+        }
+
+        .msg-bubble {
+            max-width: 65%;
+            padding: 10px 14px;
+            border-radius: 16px;
+            position: relative;
+            word-wrap: break-word;
+            font-size: 14px;
+            line-height: 1.5;
+            color: var(--text-main);
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.03);
+        }
+
+        .msg-in {
+            background: #ffffff;
+            align-self: flex-start;
+            border-bottom-left-radius: 4px;
+            border: 1px solid var(--border-color);
+        }
+
+        .msg-out {
+            background: #dcf8c6;
+            align-self: flex-end;
+            border-bottom-right-radius: 4px;
+            border: 1px solid #cbdba8;
+        }
+
+        .msg-time {
+            font-size: 10px;
+            color: var(--text-muted);
+            float: right;
+            margin: 10px 0 -4px 12px;
+        }
+
+        .msg-status-tick {
+            margin-left: 4px;
+            font-size: 10px;
+            font-weight: bold;
+        }
+
+        /* Dynamic notes inside timeline */
+        .msg-timeline-note {
+            align-self: center;
+            background: #fffbeb !important;
+            border: 1px dashed #fcd34d !important;
+            color: #b45309 !important;
+            max-width: 80% !important;
+            border-radius: 12px !important;
+            padding: 10px 16px !important;
+            font-size: 13.5px !important;
+            box-shadow: none !important;
+        }
+
+        .msg-timeline-note strong {
+            color: #b45309;
+        }
+
         .crm-chat-btn {
             display: inline-block;
-            margin-top: 6px;
+            margin-top: 8px;
             margin-right: 6px;
-            padding: 5px 12px;
-            background: #dcf8c6;
-            border: 1px solid #b8e0a3;
-            border-radius: 12px;
-            font-size: 11.5px;
-            color: #111b21;
+            padding: 6px 14px;
+            background: #f1f5f9;
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            font-size: 11px;
+            color: var(--text-muted);
             cursor: default;
-            box-shadow: 0 1px 1px rgba(0,0,0,0.05);
+            font-weight: 500;
+        }
+
+        /* Chat Input Area */
+        .chat-input-area {
+            background: var(--bg-panel);
+            padding: 16px 24px;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            z-index: 2;
+            position: relative;
+            border-top: 1px solid var(--border-color);
+            box-shadow: 0 -2px 8px rgba(0, 0, 0, 0.02);
+        }
+
+        .chat-input-wrapper {
+            position: relative;
+            flex: 1;
+        }
+
+        .chat-input-area input {
+            width: 100%;
+            padding: 14px 18px;
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            font-size: 14.5px;
+            outline: none;
+            background: #ffffff;
+            color: var(--text-main);
+            transition: border-color 0.2s;
+        }
+
+        .chat-input-area input:focus {
+            border-color: var(--primary);
+        }
+
+        .chat-input-area button {
+            background: linear-gradient(135deg, var(--primary) 0%, #047857 100%);
+            color: white;
+            border: none;
+            padding: 14px 24px;
+            border-radius: 12px;
+            cursor: pointer;
+            font-weight: 600;
+            font-family: inherit;
+            font-size: 14.5px;
+            transition: opacity 0.2s;
+            box-shadow: 0 4px 12px rgba(16, 185, 129, 0.15);
+        }
+
+        .chat-input-area button:hover {
+            opacity: 0.95;
+        }
+
+        .chat-input-area button:disabled {
+            background: #e2e8f0;
+            color: #94a3b8;
+            box-shadow: none;
+            cursor: not-allowed;
+        }
+
+        /* Quick Replies Popup (/) */
+        .qr-popup {
+            display: none;
+            position: absolute;
+            bottom: 80px;
+            left: 24px;
+            background: #ffffff;
+            border-radius: 14px;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.08);
+            width: 320px;
+            max-height: 240px;
+            overflow-y: auto;
+            z-index: 10;
+            border: 1px solid var(--border-color);
+        }
+
+        .qr-item {
+            padding: 12px 16px;
+            border-bottom: 1px solid #f1f5f9;
+            cursor: pointer;
+            font-size: 13px;
+            transition: background 0.2s;
+        }
+
+        .qr-item:hover {
+            background: #f8fafc;
+        }
+
+        .qr-item:last-child {
+            border-bottom: none;
+        }
+
+        .qr-cmd {
+            font-weight: 600;
+            color: var(--primary);
+        }
+
+        /* Column 4: CRM Profile details panel (340px) */
+        .profile-panel {
+            width: 340px;
+            background: var(--bg-panel);
+            display: none;
+            flex-direction: column;
+            overflow-y: auto;
+            flex-shrink: 0;
+        }
+
+        .profile-card-header {
+            padding: 32px 24px;
+            text-align: center;
+            border-bottom: 1px solid var(--border-color);
+            background: #f8fafc;
+        }
+
+        .profile-avatar {
+            width: 76px;
+            height: 76px;
+            border-radius: 18px;
+            background: #e2e8f0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-size: 28px;
+            color: #0f172a;
+            font-weight: bold;
+            margin: 0 auto 16px;
+            box-shadow: 0 10px 20px rgba(0, 0, 0, 0.05);
+        }
+
+        .profile-name {
+            font-family: 'Outfit', sans-serif;
+            font-size: 18px;
+            font-weight: 600;
+            color: var(--text-main);
+            margin-bottom: 4px;
+        }
+
+        .profile-phone {
+            font-size: 13.5px;
+            color: var(--text-muted);
+        }
+
+        .crm-section {
+            padding: 24px;
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        .crm-section:last-child {
+            border-bottom: none;
+        }
+
+        .crm-label {
+            font-size: 11px;
+            font-weight: 600;
+            color: var(--text-muted);
+            margin-bottom: 10px;
+            text-transform: uppercase;
+            letter-spacing: 0.8px;
+        }
+
+        .crm-input {
+            width: 100%;
+            padding: 10px 12px;
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            font-size: 13.5px;
+            margin-bottom: 16px;
+            outline: none;
+            background: #ffffff;
+            color: var(--text-main);
+            font-family: inherit;
+            transition: border-color 0.2s;
+        }
+
+        .crm-input:focus {
+            border-color: var(--primary);
+        }
+
+        .tags-container {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 6px;
+            margin-bottom: 12px;
+        }
+
+        .tag {
+            background: #e0e7ff;
+            color: #4338ca;
+            border: 1px solid #c7d2fe;
+            padding: 4px 10px;
+            border-radius: 8px;
+            font-size: 12px;
+            font-weight: 500;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .tag-remove {
+            cursor: pointer;
+            font-weight: 700;
+            opacity: 0.7;
+            transition: opacity 0.2s;
+        }
+
+        .tag-remove:hover {
+            opacity: 1;
+            color: var(--error);
+        }
+
+        .tag-preset {
+            display: inline-block;
+            margin: 2px;
+            padding: 4px 10px;
+            background: #f1f5f9;
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            font-size: 11.5px;
+            cursor: pointer;
+            color: var(--text-muted);
+            transition: all 0.2s;
+        }
+
+        .tag-preset:hover {
+            background: #e2e8f0;
+            color: var(--text-main);
+        }
+
+        .btn-save {
+            background: linear-gradient(135deg, var(--indigo) 0%, #4f46e5 100%);
+            color: white;
+            border: none;
+            padding: 10px 16px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-weight: 600;
+            font-family: inherit;
+            font-size: 13.5px;
+            width: 100%;
+            box-shadow: 0 4px 12px rgba(99, 102, 241, 0.15);
+            transition: opacity 0.2s;
+        }
+
+        .btn-save:hover {
+            opacity: 0.95;
+        }
+
+        .notes-list {
+            max-height: 240px;
+            overflow-y: auto;
+            margin-top: 14px;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        .note-item {
+            background: #fffbeb;
+            border: 1px solid #fde68a;
+            padding: 12px;
+            border-radius: 10px;
+            font-size: 13px;
+            color: #b45309;
+            line-height: 1.4;
+        }
+
+        .note-meta {
+            font-size: 10px;
+            color: var(--text-muted);
+            margin-top: 6px;
+            text-align: right;
+        }
+
+        /* Empty State Layout */
+        .empty-state {
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            height: 100%;
+            flex: 1;
+            background: var(--bg-chat);
+            color: var(--text-muted);
+            gap: 12px;
+        }
+
+        .empty-state svg {
+            width: 64px;
+            height: 64px;
+            color: var(--border-color);
+        }
+
+        .empty-state h2 {
+            font-family: 'Outfit', sans-serif;
+            color: var(--text-main);
+            font-weight: 600;
+            font-size: 20px;
+        }
+
+        /* Analytics Tab View */
+        .analytics-pane {
+            flex: 1;
+            background: var(--bg-chat);
+            padding: 40px;
+            overflow-y: auto;
+        }
+
+        /* ── Campaigns (broadcast) view — scoped to #broadcastView ── */
+        #broadcastView .broadcast-container { max-width: 1000px; margin: 0 auto; }
+        #broadcastView .page-header { margin-bottom: 28px; }
+        #broadcastView .page-title {
+            font-family: 'Outfit', sans-serif; font-size: 26px; font-weight: 700; margin-bottom: 6px;
+            background: linear-gradient(to right, #0f172a, #475569);
+            -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+        }
+        #broadcastView .page-subtitle { color: var(--text-muted); font-size: 14px; }
+        #broadcastView .bc-card {
+            background: var(--bg-panel); border: 1px solid var(--border-color); border-radius: 20px;
+            padding: 24px; margin-bottom: 20px; box-shadow: 0 4px 16px rgba(0,0,0,0.04);
+        }
+        #broadcastView .bc-card h3 {
+            font-family: 'Outfit', sans-serif; font-size: 15px; font-weight: 600; margin-bottom: 18px;
+            display: flex; align-items: center; gap: 8px; border-bottom: 1px solid #f1f5f9;
+            padding-bottom: 12px; text-transform: uppercase; letter-spacing: 0.5px; color: var(--text-muted);
+        }
+        #broadcastView .bc-card h3 svg { width: 18px; height: 18px; stroke: var(--primary); }
+        #broadcastView .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
+        #broadcastView .form-group { display: flex; flex-direction: column; gap: 8px; }
+        #broadcastView .form-group.full-width { grid-column: 1 / -1; }
+        #broadcastView label { font-size: 13px; font-weight: 500; color: var(--text-muted); }
+        #broadcastView input, #broadcastView select {
+            background: #ffffff; border: 1px solid var(--border-color); border-radius: 10px;
+            padding: 12px 14px; color: var(--text-main); font-family: inherit; font-size: 14px;
+            outline: none; transition: border-color 0.2s; width: 100%;
+        }
+        #broadcastView input:focus, #broadcastView select:focus { border-color: var(--primary); }
+        #broadcastView .dropzone {
+            border: 2px dashed #cbd5e1; border-radius: 12px; padding: 36px 20px; text-align: center;
+            cursor: pointer; background: #f8fafc; transition: border-color 0.2s, background 0.2s;
+            display: flex; flex-direction: column; align-items: center; gap: 10px;
+        }
+        #broadcastView .dropzone:hover, #broadcastView .dropzone.dragover { border-color: var(--primary); background: rgba(16,185,129,0.04); }
+        #broadcastView .dropzone svg { width: 40px; height: 40px; color: var(--text-muted); }
+        #broadcastView .dropzone:hover svg { color: var(--primary); }
+        #broadcastView .dropzone p { font-size: 14px; color: var(--text-muted); }
+        #broadcastView .dropzone .highlight { color: var(--primary); font-weight: 600; }
+        #broadcastView .preview-container {
+            margin-top: 18px; max-height: 240px; overflow-y: auto;
+            border: 1px solid var(--border-color); border-radius: 10px; background: #f8fafc;
+        }
+        #broadcastView table { width: 100%; border-collapse: collapse; font-size: 13px; text-align: left; }
+        #broadcastView th {
+            background: #f1f5f9; position: sticky; top: 0; padding: 10px 16px; font-weight: 600;
+            color: var(--text-muted); border-bottom: 1px solid var(--border-color); z-index: 2;
+        }
+        #broadcastView td { padding: 10px 16px; border-bottom: 1px solid #f1f5f9; }
+        #broadcastView .btn-action {
+            width: 100%; padding: 14px; border-radius: 12px; border: none; font-size: 15px; font-weight: 600;
+            cursor: pointer; transition: opacity 0.2s; display: flex; justify-content: center; align-items: center;
+            gap: 8px; background: linear-gradient(135deg, var(--primary) 0%, #047857 100%); color: white;
+            box-shadow: 0 4px 12px rgba(16,185,129,0.15); font-family: inherit; margin-bottom: 28px;
+        }
+        #broadcastView .btn-action:hover { opacity: 0.95; }
+        #broadcastView .btn-action:disabled { background: #e2e8f0; color: #94a3b8; cursor: not-allowed; box-shadow: none; }
+        #broadcastView .analytics-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin-bottom: 20px; }
+        #broadcastView .analytic-box { background: #f8fafc; border: 1px solid var(--border-color); border-radius: 12px; padding: 16px; text-align: center; }
+        #broadcastView .analytic-label { font-size: 11px; color: var(--text-muted); font-weight: 600; text-transform: uppercase; margin-bottom: 6px; letter-spacing: 0.5px; }
+        #broadcastView .analytic-value { font-size: 20px; font-family: 'Outfit', sans-serif; font-weight: 700; }
+        #broadcastView .progress-bar-track { width: 100%; height: 8px; background: #f1f5f9; border-radius: 99px; overflow: hidden; margin-bottom: 20px; border: 1px solid var(--border-color); }
+        #broadcastView .progress-bar-fill { height: 100%; width: 0%; background: linear-gradient(90deg, var(--primary) 0%, var(--indigo) 100%); transition: width 0.3s ease; }
+        #broadcastView .console-log {
+            background: #0f172a; border-radius: 12px; padding: 16px; font-family: ui-monospace, Menlo, Consolas, monospace;
+            font-size: 12px; height: 200px; overflow-y: auto; color: #38bdf8; line-height: 1.6;
+        }
+        #broadcastView .log-line { margin-bottom: 4px; white-space: pre-wrap; }
+        #broadcastView .log-line.error { color: #fca5a5; }
+        #broadcastView .log-line.info { color: #a7f3d0; }
+
+        /* ── People directory views ── */
+        #peopleView table { width: 100%; border-collapse: collapse; font-size: 13.5px; text-align: left; }
+        #peopleView th { background: #f1f5f9; position: sticky; top: 0; padding: 12px 16px; font-weight: 600; color: var(--text-muted); border-bottom: 1px solid var(--border-color); z-index: 1; }
+        #peopleView td { padding: 11px 16px; border-bottom: 1px solid #f1f5f9; color: var(--text-main); }
+        #peopleView tr:last-child td { border-bottom: none; }
+        .pmsg-btn { padding: 6px 14px; border-radius: 8px; border: 1px solid var(--primary); background: var(--primary-glow); color: var(--primary); font-weight: 600; font-size: 12.5px; cursor: pointer; white-space: nowrap; }
+        .pmsg-btn:hover { background: var(--primary); color: #fff; }
+
+        /* ── Notifications ── */
+        .notif-badge {
+            margin-left: auto; background: var(--error); color: #fff; font-size: 11px; font-weight: 700;
+            min-width: 20px; height: 20px; border-radius: 10px; display: inline-flex;
+            align-items: center; justify-content: center; padding: 0 6px;
+        }
+        .notif-card {
+            background: var(--bg-panel); border: 1px solid var(--border-color); border-radius: 14px;
+            padding: 16px 20px; margin-bottom: 12px; display: flex; align-items: center; gap: 16px;
+        }
+        .notif-card.overdue { border-left: 4px solid var(--error); }
+        .notif-info { flex: 1; min-width: 0; }
+        .notif-name { font-weight: 600; font-size: 14.5px; color: var(--text-main); }
+        .notif-meta { font-size: 12.5px; color: var(--text-muted); margin-top: 3px; }
+        .notif-due { font-size: 12px; font-weight: 600; color: var(--error); margin-top: 3px; }
+
+        .analytics-container {
+            max-width: 1100px;
+            margin: 0 auto;
+        }
+
+        .analytics-title {
+            font-family: 'Outfit', sans-serif;
+            font-size: 26px;
+            font-weight: 700;
+            margin-bottom: 28px;
+            background: linear-gradient(to right, #0f172a, #475569);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        /* Modern KPI Cards */
+        .kpi-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+            gap: 16px;
+            margin-bottom: 24px;
+        }
+
+        .kpi-card {
+            background: var(--bg-panel);
+            border: 1px solid var(--border-color);
+            border-radius: 16px;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.03);
+        }
+
+        .kpi-label {
+            font-size: 11.5px;
+            font-weight: 600;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .kpi-value {
+            font-size: 24px;
+            font-family: 'Outfit', sans-serif;
+            font-weight: 700;
+        }
+
+        /* Analytics Visual Card */
+        .chart-card {
+            background: var(--bg-panel);
+            border: 1px solid var(--border-color);
+            border-radius: 20px;
+            padding: 24px;
+            margin-bottom: 28px;
+            box-shadow: 0 4px 16px rgba(0, 0, 0, 0.04);
+        }
+
+        .table-card {
+            background: var(--bg-panel);
+            border: 1px solid var(--border-color);
+            border-radius: 20px;
+            overflow: hidden;
+            box-shadow: 0 4px 16px rgba(0, 0, 0, 0.04);
+        }
+
+        .analytics-table {
+            width: 100%;
+            border-collapse: collapse;
+            text-align: left;
+            font-size: 13.5px;
+        }
+
+        .analytics-table th {
+            background: #f8fafc;
+            padding: 16px 24px;
+            color: var(--text-muted);
+            font-weight: 600;
+            font-size: 11px;
+            text-transform: uppercase;
+            letter-spacing: 0.8px;
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        .analytics-table td {
+            padding: 18px 24px;
+            border-bottom: 1px solid #f1f5f9;
+            color: var(--text-main);
+        }
+
+        .analytics-table tr:last-child td {
+            border-bottom: none;
+        }
+
+        .analytics-badge {
+            font-size: 12px;
+            padding: 4px 10px;
+            border-radius: 8px;
+            font-weight: 600;
+            display: inline-block;
         }
         
-        body { background-color: #d1d7db; height: 100vh; display: flex; justify-content: center; align-items: center; }
-        
-        .app-container { width: 100%; height: 100%; display: flex; background: #ffffff; box-shadow: 0 1px 1px 0 rgba(0,0,0,0.06), 0 2px 5px 0 rgba(0,0,0,0.2); }
-
-        /* Left Sidebar (25%) */
-        .sidebar { width: 25%; border-right: 1px solid #e9edef; display: flex; flex-direction: column; background: #ffffff; }
-        .sidebar-header { background: #f0f2f5; min-height: 60px; padding: 10px 16px; display: flex; align-items: center; justify-content: space-between; font-weight: 600; color: #41525d; border-bottom: 1px solid #e9edef; }
-        
-        .search-bar { background: #ffffff; padding: 10px; border-bottom: 1px solid #e9edef; display: flex; gap: 8px; flex-direction: column; }
-        .search-bar input, .search-bar select { padding: 8px 12px; border-radius: 8px; border: 1px solid #e9edef; font-size: 13px; outline: none; background: #f0f2f5; }
-
-        .contact-list { flex: 1; overflow-y: auto; }
-        .contact-item { display: flex; padding: 12px 15px; cursor: pointer; border-bottom: 1px solid #f2f2f2; align-items: center; }
-        .contact-item:hover, .contact-item.active { background: #f0f2f5; }
-        .avatar { width: 45px; height: 45px; border-radius: 50%; background: #dfe5e7; display: flex; justify-content: center; align-items: center; margin-right: 12px; font-size: 18px; color: #fff; font-weight: bold; flex-shrink: 0; }
-        .contact-info { flex: 1; overflow: hidden; }
-        .contact-name-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 3px; }
-        .contact-name { font-size: 15px; color: #111b21; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-        .contact-time { font-size: 11px; color: #667781; }
-        .contact-sub-row { display: flex; justify-content: space-between; align-items: center; font-size: 12px; color: #667781; }
-        
-        .status-dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; margin-right: 4px; }
-        .dot-new { background: #34B7F1; } .dot-interested { background: #FFB02E; } .dot-booked { background: #25D366; } .dot-closed { background: #dc3545; } .dot-none { background: #ccc; }
-
-        /* Middle Chat Area (50%) */
-        .chat-area { width: 50%; display: flex; flex-direction: column; background: #efeae2; position: relative; border-right: 1px solid #e9edef; }
-        .chat-bg { position: absolute; top: 0; left: 0; width: 100%; height: 100%; opacity: 0.06; pointer-events: none; background-image: url('https://upload.wikimedia.org/wikipedia/commons/8/82/WhatsApp_background.png'); background-repeat: repeat; }
-        
-        .chat-header { background: #f0f2f5; height: 60px; padding: 10px 16px; display: flex; align-items: center; justify-content: space-between; z-index: 2; }
-        .bot-control { display: flex; align-items: center; gap: 10px; }
-        .toggle-switch { position: relative; display: inline-block; width: 44px; height: 22px; }
-        .toggle-switch input { opacity: 0; width: 0; height: 0; }
-        .slider { position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background-color: #25D366; transition: .4s; border-radius: 22px; }
-        .slider:before { position: absolute; content: ""; height: 14px; width: 14px; left: 4px; bottom: 4px; background-color: white; transition: .4s; border-radius: 50%; }
-        input:checked + .slider { background-color: #dc3545; }
-        input:checked + .slider:before { transform: translateX(22px); }
-
-        .messages { flex: 1; padding: 20px; overflow-y: auto; display: flex; flex-direction: column; z-index: 2; }
-        .msg-bubble { max-width: 75%; padding: 6px 10px; border-radius: 7.5px; margin-bottom: 8px; position: relative; word-wrap: break-word; font-size: 14px; line-height: 19px; color: #111b21; }
-        .msg-in { background: #ffffff; align-self: flex-start; border-top-left-radius: 0; box-shadow: 0 1px 0.5px rgba(11,20,26,.13); }
-        .msg-out { background: #d9fdd3; align-self: flex-end; border-top-right-radius: 0; box-shadow: 0 1px 0.5px rgba(11,20,26,.13); }
-        .msg-time { font-size: 11px; color: #667781; float: right; margin: 8px 0 -4px 10px; }
-
-        .chat-input-area { background: #f0f2f5; padding: 10px 16px; display: flex; align-items: center; gap: 10px; z-index: 2; position: relative; }
-        .chat-input-area input { flex: 1; padding: 12px; border: none; border-radius: 8px; font-size: 14px; outline: none; }
-        .chat-input-area button { background: #00a884; color: white; border: none; padding: 12px 20px; border-radius: 8px; cursor: pointer; font-weight: 600; }
-        
-        .qr-popup { display: none; position: absolute; bottom: 60px; left: 16px; background: white; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); width: 300px; max-height: 200px; overflow-y: auto; z-index: 10; border: 1px solid #e9edef; }
-        .qr-item { padding: 10px 15px; border-bottom: 1px solid #f2f2f2; cursor: pointer; font-size: 13px; }
-        .qr-item:hover { background: #f0f2f5; }
-        .qr-cmd { font-weight: 600; color: #00a884; }
-
-        /* Right Profile Panel (25%) */
-        .profile-panel { width: 25%; background: #ffffff; display: none; flex-direction: column; overflow-y: auto; }
-        .profile-header { height: 200px; background: #f0f2f5; display: flex; flex-direction: column; justify-content: center; align-items: center; border-bottom: 1px solid #e9edef; }
-        .profile-avatar { width: 80px; height: 80px; border-radius: 50%; background: #dfe5e7; display: flex; justify-content: center; align-items: center; font-size: 30px; color: #fff; font-weight: bold; margin-bottom: 10px; }
-        .profile-name { font-size: 18px; font-weight: 600; color: #111b21; }
-        .profile-phone { font-size: 14px; color: #667781; }
-
-        .crm-section { padding: 20px; border-bottom: 1px solid #e9edef; }
-        .crm-label { font-size: 12px; font-weight: 600; color: #54656f; margin-bottom: 8px; text-transform: uppercase; letter-spacing: 0.5px; }
-        
-        .crm-input { width: 100%; padding: 8px 10px; border: 1px solid #d1d7db; border-radius: 6px; font-size: 14px; margin-bottom: 15px; outline: none; background: #f8f9fa; }
-        .crm-input:focus { border-color: #00a884; }
-
-        .tags-container { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px; }
-        .tag { background: #e1f0fa; color: #005c4b; padding: 4px 10px; border-radius: 12px; font-size: 12px; font-weight: 500; display: flex; align-items: center; gap: 5px; }
-        .tag-remove { cursor: pointer; font-weight: bold; }
-        .tag-preset { display: inline-block; margin: 2px; padding: 3px 8px; border: 1px solid #ccc; border-radius: 10px; font-size: 11px; cursor: pointer; color: #54656f; }
-        .tag-preset:hover { background: #f0f2f5; }
-
-        .notes-list { max-height: 200px; overflow-y: auto; margin-top: 10px; }
-        .note-item { background: #fff9c4; padding: 10px; border-radius: 6px; margin-bottom: 10px; font-size: 13px; color: #111b21; border-left: 3px solid #fbc02d; }
-        .note-meta { font-size: 10px; color: #667781; margin-top: 5px; text-align: right; }
-
-        .btn-save { background: #00a884; color: white; border: none; padding: 8px 15px; border-radius: 6px; cursor: pointer; font-weight: 600; width: 100%; }
-        .btn-save:hover { background: #008f6f; }
-
-        .empty-state { display: flex; flex-direction: column; justify-content: center; align-items: center; height: 100%; width: 75%; background: #f0f2f5; color: #667781; }
-        
-        @media (min-width: 1400px) { .app-container { width: 1400px; height: calc(100vh - 40px); margin-top: 20px; } }
+        .analytics-badge.delivered { background: rgba(14, 165, 233, 0.1); color: #0284c7; }
+        .analytics-badge.read { background: rgba(16, 185, 129, 0.1); color: #059669; }
+        .analytics-badge.replied { background: rgba(79, 70, 229, 0.1); color: #4f46e5; }
+        .analytics-badge.booked { background: rgba(219, 39, 119, 0.1); color: #db2777; }
     </style>
 </head>
 <body>
 
 <div class="app-container">
-    <!-- 1. Left Sidebar -->
+    <!-- COLUMN 1: Shared Left Sidebar Navigation -->
     <div class="sidebar">
-        <div class="sidebar-header" style="flex-direction: column; align-items: flex-start; gap: 10px;">
-            <div style="display: flex; justify-content: space-between; width: 100%;">
-                <div>
-                    <span id="loggedInUser" style="color: #00a884; margin-right: 5px;"></span>
-                    <span id="logoutBtn" style="font-size: 11px; cursor: pointer; color: #dc3545;" onclick="logout()">Logout</span>
+        <div>
+            <div class="sidebar-brand">
+                <div class="brand-logo">
+                    <svg viewBox="0 0 24 24">
+                        <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 3c1.66 0 3 1.34 3 3s-1.34 3-3 3-3-1.34-3-3 1.34-3 3-3zm0 14.2c-2.5 0-4.71-1.28-6-3.22.03-1.99 4-3.08 6-3.08 1.99 0 5.97 1.09 6 3.08-1.29 1.94-3.5 3.22-6 3.22z"/>
+                    </svg>
                 </div>
-                <div style="font-size: 13px; font-weight: normal; color: #54656f;" id="totalUsersCount"></div>
+                <span class="brand-name">Cleanly WhatsApp</span>
             </div>
-            <div style="display: flex; gap: 10px; width: 100%;">
-                <button onclick="showChatView()" class="btn-login" style="padding: 6px; font-size: 12px; margin-top: 0; background: #00a884;">Chats</button>
-                <button onclick="showAnalyticsView()" class="btn-login" id="analyticsNavBtn" style="padding: 6px; font-size: 12px; margin-top: 0; background: #54656f; display: none;">Analytics</button>
-                <button onclick="runFollowUps()" class="btn-login" id="followupsBtn" style="padding: 6px; font-size: 12px; margin-top: 0; background: #f59e0b; display: none;" title="Send Day 3 / 7 / 15 follow-up templates to leads who are due">Run Follow-Ups</button>
-            </div>
-        </div>
-        <div class="search-bar">
-            <div style="display: flex; gap: 5px; margin-bottom: 5px;">
-                <input type="text" id="searchInput" placeholder="Search name or phone" onkeyup="renderContacts()" style="flex:1;">
-                <button id="filterUnreadBtn" onclick="toggleUnreadFilter()" style="padding: 8px 12px; border: 1px solid #d1d7db; border-radius: 8px; background: white; cursor: pointer; color: #54656f; font-size: 13px;">Unread</button>
-            </div>
-            <select id="filterStatus" onchange="renderContacts()" style="flex:1;">
-                <option value="all">All Statuses</option>
-                <option value="New Lead">New Lead</option>
-                <option value="Interested">Interested</option>
-                <option value="Quote Sent">Quote Sent</option>
-                <option value="Follow-up Required">Follow-up Required</option>
-                <option value="Booked">Booked</option>
-                <option value="Service Completed">Service Completed</option>
-                <option value="Not Interested">Not Interested</option>
-            </select>
-            <div style="display: flex; gap: 5px; width: 100%; margin-bottom: 5px;">
-                <select id="filterCategory" onchange="renderContacts()" style="flex:1;">
-                    <option value="all">All Services</option>
-                    <option value="cleaning">Cleaning</option>
-                    <option value="maid">Maid</option>
-                </select>
-                <select id="filterTemperature" onchange="renderContacts()" style="flex:1;">
-                    <option value="all">All Temps</option>
-                    <option value="Hot Lead">🔥 Hot Lead</option>
-                    <option value="Warm Lead">☀️ Warm Lead</option>
-                    <option value="Cold Lead">❄️ Cold Lead</option>
-                </select>
-            </div>
-            <div style="display: flex; gap: 5px; width: 100%;">
-                <select id="filterTag" onchange="renderContacts()" style="flex:1;">
-                    <option value="all">All Tags</option>
-                </select>
-                <select id="filterAgent" onchange="renderContacts()" style="flex:1;">
-                    <option value="all">All Agents</option>
-                    <option value="Unassigned">Unassigned</option>
-                </select>
-            </div>
-        </div>
+            
+            <div class="sidebar-menu">
+                <button onclick="showChatView()" id="navChatsBtn" class="menu-item active">
+                    <svg fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M8.684 10.742a3 3 0 005.13 0M15.914 10a3 3 0 00-6.828 0M12 21V3"></path>
+                    </svg>
+                    <span>Conversations</span>
+                </button>
 
+                <button onclick="showNotifView()" id="notifNavBtn" class="menu-item">
+                    <svg fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M14.857 17.082a23.848 23.848 0 005.454-1.31A8.967 8.967 0 0118 9.75v-.7V9A6 6 0 006 9v.75a8.967 8.967 0 01-2.312 6.022c1.733.64 3.56 1.085 5.455 1.31m5.714 0a24.255 24.255 0 01-5.714 0m5.714 0a3 3 0 11-5.714 0"></path>
+                    </svg>
+                    <span>Notifications</span>
+                    <span id="notifBadge" class="notif-badge" style="display:none;">0</span>
+                </button>
+
+                <button onclick="showPeopleView('flat_customers')" id="peopleNav_flat_customers" class="menu-item people-nav">
+                    <svg fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"></path>
+                    </svg>
+                    <span>Flat Customers</span>
+                </button>
+
+                <button onclick="showPeopleView('customers')" id="peopleNav_customers" class="menu-item people-nav">
+                    <svg fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M17 20h5v-2a4 4 0 00-3-3.87M9 20H4v-2a4 4 0 013-3.87m6-1.13a4 4 0 10-4-4 4 4 0 004 4z"></path>
+                    </svg>
+                    <span>Maid Customers</span>
+                </button>
+
+                <button onclick="showPeopleView('maids')" id="peopleNav_maids" class="menu-item people-nav">
+                    <svg fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"></path>
+                    </svg>
+                    <span>Maids</span>
+                </button>
+
+                <button onclick="showBroadcastView()" id="navBroadcastBtn" class="menu-item" style="display: none;">
+                    <svg fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M10.34 15.84c-.68-.68-1.79-.68-2.47 0M4.16 9.66c-.68-.68-1.79-.68-2.47 0M19.84 9.66c.68-.68 1.79-.68 2.47 0m-6.38 6.18c.68-.68 1.79-.68 2.47 0M12 18.75v-13.5"></path>
+                    </svg>
+                    <span>Campaigns</span>
+                </button>
+                
+                <button onclick="showAnalyticsView()" id="analyticsNavBtn" class="menu-item" style="display: none;">
+                    <svg fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M3 13.125C3 12.504 3.504 12 4.125 12h2.25c.621 0 1.125.504 1.125 1.125v5.75c0 .621-.504 1.125-1.125 1.125h-2.25A1.125 1.125 0 013 18.875v-5.75zM9.75 8.625c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125v10.25c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 01-1.125-1.125v-10.25zM16.5 4.125c0-.621.504-1.125 1.125-1.125h2.25C20.496 3 21 3.504 21 4.125v14.75c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 01-1.125-1.125V4.125z"></path>
+                    </svg>
+                    <span>Analytics</span>
+                </button>
+
+            </div>
+        </div>
+        
+        <div class="sidebar-footer">
+            <div class="user-profile">
+                <div class="user-avatar" id="sidebarAvatar">U</div>
+                <div class="user-details">
+                    <div class="user-name" id="loggedInUser">Agent Name</div>
+                    <div class="user-role" id="totalUsersCount">Loading...</div>
+                </div>
+            </div>
+            <button class="btn-logout" id="logoutBtn" onclick="logout()">
+                <svg fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24" style="width:16px;height:16px;">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M15.75 9V5.25A2.25 2.25 0 0013.5 3h-6a2.25 2.25 0 00-2.25 2.25v13.5A2.25 2.25 0 007.5 21h6a2.25 2.25 0 002.25-2.25V15M12 9l-3 3m0 0l3 3m-3-3h12.75"></path>
+                </svg>
+                <span>Logout</span>
+            </button>
+        </div>
+    </div>
+
+    <!-- COLUMN 2: CRM Leads List (visible in Chats mode) -->
+    <div class="leads-pane" id="leadsPane">
+        <div class="leads-header">
+            <div class="leads-header-title">
+                <h2>Leads Database</h2>
+                <span class="leads-count-badge" id="leadsCount">0</span>
+            </div>
+            <div class="search-filters">
+                <div class="search-input-wrapper">
+                    <svg class="search-icon" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path>
+                    </svg>
+                    <input type="text" id="searchInput" placeholder="Search name or number..." onkeyup="renderContacts()">
+                    <button class="btn-unread-filter" id="filterUnreadBtn" onclick="toggleUnreadFilter()">Unread</button>
+                </div>
+                
+                <select id="filterStatus" onchange="renderContacts()">
+                    <option value="all">All Statuses</option>
+                    <option value="New Lead">New Lead</option>
+                    <option value="Interested">Interested</option>
+                    <option value="Quote Sent">Quote Sent</option>
+                    <option value="Follow-up Required">Follow-up Required</option>
+                    <option value="Booked">Booked</option>
+                    <option value="Service Completed">Service Completed</option>
+                    <option value="Not Interested">Not Interested</option>
+                </select>
+                
+                <div class="filter-grid">
+                    <select id="filterCategory" onchange="renderContacts()">
+                        <option value="all">All Services</option>
+                        <option value="cleaning">Cleaning (Flat Customer)</option>
+                        <option value="maid">Maid Customer</option>
+                        <option value="worker">Maid (Worker)</option>
+                    </select>
+                    <select id="filterTemperature" onchange="renderContacts()">
+                        <option value="all">All Temps</option>
+                        <option value="Hot Lead">🔥 Hot Lead</option>
+                        <option value="Warm Lead">☀️ Warm Lead</option>
+                        <option value="Cold Lead">❄️ Cold Lead</option>
+                    </select>
+                </div>
+                
+                <div class="filter-grid">
+                    <select id="filterTag" onchange="renderContacts()">
+                        <option value="all">All Tags</option>
+                    </select>
+                    <select id="filterAgent" onchange="renderContacts()">
+                        <option value="all">All Agents</option>
+                        <option value="Unassigned">Unassigned</option>
+                    </select>
+                </div>
+            </div>
+        </div>
+        
         <div class="contact-list" id="contactList"></div>
     </div>
 
+    <!-- COLUMN 3: Dynamic Workspace View (Empty State, Chat View, or Analytics Dashboard) -->
     <div id="emptyState" class="empty-state">
-        <h2>WhatsApp CRM</h2>
-        <span>Select a lead to start messaging</span>
+        <svg fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M8.684 10.742a3 3 0 005.13 0M15.914 10a3 3 0 00-6.828 0M1.125 12V3.75c0-.621.504-1.125 1.125-1.125h9.75c.621 0 1.125.504 1.125 1.125V12M1.125 12h11.25M1.125 12v3.75c0 .621.504 1.125 1.125 1.125h9.75c.621 0 1.125-.504 1.125-1.125V12M3 5.625h6.75M3 8.625h6.75M3 14.625h6.75"></path>
+        </svg>
+        <h2>CRM Workspace</h2>
+        <p>Select a lead from the list to launch the console</p>
     </div>
 
-    <!-- Analytics Dashboard View -->
-    <div class="chat-area" id="analyticsView" style="display: none; background: #f4f6f8; padding: 40px; overflow-y: auto;">
-        <div style="max-width: 1000px; margin: 0 auto;">
-            <h2 style="margin-bottom: 24px; color: #111b21; font-size: 28px; font-weight: 700; letter-spacing: -0.5px;">📈 Broadcast Analytics</h2>
-            
-            <!-- Graph Container -->
-            <div style="background: white; border-radius: 12px; box-shadow: 0 4px 20px rgba(0,0,0,0.05); padding: 20px; margin-bottom: 24px;">
-                <canvas id="analyticsChart" style="max-height: 300px; width: 100%;"></canvas>
-            </div>
-            
-            <div style="background: white; border-radius: 12px; box-shadow: 0 4px 20px rgba(0,0,0,0.05); padding: 0; overflow: hidden;">
-                <div style="overflow-x: auto;">
-                    <table style="width: 100%; border-collapse: collapse; text-align: left; white-space: nowrap;">
-                        <thead style="background: #f8f9fa;">
-                            <tr>
-                                <th style="padding: 16px 24px; color: #54656f; font-weight: 600; font-size: 13px; text-transform: uppercase; letter-spacing: 0.5px;">Campaign Name</th>
-                                <th style="padding: 16px 24px; color: #54656f; font-weight: 600; font-size: 13px; text-transform: uppercase; letter-spacing: 0.5px;">Sent</th>
-                                <th style="padding: 16px 24px; color: #54656f; font-weight: 600; font-size: 13px; text-transform: uppercase; letter-spacing: 0.5px;">Delivered</th>
-                                <th style="padding: 16px 24px; color: #54656f; font-weight: 600; font-size: 13px; text-transform: uppercase; letter-spacing: 0.5px;">Read</th>
-                                <th style="padding: 16px 24px; color: #54656f; font-weight: 600; font-size: 13px; text-transform: uppercase; letter-spacing: 0.5px;">Replied</th>
-                                <th style="padding: 16px 24px; color: #54656f; font-weight: 600; font-size: 13px; text-transform: uppercase; letter-spacing: 0.5px;">Booked</th>
-                                <th style="padding: 16px 24px; color: #54656f; font-weight: 600; font-size: 13px; text-transform: uppercase; letter-spacing: 0.5px;">Read Rate</th>
-                            </tr>
-                        </thead>
-                        <tbody id="analyticsTableBody">
-                            <tr><td colspan="7" style="padding: 30px; text-align: center; color: #888;">Loading analytics...</td></tr>
-                        </tbody>
-                    </table>
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <!-- 2. Main Chat Area -->
+    <!-- Chat Area Pane (Hidden by default) -->
     <div class="chat-area" id="activeChat" style="display: none;">
         <div class="chat-bg"></div>
         <div class="chat-header">
-            <div style="display: flex; align-items: center;">
-                <div class="avatar" id="headerAvatar" style="width:40px;height:40px;font-size:16px;">?</div>
-                <div>
-                    <div class="contact-name" id="headerName" style="font-weight: 600;">Customer Name</div>
-                    <div class="contact-time" id="headerPhone" style="font-size:11px;">1234567890</div>
+            <div class="chat-header-user">
+                <div class="avatar" id="headerAvatar" style="background:#10b981;">?</div>
+                <div class="chat-header-details">
+                    <span class="contact-name" id="headerName">Customer</span>
+                    <span class="contact-time" id="headerPhone">Loading...</span>
                 </div>
             </div>
             <div class="bot-control">
-                <button onclick="markAsUnread()" style="margin-right: 15px; padding: 6px 12px; background: white; border: 1px solid #d1d7db; border-radius: 6px; cursor: pointer; color: #54656f; font-weight: 500;">Mark Unread</button>
-                <span style="font-size: 13px; font-weight: 500; color: #54656f;" id="botStatusLabel">Bot Active</span>
-                <label class="toggle-switch">
-                    <input type="checkbox" id="pauseBotToggle">
-                    <span class="slider"></span>
-                </label>
+                <button class="btn-header-action" onclick="markAsUnread()">Mark Unread</button>
+                <div class="toggle-container">
+                    <span class="bot-status-txt" id="botStatusLabel">Bot Active</span>
+                    <label class="toggle-switch">
+                        <input type="checkbox" id="pauseBotToggle">
+                        <span class="slider"></span>
+                    </label>
+                </div>
             </div>
         </div>
 
@@ -229,17 +1376,19 @@
 
         <div class="chat-input-area">
             <div class="qr-popup" id="qrPopup"></div>
-            <input type="text" id="messageInput" placeholder="Type a message or '/' for quick replies" autocomplete="off" onkeyup="checkQuickReplies(event)">
+            <div class="chat-input-wrapper">
+                <input type="text" id="messageInput" placeholder="Type message or '/' for shortcuts..." autocomplete="off" onkeyup="checkQuickReplies(event)">
+            </div>
             <button id="sendBtn">Send</button>
         </div>
     </div>
 
-    <!-- 3. Right Profile Panel -->
+    <!-- COLUMN 4: CRM Right Info Panel (visible only when chat is active) -->
     <div class="profile-panel" id="profilePanel">
-        <div class="profile-header">
+        <div class="profile-card-header">
             <div class="profile-avatar" id="panelAvatar">?</div>
-            <div class="profile-name" id="panelName">Customer</div>
-            <div class="profile-phone" id="panelPhone">1234567890</div>
+            <div class="profile-name" id="panelName">Customer Name</div>
+            <div class="profile-phone" id="panelPhone">Phone</div>
         </div>
 
         <div class="crm-section">
@@ -255,42 +1404,261 @@
                 <option value="Not Interested">Not Interested</option>
             </select>
 
-            <div class="crm-label">Assigned To</div>
+            <div class="crm-label">Assigned Agent</div>
             <select class="crm-input" id="crmAgent" onchange="updateCRM()">
                 <option value="Unassigned">Unassigned</option>
             </select>
 
-            <div class="crm-label">Follow-up Date</div>
+            <div class="crm-label">Follow-up Schedule</div>
             <input type="datetime-local" class="crm-input" id="crmFollowUp" onchange="updateCRM()">
 
-            <div style="margin-top: 15px; display: flex; align-items: center; gap: 8px;">
+            <div style="margin-top: 10px; display: flex; align-items: center; gap: 8px;">
                 <input type="checkbox" id="crmDripDisable" onchange="updateCRM()" style="width:16px;height:16px;cursor:pointer;">
-                <label for="crmDripDisable" style="font-size: 13px; color: #54656f; cursor:pointer;">Disable Auto Follow-ups</label>
+                <label for="crmDripDisable" style="font-size:12.5px; color:var(--text-muted); cursor:pointer;">Disable Auto Follow-ups</label>
             </div>
         </div>
 
         <div class="crm-section">
-            <div class="crm-label">Tags & Labels</div>
+            <div class="crm-label">CRM Labels & Tags</div>
             <div class="tags-container" id="tagsContainer"></div>
-            <div style="display: flex; gap: 5px; margin-bottom: 5px;">
-                <input type="text" id="tagInput" class="crm-input" placeholder="Type custom tag..." style="margin-bottom: 0; flex: 1;" onkeypress="if(event.key==='Enter') addTag()">
-                <button class="btn-save" style="margin-top: 0; padding: 6px 12px; width: auto;" onclick="addTag()">Save</button>
+            <div style="display: flex; gap: 6px; margin-bottom: 12px;">
+                <input type="text" id="tagInput" class="crm-input" placeholder="Custom tag..." style="margin-bottom:0; flex:1;" onkeypress="if(event.key==='Enter') addTag()">
+                <button class="btn-save" style="width:auto; white-space:nowrap;" onclick="addTag()">Add</button>
             </div>
-            <div style="display: flex; gap: 5px; flex-wrap: wrap;">
-                <span class="tag-preset" onclick="addPresetTag('Deep Cleaning')">+ Deep Cleaning</span>
-                <span class="tag-preset" onclick="addPresetTag('Bathroom Cleaning')">+ Bathroom Cleaning</span>
-                <span class="tag-preset" onclick="addPresetTag('Maid Service')">+ Maid Service</span>
-                <span class="tag-preset" onclick="addPresetTag('Repeat Customer')">+ Repeat Customer</span>
-                <span class="tag-preset" onclick="addPresetTag('High Value Lead')">+ High Value Lead</span>
-                <span class="tag-preset" onclick="addPresetTag('Society Lead')">+ Society Lead</span>
+            <div style="display: flex; gap: 4px; flex-wrap: wrap;">
+                <span class="tag-preset" onclick="addPresetTag('Deep Cleaning')">+ Deep</span>
+                <span class="tag-preset" onclick="addPresetTag('Bathroom Cleaning')">+ Bath</span>
+                <span class="tag-preset" onclick="addPresetTag('Maid Service')">+ Maid</span>
+                <span class="tag-preset" onclick="addPresetTag('Repeat Customer')">+ Repeat</span>
+                <span class="tag-preset" onclick="addPresetTag('High Value Lead')">+ Value</span>
+                <span class="tag-preset" onclick="addPresetTag('Society Lead')">+ Society</span>
             </div>
         </div>
 
-        <div class="crm-section" style="border-bottom: none;">
-            <div class="crm-label">Internal Notes</div>
-            <textarea id="noteInput" class="crm-input" rows="3" placeholder="Add a private note..."></textarea>
-            <button class="btn-save" onclick="addNote()">Save Note</button>
+        <div class="crm-section">
+            <div class="crm-label">Agent Internal Notes</div>
+            <textarea id="noteInput" class="crm-input" rows="3" placeholder="Private internal note..." style="resize:none;"></textarea>
+            <button class="btn-save" onclick="addNote()">Save Private Note</button>
             <div class="notes-list" id="notesList"></div>
+        </div>
+    </div>
+
+    <!-- FULLSCREEN VIEW: Analytics Dashboard View -->
+    <div class="analytics-pane" id="analyticsView" style="display: none;">
+        <div class="analytics-container">
+            <h2 class="analytics-title">Analytics Dashboard</h2>
+            
+            <!-- KPI Summary stats -->
+            <div class="kpi-grid">
+                <div class="kpi-card">
+                    <span class="kpi-label">Active Campaigns</span>
+                    <span class="kpi-value" id="kpiCampaigns" style="color:var(--indigo);">0</span>
+                </div>
+                <div class="kpi-card">
+                    <span class="kpi-label">Total Outbound</span>
+                    <span class="kpi-value" id="kpiSent" style="color:var(--text-main);">0</span>
+                </div>
+                <div class="kpi-card">
+                    <span class="kpi-label">Leads Read</span>
+                    <span class="kpi-value" id="kpiRead" style="color:#34d399;">0</span>
+                </div>
+                <div class="kpi-card">
+                    <span class="kpi-label">Total Replied</span>
+                    <span class="kpi-value" id="kpiReplied" style="color:#818cf8;">0</span>
+                </div>
+                <div class="kpi-card">
+                    <span class="kpi-label">Leads Booked</span>
+                    <span class="kpi-value" id="kpiBooked" style="color:#f43f5e;">0</span>
+                </div>
+            </div>
+
+            <!-- Graph Container -->
+            <div class="chart-card">
+                <canvas id="analyticsChart" style="max-height: 280px; width:100%;"></canvas>
+            </div>
+            
+            <!-- Details Table -->
+            <div class="table-card">
+                <table class="analytics-table">
+                    <thead>
+                        <tr>
+                            <th>Campaign Name</th>
+                            <th>Sent</th>
+                            <th>Delivered</th>
+                            <th>Read</th>
+                            <th>Replied</th>
+                            <th>Booked</th>
+                            <th>Read Conversion</th>
+                        </tr>
+                    </thead>
+                    <tbody id="analyticsTableBody">
+                        <tr><td colspan="7" style="padding:32px; text-align:center; color:var(--text-muted);">Loading Analytics database...</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- FULLSCREEN VIEW: Campaigns (Broadcast) View -->
+    <div class="analytics-pane" id="broadcastView" style="display: none;">
+        <div class="broadcast-container">
+            <div class="page-header">
+                <h1 class="page-title">Broadcast Campaigns</h1>
+                <p class="page-subtitle">Schedule and send official WhatsApp templates to a list of leads</p>
+            </div>
+
+            <!-- Campaign settings -->
+            <div class="bc-card">
+                <h3>
+                    <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"></path></svg>
+                    Campaign settings
+                </h3>
+                <div class="form-grid">
+                    <div class="form-group">
+                        <label for="bc_templateName">Approved Template Name</label>
+                        <input type="text" id="bc_templateName" placeholder="e.g. day3_follow_up" value="cleanly_deep_cleaning_offer">
+                    </div>
+                    <div class="form-group">
+                        <label for="bc_languageCode">Language Code</label>
+                        <select id="bc_languageCode">
+                            <option value="en_US">English US (en_US)</option>
+                            <option value="en">English (en)</option>
+                            <option value="hi">Hindi (hi)</option>
+                            <option value="mr">Marathi (mr)</option>
+                        </select>
+                    </div>
+                    <div class="form-group full-width">
+                        <label for="bc_headerUrl">Header Media URL (optional video/image link)</label>
+                        <input type="url" id="bc_headerUrl" placeholder="e.g. https://domain.com/video.mp4">
+                    </div>
+                </div>
+            </div>
+
+            <!-- Recipient upload -->
+            <div class="bc-card">
+                <h3>
+                    <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"></path></svg>
+                    Recipient Database
+                </h3>
+                <div class="dropzone" id="bc_dropzone">
+                    <svg fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 16.5V9.75m0 0l3 3m-3-3l-3 3M6.75 19.5a4.5 4.5 0 01-1.41-8.775 5.25 5.25 0 0110.233-2.33 3 3 0 013.758 3.848A3.752 3.752 0 0118 19.5H6.75z"></path></svg>
+                    <p>Drag and drop your spreadsheet <span class="highlight">Excel (.xlsx, .xls)</span> or <span class="highlight">CSV (.csv)</span></p>
+                    <p style="font-size:12px; opacity:0.65; margin-top:-4px;">Columns should include "Phone" and "Name"</p>
+                    <input type="file" id="bc_fileInput" accept=".xlsx, .xls, .csv" style="display:none;">
+                </div>
+                <div id="bc_previewWrapper" style="display:none;">
+                    <div class="preview-container">
+                        <table>
+                            <thead><tr><th>Row</th><th>Name</th><th>Phone Number</th></tr></thead>
+                            <tbody id="bc_previewBody"></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <button class="btn-action" id="bc_sendBtn" disabled onclick="bcLaunch()">
+                <svg style="width:20px;height:20px;" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M6 12L3.269 3.126A59.768 59.768 0 0121.485 12 59.77 59.77 0 013.27 20.876L5.999 12zm0 0h7.5"></path></svg>
+                Launch Campaign Broadcast
+            </button>
+
+            <!-- Live status -->
+            <div class="bc-card" id="bc_statusCard" style="display:none;">
+                <h3>
+                    <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"></path></svg>
+                    Campaign Execution Stream
+                </h3>
+                <div class="analytics-grid">
+                    <div class="analytic-box"><div class="analytic-label">Recipients</div><div class="analytic-value" id="bc_statTotal" style="color:var(--text-main);">0</div></div>
+                    <div class="analytic-box"><div class="analytic-label">Processed</div><div class="analytic-value" id="bc_statSent" style="color:var(--indigo);">0</div></div>
+                    <div class="analytic-box"><div class="analytic-label">Delivered</div><div class="analytic-value" id="bc_statSuccess" style="color:var(--primary);">0</div></div>
+                    <div class="analytic-box"><div class="analytic-label">Failed</div><div class="analytic-value" id="bc_statFailed" style="color:var(--error);">0</div></div>
+                </div>
+                <div class="progress-bar-track"><div class="progress-bar-fill" id="bc_progressBar"></div></div>
+                <div class="console-log" id="bc_consoleLog"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- FULLSCREEN VIEW: People directory (flat_customers / customers / maids) -->
+    <div class="analytics-pane" id="peopleView" style="display: none;">
+        <div class="broadcast-container">
+            <div class="page-header">
+                <h1 class="page-title" id="peopleTitle">People</h1>
+                <p class="page-subtitle" id="peopleSubtitle"></p>
+            </div>
+            <div style="margin-bottom:16px; display:flex; gap:12px; align-items:center; flex-wrap:wrap;">
+                <input id="peopleSearch" placeholder="Search name, phone, area, status, work type… (e.g. interested cooking)" oninput="renderPeople()"
+                       style="flex:1; min-width:240px; max-width:420px; padding:11px 14px; border:1px solid var(--border-color); border-radius:10px; font-family:inherit; font-size:14px; outline:none;">
+                <div id="peopleBulkBar" style="display:none; align-items:center; gap:10px;">
+                    <span id="peopleSelCount" style="font-size:13.5px; font-weight:600; color:var(--primary);"></span>
+                    <button class="pmsg-btn" onclick="openBulkMsg()">📨 Send Template to Selected</button>
+                    <button class="pmsg-btn" style="border-color:var(--border-color); color:var(--text-muted); background:#fff;" onclick="clearPeopleSel()">Clear</button>
+                </div>
+            </div>
+            <div class="bc-card" style="padding:0; overflow:hidden;">
+                <div style="overflow-x:auto;">
+                    <table id="peopleTable">
+                        <thead>
+                            <tr>
+                                <th id="peopleSelHead" style="width:36px;"><input type="checkbox" id="peopleSelAll" onchange="toggleSelAll(this.checked)" style="width:16px;height:16px;cursor:pointer;"></th>
+                                <th>Name</th><th>Phone</th><th>Area</th>
+                                <th id="peopleTagHead">Type</th><th>Status</th><th></th>
+                            </tr>
+                        </thead>
+                        <tbody id="peopleBody"></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- FULLSCREEN VIEW: Notifications (due follow-up reminders) -->
+    <div class="analytics-pane" id="notifView" style="display: none;">
+        <div class="broadcast-container">
+            <div class="page-header">
+                <h1 class="page-title">Notifications</h1>
+                <p class="page-subtitle">Booking, payment &amp; callback alerts, plus due follow-up reminders</p>
+            </div>
+            <div id="notifList"></div>
+        </div>
+    </div>
+
+    <!-- Message-a-person modal -->
+    <div id="peopleMsgModal" style="display:none; position:fixed; inset:0; background:rgba(15,23,42,0.45); z-index:1000; align-items:center; justify-content:center;">
+        <div style="background:#fff; border-radius:16px; padding:24px; width:440px; max-width:92%; box-shadow:0 20px 50px rgba(0,0,0,0.25);">
+            <h3 style="font-family:'Outfit',sans-serif; font-size:16px; margin-bottom:4px;">Send Template Message</h3>
+            <p style="color:var(--text-muted); font-size:13px; margin-bottom:18px;">To <span id="pmTo" style="font-weight:600; color:var(--text-main);"></span></p>
+            <div style="display:flex; flex-direction:column; gap:12px;">
+                <div><label style="font-size:13px; color:var(--text-muted);">Template</label>
+                    <select id="pmTemplateSel" onchange="pmToggleCustom()" style="width:100%; margin-top:6px; padding:11px 14px; border:1px solid var(--border-color); border-radius:10px; font-family:inherit; font-size:14px; outline:none;">
+                        <option value="day3_follow_up">day3_follow_up (video)</option>
+                        <option value="day7_follow_up">day7_follow_up (video)</option>
+                        <option value="day15_follow_up">day15_follow_up (image)</option>
+                        <option value="cleanly_deep_cleaning_offer">cleanly_deep_cleaning_offer</option>
+                        <option value="__custom">Custom template name…</option>
+                    </select>
+                    <input id="pmTemplateCustom" placeholder="approved_template_name" style="display:none; width:100%; margin-top:8px; padding:11px 14px; border:1px solid var(--border-color); border-radius:10px; font-family:inherit; font-size:14px; outline:none;"></div>
+                <div><label style="font-size:13px; color:var(--text-muted);">Language code</label>
+                    <select id="pmLang" style="width:100%; margin-top:6px; padding:11px 14px; border:1px solid var(--border-color); border-radius:10px; font-family:inherit; font-size:14px; outline:none;">
+                        <option value="en_US">English US (en_US)</option>
+                        <option value="en">English (en)</option>
+                        <option value="hi">Hindi (hi)</option>
+                        <option value="mr">Marathi (mr)</option>
+                    </select></div>
+                <div><label style="font-size:13px; color:var(--text-muted);">Video / image header</label>
+                    <select id="pmHeaderSel" onchange="pmToggleCustom()" style="width:100%; margin-top:6px; padding:11px 14px; border:1px solid var(--border-color); border-radius:10px; font-family:inherit; font-size:14px; outline:none;">
+                        <option value="">None (text-only template)</option>
+                        <option value="https://ikwyrrzipzfbyzmkrfmu.supabase.co/storage/v1/object/public/media/Untitled%20design%20(1).mp4">Video 1 — intro (day3)</option>
+                        <option value="https://ikwyrrzipzfbyzmkrfmu.supabase.co/storage/v1/object/public/media/WhatsApp%20Video%202026-06-10%20at%204.08.29%20PM.mp4">Video 2 — follow-up (day7)</option>
+                        <option value="https://ikwyrrzipzfbyzmkrfmu.supabase.co/storage/v1/object/public/media/WhatsApp%20Image%202026-06-10%20at%205.13.53%20PM.jpeg">Image — offer (day15)</option>
+                        <option value="__custom">Custom URL…</option>
+                    </select>
+                    <input id="pmHeaderCustom" placeholder="https://…/video.mp4" style="display:none; width:100%; margin-top:8px; padding:11px 14px; border:1px solid var(--border-color); border-radius:10px; font-family:inherit; font-size:14px; outline:none;"></div>
+            </div>
+            <div style="display:flex; gap:10px; margin-top:22px; justify-content:flex-end;">
+                <button onclick="closePeopleMsg()" style="padding:10px 18px; border-radius:10px; border:1px solid var(--border-color); background:#fff; color:var(--text-muted); font-weight:600; cursor:pointer;">Cancel</button>
+                <button id="pmSendBtn" onclick="sendPeopleMsg()" style="padding:10px 18px; border-radius:10px; border:none; background:linear-gradient(135deg,var(--primary) 0%,#047857 100%); color:#fff; font-weight:600; cursor:pointer;">Send</button>
+            </div>
         </div>
     </div>
 </div>
@@ -302,66 +1670,17 @@
     const currentUser = localStorage.getItem('crm_user');
     const currentRole = localStorage.getItem('crm_role');
     
-    document.getElementById('loggedInUser').innerText = currentUser + (currentRole === 'admin' ? ' (Admin)' : '');
+    document.getElementById('loggedInUser').innerText = currentUser;
+    document.getElementById('sidebarAvatar').innerText = currentUser.substring(0, 1).toUpperCase();
 
     if (currentRole === 'admin') {
-        document.getElementById('analyticsNavBtn').style.display = 'block';
-        document.getElementById('followupsBtn').style.display = 'block';
+        document.getElementById('analyticsNavBtn').style.display = 'flex';
+        document.getElementById('navBroadcastBtn').style.display = 'flex';
     }
 
     function logout() {
         localStorage.clear();
         window.location.href = '/login';
-    }
-
-    async function runFollowUps() {
-        if (!confirm('Run follow-ups now?\n\nThis sends Day 3 / 7 / 15 templates to all leads who are due. Leads already messaged for that day will be skipped. Run this once per day.')) return;
-        const btn = document.getElementById('followupsBtn');
-        const originalText = btn.innerText;
-        btn.disabled = true;
-        btn.innerText = 'Running…';
-        try {
-            const res = await authFetch('/api/run-followups', { method: 'POST' });
-            const j = await res.json();
-            if (!res.ok || !j.ok) {
-                alert('❌ Failed: ' + (j.error || res.statusText));
-            } else {
-                const s = j.summary;
-                let msg = `✅ Follow-ups complete (${s.durationMs}ms)\n\n` +
-                          `Total leads checked: ${s.totalLeadsChecked}\n` +
-                          `Follow-ups sent:     ${s.followUpsSent}\n` +
-                          `Skipped:             ${s.followUpsSkipped}\n` +
-                          `Errors:              ${s.errors}`;
-
-                const sent    = (j.details || []).filter(d => d.action === 'sent');
-                const skipped = (j.details || []).filter(d => d.action === 'skipped');
-                const errs    = (j.details || []).filter(d => d.action === 'error');
-
-                if (sent.length) {
-                    msg += '\n\nSent:\n' + sent.map(d => `  • ${d.phone} → ${d.template} (Day ${d.stage})`).join('\n');
-                }
-                if (skipped.length) {
-                    // Group by reason so 100s of skips compress to a readable summary
-                    const buckets = {};
-                    skipped.forEach(d => {
-                        const r = d.reason || 'unknown';
-                        buckets[r] = (buckets[r] || 0) + 1;
-                    });
-                    msg += '\n\nSkip reasons:\n' + Object.entries(buckets)
-                        .sort((a, b) => b[1] - a[1])
-                        .map(([r, n]) => `  • ${n}× ${r}`)
-                        .join('\n');
-                }
-                if (errs.length) {
-                    msg += '\n\nErrors:\n' + errs.map(d => `  • ${d.phone}: ${(d.reason || '').slice(0, 100)}`).join('\n');
-                }
-                alert(msg);
-            }
-        } catch (e) {
-            alert('❌ Network error: ' + e.message);
-        }
-        btn.disabled = false;
-        btn.innerText = originalText;
     }
 
     let allContacts = [];
@@ -413,9 +1732,9 @@
         if (tagSet.has(currentTagVal)) filterTag.value = currentTagVal;
 
         if (currentRole === 'admin') {
-            document.getElementById('totalUsersCount').innerText = `${allContacts.length} Users`;
+            document.getElementById('totalUsersCount').innerText = `${allContacts.length} Leads Total`;
         } else {
-            document.getElementById('totalUsersCount').style.display = 'none';
+            document.getElementById('totalUsersCount').innerText = 'Standard User';
         }
         
         renderContacts();
@@ -434,22 +1753,518 @@
         });
     }
 
-    /* Views */
+    /* Views Toggling */
     function showChatView() {
         document.getElementById('analyticsView').style.display = 'none';
+        document.getElementById('broadcastView').style.display = 'none';
+        document.getElementById('peopleView').style.display = 'none';
+        document.getElementById('notifView').style.display = 'none';
+        document.getElementById('leadsPane').style.display = 'flex';
+        document.getElementById('navChatsBtn').classList.add('active');
+        document.getElementById('analyticsNavBtn').classList.remove('active');
+        document.getElementById('navBroadcastBtn').classList.remove('active');
+        document.getElementById('notifNavBtn').classList.remove('active');
+        document.querySelectorAll('.people-nav').forEach(b => b.classList.remove('active'));
+
         if (currentPhone) {
             document.getElementById('activeChat').style.display = 'flex';
-            document.getElementById('profilePanel').style.display = 'block';
+            document.getElementById('profilePanel').style.display = 'flex';
             document.getElementById('emptyState').style.display = 'none';
         } else {
             document.getElementById('emptyState').style.display = 'flex';
         }
     }
 
+    function showBroadcastView() {
+        if (currentRole !== 'admin') { alert('Admin privileges required.'); return; }
+        document.getElementById('activeChat').style.display = 'none';
+        document.getElementById('profilePanel').style.display = 'none';
+        document.getElementById('emptyState').style.display = 'none';
+        document.getElementById('leadsPane').style.display = 'none';
+        document.getElementById('analyticsView').style.display = 'none';
+        document.getElementById('peopleView').style.display = 'none';
+        document.getElementById('notifView').style.display = 'none';
+        document.getElementById('broadcastView').style.display = 'block';
+        document.getElementById('navChatsBtn').classList.remove('active');
+        document.getElementById('analyticsNavBtn').classList.remove('active');
+        document.getElementById('notifNavBtn').classList.remove('active');
+        document.querySelectorAll('.people-nav').forEach(b => b.classList.remove('active'));
+        document.getElementById('navBroadcastBtn').classList.add('active');
+    }
+
+    // ── Campaigns / broadcast logic ──
+    let bcRecipients = [];
+    let bcPoll = null;
+
+    (function bcInit() {
+        const dz = document.getElementById('bc_dropzone');
+        const fi = document.getElementById('bc_fileInput');
+        const tn = document.getElementById('bc_templateName');
+        if (!dz) return;
+        dz.addEventListener('click', () => fi.click());
+        ['dragenter', 'dragover'].forEach(ev => dz.addEventListener(ev, e => { e.preventDefault(); dz.classList.add('dragover'); }));
+        ['dragleave', 'drop'].forEach(ev => dz.addEventListener(ev, e => { e.preventDefault(); dz.classList.remove('dragover'); }));
+        dz.addEventListener('drop', e => { if (e.dataTransfer.files.length) bcHandleFile(e.dataTransfer.files[0]); });
+        fi.addEventListener('change', () => { if (fi.files.length) bcHandleFile(fi.files[0]); });
+        tn.addEventListener('input', bcUpdateSendState);
+    })();
+
+    function bcUpdateSendState() {
+        const tn = document.getElementById('bc_templateName').value.trim();
+        document.getElementById('bc_sendBtn').disabled = !(bcRecipients.length > 0 && tn.length > 0);
+    }
+
+    function bcHandleFile(file) {
+        const reader = new FileReader();
+        reader.onload = function(e) {
+            try {
+                const data = new Uint8Array(e.target.result);
+                const wb = XLSX.read(data, { type: 'array' });
+                const ws = wb.Sheets[wb.SheetNames[0]];
+                const rows = XLSX.utils.sheet_to_json(ws);
+                if (!rows || !rows.length) { alert('No rows found in the sheet!'); return; }
+                const keys = Object.keys(rows[0]);
+                let nameKey = null, phoneKey = null;
+                keys.forEach(k => {
+                    const ck = k.toLowerCase().replace(/[\s_\-]/g, '');
+                    if (ck.includes('name')) nameKey = nameKey || k;
+                    if (ck.includes('phone') || ck.includes('number') || ck.includes('whatsapp') || ck.includes('mobile')) phoneKey = phoneKey || k;
+                });
+                if (!nameKey) nameKey = keys[0];
+                if (!phoneKey) phoneKey = keys[1] || keys[0];
+                bcRecipients = [];
+                const body = document.getElementById('bc_previewBody');
+                body.innerHTML = '';
+                rows.forEach((row, idx) => {
+                    const rawPhone = String(row[phoneKey] || '').replace(/\D/g, '');
+                    if (rawPhone.length >= 10) {
+                        const rec = { name: String(row[nameKey] || 'Customer').trim(), phone: rawPhone };
+                        bcRecipients.push(rec);
+                        const tr = document.createElement('tr');
+                        tr.innerHTML = `<td>${idx + 1}</td><td><b>${rec.name}</b></td><td>${rec.phone}</td>`;
+                        body.appendChild(tr);
+                    }
+                });
+                if (!bcRecipients.length) {
+                    alert('Could not extract any valid phone numbers!');
+                    document.getElementById('bc_previewWrapper').style.display = 'none';
+                } else {
+                    document.getElementById('bc_previewWrapper').style.display = 'block';
+                    document.getElementById('bc_dropzone').innerHTML = `<svg style="color:var(--primary)" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg><p style="color:var(--primary)"><b>File parsed successfully!</b></p><p style="font-size:12px;opacity:0.8;">${bcRecipients.length} valid recipients loaded</p>`;
+                }
+                bcUpdateSendState();
+            } catch (err) { alert('Error reading file: ' + err.message); }
+        };
+        reader.readAsArrayBuffer(file);
+    }
+
+    async function bcLaunch() {
+        const templateName = document.getElementById('bc_templateName').value.trim();
+        const languageCode = document.getElementById('bc_languageCode').value;
+        const headerUrl = document.getElementById('bc_headerUrl').value.trim();
+        if (!templateName) { alert('Please enter the template name!'); return; }
+        if (!bcRecipients.length) { alert('Please load a recipient sheet first!'); return; }
+        if (!confirm(`Execute broadcast for ${bcRecipients.length} numbers using template "${templateName}"?`)) return;
+
+        document.getElementById('bc_sendBtn').disabled = true;
+        document.getElementById('bc_templateName').disabled = true;
+        document.getElementById('bc_languageCode').disabled = true;
+        document.getElementById('bc_statusCard').style.display = 'block';
+        document.getElementById('bc_consoleLog').innerHTML = '<div class="log-line info">[System] Starting campaign background job...</div>';
+        try {
+            const res = await authFetch('/api/broadcast', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ templateName, languageCode, headerUrl, recipients: bcRecipients })
+            });
+            const data = await res.json();
+            if (res.ok && data.success) { bcLog('Campaign running in background.'); bcStartPolling(); }
+            else { bcLog('Error starting campaign: ' + (data.error || 'Unknown error'), true); bcReset(); }
+        } catch (err) { bcLog('Network exception: ' + err.message, true); bcReset(); }
+    }
+
+    function bcStartPolling() {
+        if (bcPoll) clearInterval(bcPoll);
+        bcPoll = setInterval(async () => {
+            try {
+                const res = await authFetch('/api/broadcast/status');
+                const data = await res.json();
+                document.getElementById('bc_statTotal').textContent = data.total;
+                document.getElementById('bc_statSent').textContent = data.sent;
+                document.getElementById('bc_statSuccess').textContent = data.success;
+                document.getElementById('bc_statFailed').textContent = data.failed;
+                const pct = data.total > 0 ? Math.round((data.sent / data.total) * 100) : 0;
+                document.getElementById('bc_progressBar').style.width = pct + '%';
+                const cl = document.getElementById('bc_consoleLog');
+                cl.innerHTML = '';
+                (data.log || []).forEach(line => {
+                    const div = document.createElement('div');
+                    div.className = 'log-line' + (/fail|error|rejected/i.test(line) ? ' error' : '');
+                    div.textContent = line;
+                    cl.appendChild(div);
+                });
+                cl.scrollTop = cl.scrollHeight;
+                if (!data.running) { clearInterval(bcPoll); bcLog('[System] Campaign execution completed.'); bcReset(); }
+            } catch (e) { /* keep polling */ }
+        }, 1000);
+    }
+
+    function bcLog(text, isError = false) {
+        const cl = document.getElementById('bc_consoleLog');
+        const div = document.createElement('div');
+        div.className = 'log-line' + (isError ? ' error' : ' info');
+        div.textContent = `[${new Date().toLocaleTimeString()}] ${text}`;
+        cl.appendChild(div);
+        cl.scrollTop = cl.scrollHeight;
+    }
+
+    function bcReset() {
+        document.getElementById('bc_templateName').disabled = false;
+        document.getElementById('bc_languageCode').disabled = false;
+        bcUpdateSendState();
+    }
+
+    // ── People directory (flat_customers / customers / maids) ──
+    const PEOPLE_META = {
+        flat_customers: { title: 'Flat Customers', sub: 'Home-cleaning customers · flat_customers', tagHead: 'Home Type' },
+        customers:      { title: 'Maid Customers', sub: 'Customers who need a maid · customers',    tagHead: 'Service Needed' },
+        maids:          { title: 'Maids',          sub: 'Workers · maids',                          tagHead: 'Work Type' },
+    };
+    let peopleData = [];
+    let peopleGroup = null;
+
+    function esc(s) {
+        return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c]));
+    }
+
+    async function showPeopleView(group) {
+        if (group !== peopleGroup) peopleSel.clear();
+        peopleGroup = group;
+        const meta = PEOPLE_META[group];
+        if (!meta) return;
+        document.getElementById('activeChat').style.display = 'none';
+        document.getElementById('profilePanel').style.display = 'none';
+        document.getElementById('emptyState').style.display = 'none';
+        document.getElementById('leadsPane').style.display = 'none';
+        document.getElementById('analyticsView').style.display = 'none';
+        document.getElementById('broadcastView').style.display = 'none';
+        document.getElementById('notifView').style.display = 'none';
+        document.getElementById('peopleView').style.display = 'block';
+        document.getElementById('navChatsBtn').classList.remove('active');
+        document.getElementById('analyticsNavBtn').classList.remove('active');
+        document.getElementById('navBroadcastBtn').classList.remove('active');
+        document.getElementById('notifNavBtn').classList.remove('active');
+        document.querySelectorAll('.people-nav').forEach(b => b.classList.remove('active'));
+        document.getElementById('peopleNav_' + group).classList.add('active');
+
+        document.getElementById('peopleTitle').innerText = meta.title;
+        document.getElementById('peopleSubtitle').innerText = meta.sub;
+        document.getElementById('peopleTagHead').innerText = meta.tagHead;
+        document.getElementById('peopleSearch').value = '';
+        document.getElementById('peopleBody').innerHTML = '<tr><td colspan="6" style="padding:28px; text-align:center; color:var(--text-muted);">Loading…</td></tr>';
+
+        try {
+            const res = await authFetch('/api/people?group=' + encodeURIComponent(group));
+            const data = await res.json();
+            peopleData = (data && data.people) || [];
+        } catch (e) {
+            peopleData = [];
+        }
+        renderPeople();
+    }
+
+    // Checkbox selection — enabled for customer groups; maids stay one-by-one.
+    let peopleSel = new Set();
+    const selectableGroup = () => peopleGroup === 'flat_customers' || peopleGroup === 'customers';
+
+    // Search across every visible column. Space-separated terms must ALL match
+    // ("interested cooking" = Interested customers who need cooking).
+    // Status matches by PREFIX, not containment — so "interested" does NOT
+    // match "Not Interested", while typing "not interested" still finds it.
+    function filteredPeople() {
+        const q = (document.getElementById('peopleSearch').value || '').toLowerCase().trim();
+        if (!q) return peopleData;
+        const terms = q.split(/\s+/);
+        return peopleData.filter(p => {
+            const status = String(p.status || '').toLowerCase();
+            if (status.startsWith(q)) return true; // whole-phrase status ("not interested", "no answer")
+            const hay = `${p.name} ${p.phone} ${p.area} ${p.tag}`.toLowerCase();
+            return terms.every(t => hay.includes(t) || status.startsWith(t));
+        });
+    }
+
+    function renderPeople() {
+        const rows = filteredPeople();
+        const body = document.getElementById('peopleBody');
+        const selectable = selectableGroup();
+        document.getElementById('peopleSelHead').style.display = selectable ? '' : 'none';
+        if (!rows.length) {
+            body.innerHTML = `<tr><td colspan="${selectable ? 7 : 6}" style="padding:28px; text-align:center; color:var(--text-muted);">No records found.</td></tr>`;
+            updateBulkBar();
+            return;
+        }
+        body.innerHTML = rows.map(p => `<tr>
+            ${selectable ? `<td><input type="checkbox" ${peopleSel.has(p.phone) ? 'checked' : ''} onchange="togglePersonSel('${esc(p.phone)}', this.checked)" style="width:16px;height:16px;cursor:pointer;"></td>` : ''}
+            <td><b>${esc(p.name)}</b></td>
+            <td>${esc(p.phone)}</td>
+            <td>${esc(p.area)}</td>
+            <td>${esc(p.tag)}</td>
+            <td>${esc(p.status)}</td>
+            <td style="text-align:right; white-space:nowrap;">
+                <button class="pmsg-btn" onclick="openPeopleChat('${esc(p.phone)}')">💬 Chat</button>
+                <button class="pmsg-btn" style="border-color:var(--indigo); color:var(--indigo); background:var(--indigo-glow);" onclick="openPeopleMsg('${esc(p.phone)}')">Template</button>
+            </td>
+        </tr>`).join('');
+        // Header checkbox mirrors "all visible selected"
+        const allSel = rows.length > 0 && rows.every(p => peopleSel.has(p.phone));
+        document.getElementById('peopleSelAll').checked = allSel;
+        updateBulkBar();
+    }
+
+    function togglePersonSel(phone, checked) {
+        if (checked) peopleSel.add(phone); else peopleSel.delete(phone);
+        updateBulkBar();
+    }
+
+    function toggleSelAll(checked) {
+        filteredPeople().forEach(p => { if (checked) peopleSel.add(p.phone); else peopleSel.delete(p.phone); });
+        renderPeople();
+    }
+
+    function clearPeopleSel() {
+        peopleSel.clear();
+        renderPeople();
+    }
+
+    function updateBulkBar() {
+        const bar = document.getElementById('peopleBulkBar');
+        if (selectableGroup() && peopleSel.size > 0) {
+            document.getElementById('peopleSelCount').innerText = `${peopleSel.size} selected`;
+            bar.style.display = 'flex';
+        } else {
+            bar.style.display = 'none';
+        }
+    }
+
+    // Open a normal WhatsApp-style conversation with a person. Creates the
+    // chat contact (tagged with the group's service category) then jumps to
+    // the Conversations view with that thread open.
+    async function openPeopleChat(phone) {
+        const person = peopleData.find(p => p.phone === phone);
+        if (!person) return;
+        try {
+            const res = await authFetch('/api/people/start-chat', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ group: peopleGroup, phone: person.phone, name: person.name })
+            });
+            const j = await res.json();
+            if (!res.ok || !j.ok) { alert('❌ Could not open chat: ' + (j.error || res.statusText)); return; }
+            await loadContacts();
+            const contact = allContacts.find(c => c.phone === j.contact.phone) || j.contact;
+            showChatView();
+            openChat(contact, (contact.name || 'C').substring(0, 1).toUpperCase());
+        } catch (e) {
+            alert('❌ Network error: ' + e.message);
+        }
+    }
+
+    // ── Notifications (admin alerts + due follow-up reminders) ──
+    let notifData = [];
+    let alertData = [];
+    let unreadAlerts = 0;
+
+    async function loadNotifications() {
+        try {
+            const res = await authFetch('/api/notifications');
+            const j = await res.json();
+            notifData = (j && j.notifications) || [];
+            alertData = (j && j.alerts) || [];
+            unreadAlerts = (j && j.unreadAlerts) || 0;
+        } catch (e) { notifData = []; alertData = []; unreadAlerts = 0; }
+        const badge = document.getElementById('notifBadge');
+        const count = notifData.length + unreadAlerts;
+        if (count > 0) {
+            badge.innerText = count > 99 ? '99+' : count;
+            badge.style.display = 'inline-flex';
+        } else {
+            badge.style.display = 'none';
+        }
+        if (document.getElementById('notifView').style.display === 'block') renderNotifications();
+    }
+
+    function renderNotifications() {
+        const list = document.getElementById('notifList');
+        let html = '';
+
+        // 1) Booking / payment / callback alerts (stored, newest first)
+        html += '<h3 style="font-family:\'Outfit\',sans-serif; font-size:14px; text-transform:uppercase; letter-spacing:0.5px; color:var(--text-muted); margin:4px 0 12px;">🔔 Alerts</h3>';
+        if (!alertData.length) {
+            html += '<div class="notif-card" style="justify-content:center; color:var(--text-muted); font-size:13.5px;">No alerts yet — bookings, payment receipts and callback requests will appear here.</div>';
+        } else {
+            html += alertData.map(a => `<div class="notif-card${a.read ? '' : ' overdue'}">
+                <div class="notif-info">
+                    <div class="notif-name">${a.read ? '' : '🔴 '}${esc(a.title || 'Alert')}</div>
+                    <div class="notif-meta" style="white-space:pre-wrap;">${esc((a.body || '').slice(0, 400))}</div>
+                    <div class="notif-meta">${new Date(a.created_at).toLocaleString()}</div>
+                </div>
+                ${a.phone ? `<button class="pmsg-btn" onclick="openNotifChat('${esc(a.phone)}')">💬 Open Chat</button>` : ''}
+            </div>`).join('');
+        }
+
+        // 2) Due follow-up reminders (live)
+        html += '<h3 style="font-family:\'Outfit\',sans-serif; font-size:14px; text-transform:uppercase; letter-spacing:0.5px; color:var(--text-muted); margin:24px 0 12px;">⏰ Due Follow-ups</h3>';
+        if (!notifData.length) {
+            html += '<div class="notif-card" style="justify-content:center; color:var(--text-muted); font-size:13.5px;">🎉 No follow-ups due. All caught up!</div>';
+        } else {
+            const sorted = [...notifData].sort((a, b) => new Date(a.follow_up_time) - new Date(b.follow_up_time));
+            html += sorted.map(n => {
+                const due = new Date(n.follow_up_time);
+                const hrsOver = Math.max(0, (Date.now() - due) / 36e5);
+                const overdueTxt = hrsOver >= 24 ? `${Math.floor(hrsOver/24)}d ${Math.floor(hrsOver%24)}h overdue`
+                                  : `${Math.floor(hrsOver)}h ${Math.floor((hrsOver%1)*60)}m overdue`;
+                return `<div class="notif-card overdue">
+                    <div class="avatar" style="width:42px;height:42px;border-radius:50%;display:flex;align-items:center;justify-content:center;color:#fff;font-weight:600;background:hsl(${(n.phone||'0').slice(-3) * 37 % 360},55%,45%)">${esc((n.name||'C').substring(0,1).toUpperCase())}</div>
+                    <div class="notif-info">
+                        <div class="notif-name">${esc(n.name || n.phone)}</div>
+                        <div class="notif-meta">+${esc(n.phone)} · Assigned: ${esc(n.assigned_agent || 'Unassigned')} · Due ${due.toLocaleString()}</div>
+                        <div class="notif-due">⏰ ${overdueTxt}</div>
+                    </div>
+                    <button class="pmsg-btn" onclick="openNotifChat('${esc(n.phone)}')">💬 Open Chat</button>
+                </div>`;
+            }).join('');
+        }
+        list.innerHTML = html;
+    }
+
+    function showNotifView() {
+        document.getElementById('activeChat').style.display = 'none';
+        document.getElementById('profilePanel').style.display = 'none';
+        document.getElementById('emptyState').style.display = 'none';
+        document.getElementById('leadsPane').style.display = 'none';
+        document.getElementById('analyticsView').style.display = 'none';
+        document.getElementById('broadcastView').style.display = 'none';
+        document.getElementById('peopleView').style.display = 'none';
+        document.getElementById('notifView').style.display = 'block';
+        document.getElementById('navChatsBtn').classList.remove('active');
+        document.getElementById('analyticsNavBtn').classList.remove('active');
+        document.getElementById('navBroadcastBtn').classList.remove('active');
+        document.querySelectorAll('.people-nav').forEach(b => b.classList.remove('active'));
+        document.getElementById('notifNavBtn').classList.add('active');
+        renderNotifications();
+        loadNotifications().then(() => {
+            // Viewing the tab clears the unread-alert count (badge keeps dues).
+            if (unreadAlerts > 0) {
+                authFetch('/api/notifications/read', { method: 'POST' }).then(() => { unreadAlerts = 0; }).catch(() => {});
+            }
+        });
+    }
+
+    async function openNotifChat(phone) {
+        await loadContacts();
+        const contact = allContacts.find(c => c.phone === phone);
+        if (!contact) { alert('Contact not found in the chat list.'); return; }
+        showChatView();
+        openChat(contact, (contact.name || 'C').substring(0, 1).toUpperCase());
+    }
+
+    // Badge refresh: on load + every 60s
+    loadNotifications();
+    setInterval(loadNotifications, 60000);
+
+    function openPeopleMsg(phone) {
+        const person = peopleData.find(p => p.phone === phone);
+        document.getElementById('pmTo').innerText = (person && person.name ? person.name + ' · ' : '') + phone;
+        const modal = document.getElementById('peopleMsgModal');
+        modal.dataset.phone = phone;
+        modal.dataset.bulk = '';
+        modal.style.display = 'flex';
+    }
+
+    function openBulkMsg() {
+        if (!peopleSel.size) { alert('Select at least one person first.'); return; }
+        document.getElementById('pmTo').innerText = `${peopleSel.size} selected ${PEOPLE_META[peopleGroup].title.toLowerCase()}`;
+        const modal = document.getElementById('peopleMsgModal');
+        modal.dataset.phone = '';
+        modal.dataset.bulk = '1';
+        modal.style.display = 'flex';
+    }
+
+    function closePeopleMsg() {
+        document.getElementById('peopleMsgModal').style.display = 'none';
+    }
+
+    function pmToggleCustom() {
+        document.getElementById('pmTemplateCustom').style.display =
+            document.getElementById('pmTemplateSel').value === '__custom' ? 'block' : 'none';
+        document.getElementById('pmHeaderCustom').style.display =
+            document.getElementById('pmHeaderSel').value === '__custom' ? 'block' : 'none';
+    }
+
+    async function sendOneTemplate(phone, templateName, languageCode, headerUrl) {
+        try {
+            const res = await authFetch('/api/people/message', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ phone, templateName, languageCode, headerUrl })
+            });
+            const j = await res.json();
+            return (res.ok && j.ok) ? { ok: true } : { ok: false, error: j.error || res.statusText };
+        } catch (e) { return { ok: false, error: e.message }; }
+    }
+
+    async function sendPeopleMsg() {
+        const modal = document.getElementById('peopleMsgModal');
+        const tSel = document.getElementById('pmTemplateSel').value;
+        const templateName = (tSel === '__custom' ? document.getElementById('pmTemplateCustom').value : tSel).trim();
+        const languageCode = document.getElementById('pmLang').value;
+        const hSel = document.getElementById('pmHeaderSel').value;
+        const headerUrl = (hSel === '__custom' ? document.getElementById('pmHeaderCustom').value : hSel).trim();
+        if (!templateName) { alert('Select or enter an approved template name.'); return; }
+        const btn = document.getElementById('pmSendBtn');
+        btn.disabled = true;
+
+        if (modal.dataset.bulk === '1') {
+            // Bulk: send to every checked person, one by one, with progress.
+            const targets = [...peopleSel];
+            if (!confirm(`Send "${templateName}" to ${targets.length} selected people?`)) {
+                btn.disabled = false; return;
+            }
+            let sent = 0; const failed = [];
+            for (let i = 0; i < targets.length; i++) {
+                btn.innerText = `Sending ${i + 1}/${targets.length}…`;
+                const r = await sendOneTemplate(targets[i], templateName, languageCode, headerUrl);
+                if (r.ok) sent++; else failed.push(`${targets[i]}: ${(r.error || '').slice(0, 80)}`);
+            }
+            let msg = `✅ Bulk send complete\n\nSent: ${sent}\nFailed: ${failed.length}`;
+            if (failed.length) msg += '\n\nFailures:\n' + failed.slice(0, 15).map(f => '  • ' + f).join('\n');
+            alert(msg);
+            if (sent > 0) { peopleSel.clear(); renderPeople(); }
+            closePeopleMsg();
+        } else {
+            // Single send (unchanged behavior).
+            const phone = modal.dataset.phone;
+            btn.innerText = 'Sending…';
+            const r = await sendOneTemplate(phone, templateName, languageCode, headerUrl);
+            if (r.ok) { alert('✅ Sent to ' + phone); closePeopleMsg(); }
+            else { alert('❌ Failed: ' + r.error); }
+        }
+        btn.disabled = false; btn.innerText = 'Send';
+    }
+
     async function showAnalyticsView() {
         document.getElementById('activeChat').style.display = 'none';
         document.getElementById('profilePanel').style.display = 'none';
         document.getElementById('emptyState').style.display = 'none';
+        document.getElementById('leadsPane').style.display = 'none';
+        document.getElementById('broadcastView').style.display = 'none';
+        document.getElementById('peopleView').style.display = 'none';
+        document.getElementById('notifView').style.display = 'none';
+        document.getElementById('navChatsBtn').classList.remove('active');
+        document.getElementById('navBroadcastBtn').classList.remove('active');
+        document.getElementById('notifNavBtn').classList.remove('active');
+        document.querySelectorAll('.people-nav').forEach(b => b.classList.remove('active'));
+        document.getElementById('analyticsNavBtn').classList.add('active');
         document.getElementById('analyticsView').style.display = 'block';
 
         const res = await authFetch('/api/analytics');
@@ -459,32 +2274,47 @@
         tbody.innerHTML = '';
         
         if (!data.metrics || data.metrics.length === 0) {
-            tbody.innerHTML = '<tr><td colspan="7" style="padding: 40px; text-align: center; color: #888; font-size: 15px;">No broadcast data yet. Launch a campaign to see stats here!</td></tr>';
+            tbody.innerHTML = '<tr><td colspan="7" style="padding: 40px; text-align: center; color: var(--text-muted); font-size: 15px;">No broadcast campaigns found.</td></tr>';
             return;
         }
+
+        // Calculate KPI values
+        let sentSum = 0, readSum = 0, repliedSum = 0, bookedSum = 0;
+        data.metrics.forEach(m => {
+            sentSum += (m.sent || 0);
+            readSum += (m.read || 0);
+            repliedSum += (m.replied || 0);
+            bookedSum += (m.booked || 0);
+        });
+
+        document.getElementById('kpiCampaigns').innerText = data.metrics.length;
+        document.getElementById('kpiSent').innerText = sentSum;
+        document.getElementById('kpiRead').innerText = readSum;
+        document.getElementById('kpiReplied').innerText = repliedSum;
+        document.getElementById('kpiBooked').innerText = bookedSum;
 
         data.metrics.forEach(m => {
             const rateVal = m.delivered > 0 ? Math.round((m.read / m.delivered) * 100) : 0;
             const readRate = m.delivered > 0 ? rateVal + '%' : '-';
             
-            let rateColor = '#8696a0';
-            if (rateVal >= 50) rateColor = '#25d366'; // Green
-            else if (rateVal >= 20) rateColor = '#fbc02d'; // Yellow
-            else if (m.delivered > 0) rateColor = '#f15c6d'; // Red
+            let rateColor = 'var(--text-muted)';
+            if (rateVal >= 50) rateColor = '#34d399'; // Green
+            else if (rateVal >= 20) rateColor = '#fbbf24'; // Yellow
+            else if (m.delivered > 0) rateColor = '#f43f5e'; // Red
             
             tbody.innerHTML += `
-                <tr style="border-bottom: 1px solid #f0f2f5; transition: background 0.2s;" onmouseover="this.style.background='#f8f9fa'" onmouseout="this.style.background='transparent'">
-                    <td style="padding: 16px 24px; font-weight: 600; color: #111b21;">${m.campaign_name}</td>
-                    <td style="padding: 16px 24px; color: #54656f; font-weight: 500;">${m.sent || 0}</td>
-                    <td style="padding: 16px 24px; color: #54656f; font-weight: 500;">${m.delivered || 0}</td>
+                <tr style="transition: background 0.2s;" onmouseover="this.style.background='rgba(255,255,255,0.02)'" onmouseout="this.style.background='transparent'">
+                    <td style="padding: 16px 24px; font-weight: 600; color: var(--text-main);">${m.campaign_name}</td>
+                    <td style="padding: 16px 24px; color: var(--text-muted);">${m.sent || 0}</td>
+                    <td style="padding: 16px 24px; color: var(--text-muted);">${m.delivered || 0}</td>
                     <td style="padding: 16px 24px;">
-                        <span style="background: #e8f9f0; color: #00a884; padding: 4px 10px; border-radius: 12px; font-weight: 600; font-size: 13px;">${m.read || 0}</span>
+                        <span class="analytics-badge read">${m.read || 0}</span>
                     </td>
                     <td style="padding: 16px 24px;">
-                        <span style="background: #e1f5fe; color: #0288d1; padding: 4px 10px; border-radius: 12px; font-weight: 600; font-size: 13px;">${m.replied || 0}</span>
+                        <span class="analytics-badge replied">${m.replied || 0}</span>
                     </td>
                     <td style="padding: 16px 24px;">
-                        <span style="background: #fce4e4; color: #dc3545; padding: 4px 10px; border-radius: 12px; font-weight: 600; font-size: 13px;">${m.booked || 0}</span>
+                        <span class="analytics-badge booked">${m.booked || 0}</span>
                     </td>
                     <td style="padding: 16px 24px; font-weight: 700; color: ${rateColor};">${readRate}</td>
                 </tr>
@@ -501,7 +2331,6 @@
             analyticsChartInstance.destroy();
         }
         
-        // Take top 10 most recent/relevant campaigns for chart readability
         const chartData = metrics.slice(0, 10);
         
         analyticsChartInstance = new Chart(ctx, {
@@ -512,54 +2341,47 @@
                     {
                         label: 'Sent',
                         data: chartData.map(m => m.sent || 0),
-                        backgroundColor: '#8696a0',
-                        borderRadius: 4
+                        backgroundColor: '#475569',
+                        borderRadius: 6
                     },
                     {
                         label: 'Read',
                         data: chartData.map(m => m.read || 0),
-                        backgroundColor: '#25d366',
-                        borderRadius: 4
+                        backgroundColor: '#10b981',
+                        borderRadius: 6
                     },
                     {
                         label: 'Replied',
                         data: chartData.map(m => m.replied || 0),
-                        backgroundColor: '#0288d1',
-                        borderRadius: 4
+                        backgroundColor: '#6366f1',
+                        borderRadius: 6
                     },
                     {
                         label: 'Booked',
                         data: chartData.map(m => m.booked || 0),
-                        backgroundColor: '#dc3545',
-                        borderRadius: 4
+                        backgroundColor: '#f43f5e',
+                        borderRadius: 6
                     }
                 ]
             },
             options: {
                 responsive: true,
                 maintainAspectRatio: false,
-                interaction: {
-                    mode: 'index',
-                    intersect: false,
-                },
                 plugins: {
                     legend: {
                         position: 'top',
-                    },
-                    title: {
-                        display: true,
-                        text: 'Campaign Performance Overview',
-                        font: { size: 16 }
+                        labels: { color: '#64748b', font: { family: 'Inter' } }
                     }
                 },
                 scales: {
                     x: {
-                        stacked: false,
-                        grid: { display: false }
+                        grid: { display: false },
+                        ticks: { color: '#64748b' }
                     },
                     y: {
-                        stacked: false,
-                        beginAtZero: true
+                        beginAtZero: true,
+                        grid: { color: '#f1f5f9' },
+                        ticks: { color: '#64748b' }
                     }
                 }
             }
@@ -574,6 +2396,14 @@
         return 'dot-none';
     }
 
+    function getStatusClass(status) {
+        if (status === 'New Lead') return 'new';
+        if (status === 'Interested' || status === 'Quote Sent' || status === 'Follow-up Required') return 'interested';
+        if (status === 'Booked' || status === 'Service Completed') return 'booked';
+        if (status === 'Not Interested') return 'closed';
+        return '';
+    }
+
     function renderContacts() {
         const list = document.getElementById('contactList');
         list.innerHTML = '';
@@ -585,6 +2415,8 @@
         const filterAgentValue = document.getElementById('filterAgent').value;
         const searchVal = document.getElementById('searchInput').value.toLowerCase();
         
+        let filteredCount = 0;
+
         allContacts.forEach(c => {
             const name = (c.name || '').toLowerCase();
             const phone = (c.phone || '').toLowerCase();
@@ -614,6 +2446,8 @@
             
             if (showUnreadOnly && !isUnread) return;
 
+            filteredCount++;
+
             let tempBadge = '';
             if (temperature === 'Hot Lead') tempBadge = '🔥 ';
             else if (temperature === 'Warm Lead') tempBadge = '☀️ ';
@@ -623,35 +2457,39 @@
             el.className = 'contact-item' + (c.phone === currentPhone ? ' active' : '');
             
             if (isOverdue) {
-                el.style.borderLeft = "4px solid #ef4444";
-                el.style.background = c.phone === currentPhone ? "#f0f2f5" : "#fef2f2";
+                el.style.borderLeft = "4px solid #f43f5e";
+                el.style.background = c.phone === currentPhone ? "rgba(244, 63, 94, 0.08)" : "rgba(244, 63, 94, 0.04)";
             }
             
             const initials = (c.name || 'C').substring(0, 1).toUpperCase();
             const time = new Date(c.last_message_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
             
             el.innerHTML = `
-                <div class="avatar" style="background: hsl(${c.phone.slice(-3) % 360}, 50%, 60%)">${initials}</div>
+                <div class="avatar" style="background: hsl(${c.phone.slice(-3) * 37 % 360}, 55%, 45%)">${initials}</div>
                 <div class="contact-info">
                     <div class="contact-name-row">
-                        <span class="contact-name" style="${isUnread ? 'font-weight:bold; color:#111b21;' : ''}">
+                        <span class="contact-name" style="${isUnread ? 'font-weight:bold; color:var(--text-main);' : ''}">
                             <span class="status-dot ${getStatusDot(status)}"></span>
                             ${tempBadge}${c.name || c.phone}
                         </span>
-                        <div style="display:flex; flex-direction:column; align-items:flex-end;">
-                            <span class="contact-time" style="${isUnread ? 'color:#25d366;font-weight:bold;' : ''}">${time}</span>
-                            ${isUnread ? '<div style="width:10px;height:10px;background:#25d366;border-radius:50%;margin-top:4px;"></div>' : ''}
+                        <div style="display:flex; flex-direction:column; align-items:flex-end; gap: 4px;">
+                            <span class="contact-time" style="${isUnread ? 'color:var(--primary);font-weight:bold;' : ''}">${time}</span>
+                            ${isUnread ? '<div style="width:8px;height:8px;background:var(--primary);border-radius:50%;"></div>' : ''}
                         </div>
                     </div>
                     <div class="contact-sub-row">
                         <span>${agent}</span>
-                        <span style="${isOverdue ? 'color:#ef4444;font-weight:bold;' : ''}">${isOverdue ? 'Overdue!' : (status || 'No Status')}</span>
+                        <span class="status-badge ${getStatusClass(status)}" style="${isOverdue ? 'color:#f43f5e; font-weight:700;' : ''}">
+                            ${isOverdue ? 'OVERDUE' : (status || 'No Status')}
+                        </span>
                     </div>
                 </div>
             `;
             el.onclick = () => openChat(c, initials);
             list.appendChild(el);
         });
+
+        document.getElementById('leadsCount').innerText = filteredCount;
     }
 
     async function openChat(contact, initials) {
@@ -673,19 +2511,20 @@
         
         // Populate Chat Header
         document.getElementById('headerName').innerText = contact.name || contact.phone;
-        document.getElementById('headerPhone').innerText = contact.phone;
+        document.getElementById('headerPhone').innerText = `+${contact.phone}`;
         document.getElementById('headerAvatar').innerText = initials;
+        document.getElementById('headerAvatar').style.background = `hsl(${contact.phone.slice(-3) * 37 % 360}, 55%, 45%)`;
         
         // Populate Profile Panel
         document.getElementById('panelName').innerText = contact.name || contact.phone;
-        document.getElementById('panelPhone').innerText = contact.phone;
+        document.getElementById('panelPhone').innerText = `+${contact.phone}`;
         document.getElementById('panelAvatar').innerText = initials;
+        document.getElementById('panelAvatar').style.background = `hsl(${contact.phone.slice(-3) * 37 % 360}, 55%, 45%)`;
         
         document.getElementById('crmStatus').value = contact.lead_status || '';
         document.getElementById('crmAgent').value = contact.assigned_agent || 'Unassigned';
         
         if (contact.follow_up_time) {
-            // format for datetime-local
             const d = new Date(contact.follow_up_time);
             d.setMinutes(d.getMinutes() - d.getTimezoneOffset());
             document.getElementById('crmFollowUp').value = d.toISOString().slice(0,16);
@@ -719,7 +2558,7 @@
         if (dripDisable) {
             payload.abandonment_drip_stage = 99;
         } else if (c && c.abandonment_drip_stage === 99) {
-            payload.abandonment_drip_stage = 0; // Resume timer if they uncheck it
+            payload.abandonment_drip_stage = 0; 
         }
 
         await authFetch('/api/chat/crm', {
@@ -728,7 +2567,6 @@
             body: JSON.stringify(payload)
         });
         
-        // update local state
         if (c) {
             c.lead_status = status;
             c.assigned_agent = agent;
@@ -746,9 +2584,10 @@
     let showUnreadOnly = false;
     function toggleUnreadFilter() {
         showUnreadOnly = !showUnreadOnly;
-        document.getElementById('filterUnreadBtn').style.background = showUnreadOnly ? '#dcf8c6' : 'white';
-        document.getElementById('filterUnreadBtn').style.fontWeight = showUnreadOnly ? 'bold' : 'normal';
-        document.getElementById('filterUnreadBtn').style.color = showUnreadOnly ? '#111b21' : '#54656f';
+        const btn = document.getElementById('filterUnreadBtn');
+        btn.style.background = showUnreadOnly ? 'var(--primary-glow)' : 'rgba(15, 23, 42, 0.4)';
+        btn.style.borderColor = showUnreadOnly ? 'var(--primary)' : 'var(--border-color)';
+        btn.style.color = showUnreadOnly ? 'var(--primary)' : 'var(--text-muted)';
         renderContacts();
     }
 
@@ -786,7 +2625,7 @@
             body: JSON.stringify({ phone: currentPhone, note: text })
         });
         input.value = '';
-        loadMessages(); // Refresh timeline
+        loadMessages(); 
     }
 
     /* Chat Messaging & Timeline */
@@ -799,7 +2638,7 @@
         const msgData = await msgRes.json();
         const noteData = await noteRes.json();
 
-        // 1. Render right panel notes
+        // Render profile notes
         const list = document.getElementById('notesList');
         list.innerHTML = '';
         noteData.notes.forEach(n => {
@@ -811,27 +2650,23 @@
                 </div>`;
         });
 
-        // 2. Render unified center timeline
+        // Render timeline
         let timeline = [
             ...msgData.messages.map(m => ({ ...m, _type: 'message' })),
             ...noteData.notes.map(n => ({ ...n, _type: 'note' }))
         ];
         
-        // Sort chronologically
         timeline.sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
 
         const msgList = document.getElementById('messageList');
-        // Check if it's the first load (empty list)
         const isFirstLoad = msgList.innerHTML === '';
-        // Save current scroll position from the top
         const currentScrollTop = msgList.scrollTop;
         
-        // Check if timeline data actually changed to avoid scroll interruption
         const timelineStr = JSON.stringify(timeline);
         if (msgList.dataset.timeline === timelineStr) {
-            // No changes, just update bot toggle and return
             document.getElementById('pauseBotToggle').checked = msgData.isBotPaused;
             document.getElementById('botStatusLabel').innerText = msgData.isBotPaused ? 'Bot Paused' : 'Bot Active';
+            document.getElementById('botStatusLabel').style.color = msgData.isBotPaused ? 'var(--error)' : 'var(--primary)';
             return;
         }
         msgList.dataset.timeline = timelineStr;
@@ -839,11 +2674,11 @@
         msgList.innerHTML = '';
         
         const getMsgStatusIcon = (status) => {
-            if (status === 'read') return '<span style="color: #53bdeb; margin-left: 4px; font-size: 11px;">✓✓</span>';
-            if (status === 'delivered') return '<span style="color: #8696a0; margin-left: 4px; font-size: 11px;">✓✓</span>';
-            if (status === 'sent' || status === 'queued' || !status) return '<span style="color: #8696a0; margin-left: 4px; font-size: 11px;">✓</span>';
-            if (status === 'failed') return '<span style="color: #f15c6d; margin-left: 4px; font-size: 11px;">!</span>';
-            return '<span style="color: #8696a0; margin-left: 4px; font-size: 10px;">🕒</span>';
+            if (status === 'read') return '<span class="msg-status-tick" style="color: #38bdf8;">✓✓</span>';
+            if (status === 'delivered') return '<span class="msg-status-tick" style="color: var(--text-muted);">✓✓</span>';
+            if (status === 'sent' || status === 'queued' || !status) return '<span class="msg-status-tick" style="color: var(--text-muted);">✓</span>';
+            if (status === 'failed') return '<span class="msg-status-tick" style="color: var(--error);">!</span>';
+            return '<span class="msg-status-tick" style="color: var(--text-muted);">🕒</span>';
         };
 
         let newHtml = '';
@@ -856,7 +2691,7 @@
                     .replace(/^\[(Buttons|List|Image|Template)\]\s*/i, function(match, type) {
                         if (type.toLowerCase() === 'image') return '🖼️ ';
                         if (type.toLowerCase() === 'template') return '📄 ';
-                        return `<span style="font-size: 10px; background: #e1f5fe; color: #0288d1; padding: 2px 6px; border-radius: 4px; margin-bottom: 6px; display: inline-block; font-weight: bold; text-transform: uppercase;">${type}</span><br>`;
+                        return `<span style="font-size: 9px; background: rgba(99, 102, 241, 0.15); color: #818cf8; border: 1px solid rgba(99, 102, 241, 0.2); padding: 2px 6px; border-radius: 4px; margin-bottom: 6px; display: inline-block; font-weight: bold; text-transform: uppercase;">${type}</span><br>`;
                     })
                     .replace(/</g, '&lt;').replace(/>/g, '&gt;')
                     .replace(/\\n/g, '<br>')
@@ -866,8 +2701,7 @@
                 const tickHtml = item.direction === 'outbound' ? getMsgStatusIcon(item.status) : '';
                 newHtml += `<div class="${className}">${textHtml} <span class="msg-time">${time}${tickHtml}</span></div>`;
             } else {
-                const style = "align-self: center; background: #fff9c4; color: #54656f; font-size: 12px; max-width: 90%; text-align: center; border: 1px dashed #fbc02d; box-shadow: none;";
-                newHtml += `<div class="msg-bubble" style="${style}"><strong>📝 Note by ${item.created_by}:</strong> ${item.note.replace(/\\n/g, '<br>')} <span class="msg-time">${time}</span></div>`;
+                newHtml += `<div class="msg-bubble msg-timeline-note"><strong>📝 Internal Note by ${item.created_by}:</strong><br>${item.note.replace(/\\n/g, '<br>')} <span class="msg-time">${time}</span></div>`;
             }
         });
         
@@ -881,6 +2715,7 @@
         
         document.getElementById('pauseBotToggle').checked = msgData.isBotPaused;
         document.getElementById('botStatusLabel').innerText = msgData.isBotPaused ? 'Bot Paused' : 'Bot Active';
+        document.getElementById('botStatusLabel').style.color = msgData.isBotPaused ? 'var(--error)' : 'var(--primary)';
     }
 
     document.getElementById('sendBtn').onclick = async () => {
@@ -924,14 +2759,14 @@
             popup.innerHTML += `
                 <div class="qr-item" onclick="insertQR('${safeMsg}')">
                     <span class="qr-cmd">/${qr.shortcut}</span><br>
-                    <span style="color:#667781; font-size:11px;">${qr.message.substring(0, 45)}${qr.message.length > 45 ? '...' : ''}</span>
+                    <span style="color:var(--text-muted); font-size:11px;">${qr.message.substring(0, 45)}${qr.message.length > 45 ? '...' : ''}</span>
                 </div>
             `;
         });
 
         if (currentRole === 'admin') {
             popup.innerHTML += `
-                <div class="qr-item" style="border-top:1px solid #e9edef; color:#00a884; font-weight:bold; margin-top:5px; padding-top:10px;" onclick="manageQuickReplies()">
+                <div class="qr-item" style="border-top:1px solid var(--border-color); color:var(--primary); font-weight:bold; margin-top:5px; padding-top:10px;" onclick="manageQuickReplies()">
                     + Add New Quick Reply
                 </div>
             `;
@@ -990,6 +2825,7 @@
     document.getElementById('pauseBotToggle').onchange = async (e) => {
         const isPaused = e.target.checked;
         document.getElementById('botStatusLabel').innerText = isPaused ? 'Bot Paused' : 'Bot Active';
+        document.getElementById('botStatusLabel').style.color = isPaused ? 'var(--error)' : 'var(--primary)';
         await authFetch('/api/chat/pause', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -1005,6 +2841,10 @@
     loadUsers();
     loadQuickReplies();
     loadContacts();
+    
+    if (window.location.hash === '#analytics') {
+        showAnalyticsView();
+    }
 </script>
 </body>
 </html>

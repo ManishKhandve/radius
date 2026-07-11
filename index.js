@@ -12,12 +12,47 @@ const config  = require('./config');
 const sheets  = require('./sheets');
 const { addInvite, isInvited, uploadReceipt } = require('./invite-store');
 const chatStore = require('./chat-store');
+const matching = require('./matching');
 
-process.on('uncaughtException',  (err) => console.error('[crash] Uncaught exception:', err.message));
-process.on('unhandledRejection', (r)   => console.error('[crash] Unhandled rejection:', r?.message || r));
+// ─── Structured logging ─────────────────────────────────────
+function log(level, tag, ...args) {
+  const ts = new Date().toISOString();
+  const fn = level === 'error' ? console.error : level === 'warn' ? console.warn : console.log;
+  fn(`${ts} [${tag}]`, ...args);
+}
+
+process.on('uncaughtException',  (err) => log('error', 'crash', 'Uncaught exception:', err.message, err.stack));
+process.on('unhandledRejection', (r)   => log('error', 'crash', 'Unhandled rejection:', r?.message || r));
 
 const app  = express();
-app.use(express.json({ limit: '5mb' }));
+const NODE_ENV = process.env.NODE_ENV || 'development';
+
+// ─── Trust proxy (for Render, Cloudflare, Nginx) ────────────
+app.set('trust proxy', 1);
+
+// ─── Body parsing ───────────────────────────────────────────
+app.use(express.json({ limit: '1mb' }));
+
+// ─── CORS — restrict API to same-origin ─────────────────────
+app.use((req, res, next) => {
+  // Allow same-origin requests; block cross-origin to /api/*
+  if (req.path.startsWith('/api/') || req.path === '/wati-webhook') {
+    res.setHeader('Access-Control-Allow-Origin', req.headers.origin || '*');
+    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, DELETE, OPTIONS');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, auth-token');
+    if (req.method === 'OPTIONS') return res.sendStatus(204);
+  }
+  next();
+});
+
+// ─── Request timeout (30s) ──────────────────────────────────
+app.use((req, res, next) => {
+  req.setTimeout(30_000, () => {
+    if (!res.headersSent) res.status(408).json({ ok: false, error: 'Request timeout' });
+  });
+  next();
+});
+
 const PORT = process.env.PORT || 3000;
 
 // ─── Meta Cloud API config ───────────────────────────────────
@@ -28,15 +63,62 @@ const META_VERIFY_TOKEN    = process.env.META_VERIFY_TOKEN   || '';
 const META_GRAPH_BASE      = `https://graph.facebook.com/${META_API_VERSION}`;
 const BOT_NUMBER           = process.env.META_BOT_NUMBER || ''; // display only
 
-// Admin number for booking/payment/lead alerts — hardcoded so misconfig
-// can never reroute alerts.
-const OWNER_PHONE = '919975233763';
+// Owner phone for booking/payment/lead alerts.
+// Falls back to hardcoded value to prevent misrouting.
+const OWNER_PHONE = process.env.OWNER_PHONE || '919975233763';
 
-if (!META_ACCESS_TOKEN)    console.error('[boot] ❌ META_ACCESS_TOKEN missing — outgoing sends will fail');
-if (!META_PHONE_NUMBER_ID) console.error('[boot] ❌ META_PHONE_NUMBER_ID missing — outgoing sends will fail');
-if (!META_VERIFY_TOKEN)    console.error('[boot] ❌ META_VERIFY_TOKEN missing — webhook verification will fail');
+// ─── Admin token validation ─────────────────────────────────
+const ADMIN_TOKEN = process.env.ADMIN_TOKEN || '';
+if (!ADMIN_TOKEN || ADMIN_TOKEN === 'your-secret-token-here') {
+  log('warn', 'boot', '⚠️  ADMIN_TOKEN is missing or uses the default placeholder — admin endpoints are insecure!');
+  if (NODE_ENV === 'production') {
+    log('error', 'boot', '❌ Refusing to start in production with default ADMIN_TOKEN');
+    process.exit(1);
+  }
+}
 
-console.log(`[boot] Meta Cloud API ${META_API_VERSION} | phoneId: ${META_PHONE_NUMBER_ID || 'MISSING'}`);
+// ─── Input validation helpers ───────────────────────────────
+function isValidPhone(phone) {
+  if (!phone || typeof phone !== 'string') return false;
+  const cleaned = phone.replace(/\D/g, '');
+  return cleaned.length >= 10 && cleaned.length <= 15;
+}
+function cleanPhone(phone) {
+  return String(phone || '').replace(/[^0-9]/g, '');
+}
+
+// ─── Boot-time checks ───────────────────────────────────────
+function validateConfig() {
+  let hasErrors = false;
+
+  log('info', 'boot', `Starting Cleanly WhatsApp CRM in ${NODE_ENV} mode...`);
+
+  if (!process.env.SUPABASE_URL || !process.env.SUPABASE_KEY) {
+    log('error', 'boot', '❌ Database Configuration Error: SUPABASE_URL and SUPABASE_KEY must be set');
+    hasErrors = true;
+  }
+  if (!process.env.SPREADSHEET_ID) {
+    log('error', 'boot', '❌ Google Sheets Configuration Error: SPREADSHEET_ID must be set');
+    hasErrors = true;
+  }
+  if (!process.env.GOOGLE_CREDENTIALS && !process.env.GOOGLE_CREDENTIALS_PATH) {
+    log('error', 'boot', '❌ Google Credentials Error: GOOGLE_CREDENTIALS or GOOGLE_CREDENTIALS_PATH must be set');
+    hasErrors = true;
+  }
+
+  if (!META_ACCESS_TOKEN || !META_PHONE_NUMBER_ID || !META_VERIFY_TOKEN) {
+    log('error', 'boot', '❌ Meta Cloud API Configuration Error: META_ACCESS_TOKEN, META_PHONE_NUMBER_ID, and META_VERIFY_TOKEN must be set');
+    hasErrors = true;
+  }
+
+  if (hasErrors && NODE_ENV === 'production') {
+    log('error', 'boot', '❌ Config validation failed in production. Refusing to start.');
+    process.exit(1);
+  }
+}
+validateConfig();
+
+log('info', 'boot', `Meta Cloud API ${META_API_VERSION} | phoneId: ${META_PHONE_NUMBER_ID || 'MISSING'} | env: ${NODE_ENV}`);
 
 // ─── WATI send helper ───────────────────────────────────────
 // Sends a free-form text message inside an open 24-hr session window.
@@ -483,6 +565,7 @@ function notifyOwnerOfFailure(toPhone, reason, originalText) {
 ${(originalText || '').slice(0, 100)}
 
 The bot couldn't deliver this reply. Please contact the customer manually.`;
+  chatStore.addNotification('⚠️ Message failed — manual follow-up', alert, toPhone, 'send-failure').catch(() => {});
   _metaSendOnce(OWNER_PHONE, alert).catch(() => {});
 }
 
@@ -559,14 +642,27 @@ async function isPaused(phone) {
 }
 
 // ─── Dedup ──────────────────────────────────────────────────
-// WATI can deliver the same message twice if its retry policy fires
-// (e.g. our webhook returns slow). Track recent message IDs and skip dupes.
-const processedMsgIds = new Set();
+// Meta can deliver the same message twice if its retry policy fires
+// (e.g. our webhook returns slow). Track recent message IDs with TTL.
+const DEDUP_TTL_MS = 60 * 60 * 1000; // 1 hour
+const DEDUP_MAX_SIZE = 5000;
+const processedMsgIds = new Map(); // id → timestamp
 function alreadyProcessed(id) {
   if (!id) return false;
   if (processedMsgIds.has(id)) return true;
-  processedMsgIds.add(id);
-  if (processedMsgIds.size > 1000) processedMsgIds.delete(processedMsgIds.values().next().value);
+  processedMsgIds.set(id, Date.now());
+  // Evict entries older than TTL or if over max size
+  if (processedMsgIds.size > DEDUP_MAX_SIZE) {
+    const cutoff = Date.now() - DEDUP_TTL_MS;
+    for (const [k, ts] of processedMsgIds) {
+      if (ts < cutoff) processedMsgIds.delete(k);
+    }
+    // If still over limit, remove oldest
+    if (processedMsgIds.size > DEDUP_MAX_SIZE) {
+      const oldest = processedMsgIds.keys().next().value;
+      processedMsgIds.delete(oldest);
+    }
+  }
   return false;
 }
 
@@ -588,8 +684,8 @@ function runQueued(jid, task) {
 }
 
 // ─── Build the wrappedMsg flow.js expects ───────────────────
-// flow.handleMessage was written for whatsapp-web.js / Baileys
-// message objects. We give it the same shape from WATI's payload.
+// flow.handleMessage expects a specific message object shape.
+// We give it the same shape from Meta's payload.
 function buildWrappedMsg(phone, text, type, mediaId, senderName, title = '') {
   return {
     from: phone,
@@ -784,6 +880,9 @@ async function handleMetaMessage(m, senderName) {
       for (const reply of replies) {
         try {
           if (typeof reply === 'object' && reply && reply._adminAlert) {
+            // Mirror the alert into the CRM Notifications tab (title = first line).
+            const alertTitle = String(reply._adminAlert).split('\n')[0].replace(/[*_]/g, '').trim().slice(0, 120);
+            chatStore.addNotification(alertTitle, reply._adminAlert, phone, 'alert').catch(() => {});
             // Admin notification — send image with alert text as caption if available
             if (reply._adminImageId) {
               watiSendImage(OWNER_PHONE, reply._adminImageId, reply._adminAlert)
@@ -837,16 +936,19 @@ async function handleMetaMessage(m, senderName) {
 
 // ─── Dashboard Chat APIs ───────────────────────────────────────
 app.get('/chat', (req, res) => {
+  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, private');
   res.sendFile(__dirname + '/livechat.html');
 });
 
 // Serve login page
 app.get('/login', (req, res) => {
+  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, private');
   res.sendFile(__dirname + '/login.html');
 });
 
 const crypto = require('crypto');
-const authTokens = new Map();
+const AUTH_TOKEN_TTL_MS = 24 * 60 * 60 * 1000; // 24 hours
+const authTokens = new Map(); // token → { username, role, createdAt }
 const wamidToCampaign = new Map();
 function setWamidCampaign(wamid, campaignName) {
   wamidToCampaign.set(wamid, campaignName);
@@ -856,95 +958,132 @@ function setWamidCampaign(wamid, campaignName) {
   }
 }
 
+// ─── Auth token cleanup (every 30 min) ─────────────────────
+setInterval(() => {
+  const now = Date.now();
+  let expired = 0;
+  for (const [token, entry] of authTokens) {
+    if (now - entry.createdAt > AUTH_TOKEN_TTL_MS) {
+      authTokens.delete(token);
+      expired++;
+    }
+  }
+  if (expired > 0) log('info', 'auth', `Cleaned up ${expired} expired token(s)`);
+}, 30 * 60 * 1000);
+
+// ─── Paused users cleanup (every 15 min) ────────────────────
+setInterval(() => {
+  const now = Date.now();
+  let cleaned = 0;
+  for (const [phone, entry] of pausedUsers) {
+    if (now > entry.expiresAt) {
+      pausedUsers.delete(phone);
+      cleaned++;
+    }
+  }
+  if (cleaned > 0) log('info', 'pause', `Cleaned up ${cleaned} expired pause(s)`);
+}, 15 * 60 * 1000);
+
 app.post('/api/login', async (req, res) => {
   const { username, password } = req.body;
-  if (!username || !password) return res.status(400).json({ error: 'Missing credentials' });
+  if (!username || !password) return res.status(400).json({ ok: false, error: 'Missing credentials' });
 
   const user = await chatStore.loginUser(username, password);
-  if (!user) return res.status(401).json({ error: 'Invalid credentials' });
+  if (!user) return res.status(401).json({ ok: false, error: 'Invalid credentials' });
 
   const token = crypto.randomBytes(32).toString('hex');
-  authTokens.set(token, { username: user.username, role: user.role });
+  authTokens.set(token, { username: user.username, role: user.role, createdAt: Date.now() });
 
-  res.json({ success: true, token, role: user.role, username: user.username });
+  res.json({ ok: true, success: true, token, role: user.role, username: user.username });
 });
 
 const authMiddleware = (req, res, next) => {
   const token = req.headers['auth-token'];
-  const user = authTokens.get(token);
-  if (!user) return res.status(401).json({ error: 'Unauthorized' });
-  req.user = user;
+  const entry = authTokens.get(token);
+  if (!entry) return res.status(401).json({ ok: false, error: 'Unauthorized' });
+  // Check TTL
+  if (Date.now() - entry.createdAt > AUTH_TOKEN_TTL_MS) {
+    authTokens.delete(token);
+    return res.status(401).json({ ok: false, error: 'Session expired, please login again' });
+  }
+  req.user = entry;
   next();
 };
 
 app.get('/api/chat/contacts', authMiddleware, async (req, res) => {
   const contacts = await chatStore.getContacts(req.user.role, req.user.username);
-  res.json({ success: true, contacts });
+  res.json({ ok: true, success: true, contacts });
 });
 
 app.get('/api/users', authMiddleware, async (req, res) => {
   const users = await chatStore.getUsers();
-  res.json({ success: true, users });
+  res.json({ ok: true, success: true, users });
 });
 
 app.get('/api/analytics', authMiddleware, async (req, res) => {
   const metrics = await chatStore.getBroadcastMetrics();
-  res.json({ success: true, metrics });
+  res.json({ ok: true, success: true, metrics });
 });
 
 app.get('/api/chat/messages/:phone', authMiddleware, async (req, res) => {
   const { phone } = req.params;
+  if (!isValidPhone(phone)) return res.status(400).json({ ok: false, error: 'Invalid phone number format' });
   const messages = await chatStore.getMessages(phone);
   const isBotPaused = await chatStore.isBotPaused(phone);
-  res.json({ success: true, messages, isBotPaused });
+  res.json({ ok: true, success: true, messages, isBotPaused });
 });
 
 app.post('/api/chat/send', authMiddleware, async (req, res) => {
   const { phone, message } = req.body;
-  if (!phone || !message) return res.status(400).json({ error: 'Missing phone or message' });
+  if (!phone || !message) return res.status(400).json({ ok: false, error: 'Missing phone or message' });
+  if (!isValidPhone(phone)) return res.status(400).json({ ok: false, error: 'Invalid phone number' });
   
   await pauseUser(phone, 4); // Pause bot automatically when human replies
   
   const result = await watiSend(phone, message);
   if (result.ok) {
     await chatStore.updateContactLabel(phone, 'read');
-    res.json({ success: true });
+    res.json({ ok: true, success: true });
   } else {
-    res.status(500).json({ error: 'Failed to send', details: result.error });
+    res.status(500).json({ ok: false, error: 'Failed to send', details: result.error });
   }
 });
 
 app.post('/api/chat/read', authMiddleware, async (req, res) => {
   const { phone } = req.body;
-  if (!phone) return res.status(400).json({ error: 'Missing phone' });
+  if (!phone) return res.status(400).json({ ok: false, error: 'Missing phone' });
+  if (!isValidPhone(phone)) return res.status(400).json({ ok: false, error: 'Invalid phone number format' });
   await chatStore.updateContactLabel(phone, 'read');
-  res.json({ success: true });
+  res.json({ ok: true, success: true });
 });
 
 app.post('/api/chat/pause', authMiddleware, async (req, res) => {
   const { phone, hours } = req.body;
-  if (!phone) return res.status(400).json({ error: 'Missing phone' });
+  if (!phone) return res.status(400).json({ ok: false, error: 'Missing phone' });
+  if (!isValidPhone(phone)) return res.status(400).json({ ok: false, error: 'Invalid phone number format' });
   
   if (hours > 0) {
     await pauseUser(phone, hours);
-    res.json({ success: true, paused: true });
+    res.json({ ok: true, success: true, paused: true });
   } else {
     await resumeUser(phone);
-    res.json({ success: true, paused: false });
+    res.json({ ok: true, success: true, paused: false });
   }
 });
 
 app.post('/api/chat/label', authMiddleware, async (req, res) => {
   const { phone, label } = req.body;
-  if (!phone || !label) return res.status(400).json({ error: 'Missing phone or label' });
+  if (!phone || !label) return res.status(400).json({ ok: false, error: 'Missing phone or label' });
+  if (!isValidPhone(phone)) return res.status(400).json({ ok: false, error: 'Invalid phone number format' });
   
   await chatStore.updateContactLabel(phone, label);
-  res.json({ success: true, label });
+  res.json({ ok: true, success: true, label });
 });
 
 app.post('/api/chat/crm', authMiddleware, async (req, res) => {
   const { phone, lead_status, assigned_agent, follow_up_time, tags, abandonment_drip_stage } = req.body;
-  if (!phone) return res.status(400).json({ error: 'Missing phone' });
+  if (!phone) return res.status(400).json({ ok: false, error: 'Missing phone' });
+  if (!isValidPhone(phone)) return res.status(400).json({ ok: false, error: 'Invalid phone number format' });
   
   const updates = {};
   if (lead_status !== undefined) {
@@ -963,92 +1102,277 @@ app.post('/api/chat/crm', authMiddleware, async (req, res) => {
   if (abandonment_drip_stage !== undefined) updates.abandonment_drip_stage = abandonment_drip_stage;
 
   await chatStore.updateContactCRM(phone, updates);
-  res.json({ success: true });
+  res.json({ ok: true, success: true });
 });
 
 app.get('/api/notes/:phone', authMiddleware, async (req, res) => {
   const { phone } = req.params;
+  if (!isValidPhone(phone)) return res.status(400).json({ ok: false, error: 'Invalid phone number format' });
   const notes = await chatStore.getNotes(phone);
-  res.json({ success: true, notes });
+  res.json({ ok: true, success: true, notes });
 });
 
 app.post('/api/notes', authMiddleware, async (req, res) => {
   const { phone, note } = req.body;
-  if (!phone || !note) return res.status(400).json({ error: 'Missing phone or note' });
+  if (!phone || !note) return res.status(400).json({ ok: false, error: 'Missing phone or note' });
+  if (!isValidPhone(phone)) return res.status(400).json({ ok: false, error: 'Invalid phone number format' });
   
   // Store note with the logged-in user's name
   const newNote = await chatStore.addNote(phone, note, req.user.username);
-  res.json({ success: true, note: newNote });
+  res.json({ ok: true, success: true, note: newNote });
 });
 
 app.get('/', (_req, res) => {
-  res.send(`<!DOCTYPE html><html><head><meta charset="utf-8"><title>${config.businessName} Bot</title>
-<style>body{font-family:system-ui,sans-serif;background:#0a1628;color:#e2e8f0;display:flex;justify-content:center;align-items:center;height:100vh;margin:0}
-.card{text-align:center;background:#1e293b;padding:3rem;border-radius:1rem}
-.dot{display:inline-block;width:14px;height:14px;border-radius:50%;background:#22c55e;margin-right:8px;animation:pulse 2s infinite}
-@keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}</style></head>
-<body><div class="card"><h1><span class="dot"></span> Bot is Live (Meta Cloud API)</h1>
-<p>${config.businessName}</p>
-<p style="font-size:.85rem;color:#94a3b8;margin-top:1rem">Sessions: <span id="s">—</span> · Uptime: <span id="u">—</span>s</p></div>
-<script>setInterval(()=>fetch('/status').then(r=>r.json()).then(d=>{document.getElementById('s').textContent=d.activeSessions;document.getElementById('u').textContent=Math.floor(d.uptime)}),5000)</script>
+  res.send(`<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>${config.businessName} Bot</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@600;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg-color: #f8fafc;
+    --card-bg: #ffffff;
+    --border-color: #94a3b8;
+    --text-main: #0f172a;
+    --text-muted: #334155;
+    --primary: #10b981;
+  }
+  body {
+    font-family: 'Inter', system-ui, sans-serif;
+    background: var(--bg-color);
+    background-image: 
+      radial-gradient(at 0% 0%, rgba(99, 102, 241, 0.05) 0px, transparent 50%),
+      radial-gradient(at 100% 100%, rgba(16, 185, 129, 0.04) 0px, transparent 50%);
+    color: var(--text-main);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    height: 100vh;
+    margin: 0;
+  }
+  .card {
+    text-align: center;
+    background: var(--card-bg);
+    border: 1px solid var(--border-color);
+    padding: 3rem;
+    border-radius: 24px;
+    box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.05), 0 10px 10px -5px rgba(0, 0, 0, 0.02);
+    max-width: 420px;
+    width: 90%;
+  }
+  h1 {
+    font-family: 'Outfit', sans-serif;
+    font-size: 24px;
+    font-weight: 700;
+    margin-bottom: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+  }
+  .business {
+    color: var(--text-muted);
+    font-size: 15px;
+    margin-bottom: 24px;
+  }
+  .dot {
+    display: inline-block;
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    background: var(--primary);
+    box-shadow: 0 0 12px var(--primary);
+    animation: pulse 2s infinite;
+  }
+  .stats {
+    font-size: 13px;
+    color: var(--text-muted);
+    background: #f1f5f9;
+    padding: 10px 16px;
+    border-radius: 12px;
+    border: 1px solid var(--border-color);
+    display: inline-block;
+  }
+  @keyframes pulse {
+    0%, 100% { opacity: 1; transform: scale(1); }
+    50% { opacity: .4; transform: scale(1.15); }
+  }
+</style></head>
+<body><div class="card">
+  <h1><span class="dot"></span> Bot is Active</h1>
+  <p class="business">${config.businessName}</p>
+  <div class="stats">Sessions: <span id="s">—</span> &nbsp;·&nbsp; Uptime: <span id="u">—</span>s</div>
+</div>
+<script>
+  setInterval(()=>fetch('/status').then(r=>r.json()).then(d=>{
+    document.getElementById('s').textContent=d.activeSessions;
+    document.getElementById('u').textContent=Math.floor(d.uptime);
+  }),5000);
+</script>
 </body></html>`);
 });
 
-app.get('/status', (_req, res) => res.json({
-  ok: true,
-  sender: 'Meta Cloud API',
-  build: process.env.RENDER_GIT_COMMIT?.slice(0, 7) || 'local',
-  apiVersion: META_API_VERSION,
-  phoneId: META_PHONE_NUMBER_ID || 'MISSING',
-  hasToken: !!META_ACCESS_TOKEN,
-  hasVerifyToken: !!META_VERIFY_TOKEN,
-  activeSessions: flow.activeSessionCount(),
-  uptime: process.uptime(),
-  bot: BOT_NUMBER,
-  msgs: {
-    sent:   sendMetrics.sent,
-    failed: sendMetrics.failed,
-    recentFailures: sendMetrics.recentFailures.slice(-10),
-  },
-}));
+app.get('/status', (_req, res) => {
+  const mem = process.memoryUsage();
+  res.json({
+    ok: true,
+    sender: 'Meta Cloud API',
+    env: NODE_ENV,
+    nodeVersion: process.version,
+    build: process.env.RENDER_GIT_COMMIT?.slice(0, 7) || 'local',
+    apiVersion: META_API_VERSION,
+    phoneId: META_PHONE_NUMBER_ID || 'MISSING',
+    hasToken: !!META_ACCESS_TOKEN,
+    hasVerifyToken: !!META_VERIFY_TOKEN,
+    activeSessions: flow.activeSessionCount(),
+    uptime: process.uptime(),
+    bot: BOT_NUMBER,
+    memory: {
+      rss: Math.round(mem.rss / 1024 / 1024) + 'MB',
+      heapUsed: Math.round(mem.heapUsed / 1024 / 1024) + 'MB',
+      heapTotal: Math.round(mem.heapTotal / 1024 / 1024) + 'MB',
+    },
+    maps: {
+      authTokens: authTokens.size,
+      pausedUsers: pausedUsers.size,
+      nudgeTimers: nudgeTimers.size,
+      dedupIds: processedMsgIds.size,
+      userQueues: userQueues.size,
+    },
+    msgs: {
+      sent:   sendMetrics.sent,
+      failed: sendMetrics.failed,
+      recentFailures: sendMetrics.recentFailures.slice(-10),
+    },
+  });
+});
 
-app.get('/ping', (_req, res) => res.send('pong'));
+app.get('/ping', (_req, res) => {
+  res.setHeader('Cache-Control', 'no-cache');
+  res.send('pong');
+});
 
 // Admin page — same as before
 app.get('/admin', (req, res) => {
   const { token } = req.query;
   if (!token || token !== process.env.ADMIN_TOKEN) return res.status(401).send('Unauthorized');
+  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, private');
   res.send(`<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>CLEANLY Admin</title>
-<style>*{box-sizing:border-box;margin:0;padding:0}body{font-family:system-ui;background:#0a1628;color:#e2e8f0;min-height:100vh;display:flex;justify-content:center;align-items:center;padding:1rem}
-.card{background:#1e293b;border-radius:1rem;padding:2rem;width:100%;max-width:420px}
-h2{margin-bottom:1.5rem;font-size:1.2rem}label{display:block;font-size:.85rem;color:#94a3b8;margin-bottom:.4rem}
-input{width:100%;padding:.75rem 1rem;border-radius:.5rem;border:1px solid #334155;background:#0f172a;color:#f1f5f9;font-size:1rem;margin-bottom:1rem;outline:none}
-input:focus{border-color:#38bdf8}button{width:100%;padding:.85rem;border-radius:.5rem;border:none;background:#22c55e;color:#fff;font-size:1rem;font-weight:600;cursor:pointer}
-button:hover{background:#16a34a}button.secondary{background:#3b82f6}button.secondary:hover{background:#2563eb}
-button:disabled{opacity:.5;cursor:not-allowed}
-.result{margin-top:1rem;padding:.75rem 1rem;border-radius:.5rem;font-size:.9rem;display:none;white-space:pre-wrap;text-align:left;font-family:ui-monospace,monospace}
-.result.ok{background:#14532d;color:#86efac}.result.err{background:#4c0519;color:#fca5a5}
-.hint{font-size:.78rem;color:#64748b;margin-top:-.5rem;margin-bottom:1rem}
-.divider{height:1px;background:#334155;margin:2rem 0 1.5rem}</style>
+<title>Cleanly WhatsApp - Admin Portal</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@600;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg-color: #f8fafc;
+    --card-bg: #ffffff;
+    --border-color: #94a3b8;
+    --text-main: #0f172a;
+    --text-muted: #334155;
+    --primary: #10b981;
+    --indigo: #4f46e5;
+    --error: #e11d48;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: 'Inter', system-ui, sans-serif;
+    background: var(--bg-color);
+    background-image: 
+      radial-gradient(at 0% 0%, rgba(99, 102, 241, 0.05) 0px, transparent 50%),
+      radial-gradient(at 100% 100%, rgba(16, 185, 129, 0.04) 0px, transparent 50%);
+    color: var(--text-main);
+    min-height: 100vh;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    padding: 2rem 1rem;
+  }
+  .card {
+    background: var(--card-bg);
+    border: 1px solid var(--border-color);
+    border-radius: 24px;
+    padding: 36px;
+    width: 100%;
+    max-width: 460px;
+    box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.05), 0 10px 10px -5px rgba(0, 0, 0, 0.02);
+  }
+  h2 {
+    font-family: 'Outfit', sans-serif;
+    font-size: 20px;
+    font-weight: 700;
+    margin-bottom: 16px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  label {
+    display: block;
+    font-size: 13px;
+    color: var(--text-muted);
+    margin-bottom: 8px;
+    font-weight: 500;
+  }
+  input {
+    width: 100%;
+    padding: 12px 14px;
+    border-radius: 10px;
+    border: 1px solid var(--border-color);
+    background: #ffffff;
+    color: var(--text-main);
+    font-size: 14px;
+    margin-bottom: 14px;
+    outline: none;
+    transition: border-color 0.2s;
+    font-family: inherit;
+  }
+  input:focus { border-color: var(--primary); }
+  button {
+    width: 100%;
+    padding: 12px;
+    border-radius: 10px;
+    border: none;
+    background: linear-gradient(135deg, var(--primary) 0%, #047857 100%);
+    color: #fff;
+    font-size: 14.5px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: opacity 0.2s;
+    font-family: inherit;
+  }
+  button:hover { opacity: 0.95; }
+  button.secondary {
+    background: linear-gradient(135deg, var(--indigo) 0%, #4f46e5 100%);
+  }
+  button:disabled { opacity: .5; cursor: not-allowed; }
+  
+  .result {
+    margin-top: 14px;
+    padding: 12px 14px;
+    border-radius: 10px;
+    font-size: 12px;
+    display: none;
+    white-space: pre-wrap;
+    text-align: left;
+    font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+    line-height: 1.5;
+    box-shadow: inset 0 2px 8px rgba(0, 0, 0, 0.1);
+  }
+  .result.ok { background: #0f172a; border: 1px solid var(--border-color); color: #a7f3d0; }
+  .result.err { background: #0f172a; border: 1px solid var(--border-color); color: #fca5a5; }
+  
+  .hint { font-size: 12px; color: var(--text-muted); margin-top: -6px; margin-bottom: 14px; line-height: 1.4; }
+  .divider { height: 1px; background: var(--border-color); margin: 28px 0 24px; }</style>
 </head><body><div class="card">
 <h2>📤 Send Intro Message</h2>
-<label>Country Code + Number</label>
-<input type="tel" id="phone" placeholder="919876543210" inputmode="numeric"/>
+<label>Country Code + Phone Number</label>
+<input type="tel" id="phone" placeholder="e.g. 919876543210" inputmode="numeric"/>
 <p class="hint">Customer must have messaged the bot within the last 24 hours.</p>
 <button id="btn" onclick="send()">Send Message</button>
 <div class="result" id="result"></div>
-
-<div class="divider"></div>
-
-<h2>⏰ Run Follow-Ups</h2>
-<p class="hint">Sends Day 3 / 7 / 15 follow-up templates to leads who are due. Skips anyone already messaged for that day. Run this once per day.</p>
-<button id="btnFollowups" class="secondary" onclick="runFollowups()">Run Follow-Ups Now</button>
-<div class="result" id="resultFollowups"></div>
 </div>
 <script>
 async function send(){
-  const phone=document.getElementById('phone').value.replace(/\\D/g,'');
+  const phone=document.getElementById('phone').value.replace(/\D/g,'');
   const btn=document.getElementById('btn'),result=document.getElementById('result');
   if(phone.length<10){result.textContent='⚠️ Enter a valid number';result.className='result err';result.style.display='block';return;}
   btn.disabled=true;btn.textContent='Sending…';result.style.display='none';
@@ -1059,35 +1383,6 @@ async function send(){
   document.getElementById('phone').value='';
 }
 document.getElementById('phone').addEventListener('keydown',e=>{if(e.key==='Enter')send();});
-
-async function runFollowups(){
-  const btn=document.getElementById('btnFollowups'),result=document.getElementById('resultFollowups');
-  btn.disabled=true;btn.textContent='Running…';result.style.display='none';
-  try{
-    const res=await fetch('/run-followups?token=${token}');
-    const j=await res.json();
-    if(!res.ok||!j.ok){
-      result.textContent='❌ '+(j.error||'Failed');
-      result.className='result err';
-    }else{
-      const s=j.summary;
-      let lines=['✅ Done in '+s.durationMs+'ms','','Total leads checked: '+s.totalLeadsChecked,'Follow-ups sent: '+s.followUpsSent,'Skipped: '+s.followUpsSkipped,'Errors: '+s.errors];
-      if(j.details && j.details.length){
-        lines.push('');
-        const sent=j.details.filter(d=>d.action==='sent');
-        const errs=j.details.filter(d=>d.action==='error');
-        if(sent.length){lines.push('Sent:');sent.forEach(d=>lines.push('  • '+d.phone+' → '+d.template+' (Day '+d.stage+')'));}
-        if(errs.length){lines.push('');lines.push('Errors:');errs.forEach(d=>lines.push('  • '+d.phone+' → '+(d.template||'?')+': '+(d.reason||'').slice(0,80)));}
-      }
-      result.textContent=lines.join('\\n');
-      result.className='result '+(s.errors>0?'err':'ok');
-    }
-  }catch(e){
-    result.textContent='❌ Network error: '+e.message;
-    result.className='result err';
-  }
-  result.style.display='block';btn.disabled=false;btn.textContent='Run Follow-Ups Now';
-}
 </script></body></html>`);
 });
 
@@ -1174,10 +1469,12 @@ app.post('/verify-payment', async (req, res) => {
 const path = require('path');
 
 app.get('/admin/broadcast', (req, res) => {
+  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, private');
   res.sendFile(path.join(__dirname, 'broadcast.html'));
 });
 
-app.post('/api/broadcast', (req, res) => {
+app.post('/api/broadcast', authMiddleware, (req, res) => {
+  if (req.user.role !== 'admin') return res.status(403).json({ ok: false, error: 'Admin only' });
   const { templateName, languageCode, recipients, headerUrl } = req.body;
 
   if (activeCampaign.running) {
@@ -1265,27 +1562,27 @@ app.post('/api/broadcast', (req, res) => {
   res.json({ success: true, message: 'Broadcast campaign started.' });
 });
 
-app.get('/api/broadcast/status', (req, res) => {
+app.get('/api/broadcast/status', authMiddleware, (req, res) => {
   res.json(activeCampaign);
 });
 
 app.get('/api/quickreplies', authMiddleware, async (req, res) => {
   const replies = await chatStore.getQuickReplies();
-  res.json({ success: true, replies });
+  res.json({ ok: true, success: true, replies });
 });
 
 app.post('/api/quickreplies', authMiddleware, async (req, res) => {
-  if (req.user.role !== 'admin') return res.status(403).json({ error: 'Admin only' });
+  if (req.user.role !== 'admin') return res.status(403).json({ ok: false, error: 'Admin only' });
   const { shortcut, message } = req.body;
-  if (!shortcut || !message) return res.status(400).json({ error: 'Missing fields' });
+  if (!shortcut || !message) return res.status(400).json({ ok: false, error: 'Missing fields' });
   const newReply = await chatStore.addQuickReply(shortcut, message);
-  res.json({ success: true, reply: newReply });
+  res.json({ ok: true, success: true, reply: newReply });
 });
 
 app.delete('/api/quickreplies/:shortcut', authMiddleware, async (req, res) => {
-  if (req.user.role !== 'admin') return res.status(403).json({ error: 'Admin only' });
+  if (req.user.role !== 'admin') return res.status(403).json({ ok: false, error: 'Admin only' });
   await chatStore.deleteQuickReply(req.params.shortcut);
-  res.json({ success: true });
+  res.json({ ok: true, success: true });
 });
 
 // ─── Background Cron: Follow-up Reminders ─────────────────────
@@ -1315,150 +1612,302 @@ setInterval(async () => {
   }
 }, 60000); // Check every minute
 
-// Background Cron: Abandonment Drip Campaign
-// AUTO is OFF by default — the auto scheduler proved unreliable, so the
-// admin now runs the drip manually via the "Run Follow-Ups" button on
-// /admin (which calls GET /run-followups). Set env DRIP_AUTO_ENABLED=true
-// to re-enable the automatic scheduler when the timing logic is solid.
+// ─── WhatsApp Follow-up Drip (Interested maid customers) ─────
+// Sends follow-up templates to leads in the `customers` table whose
+// status = 'Interested'. Manual trigger only — an admin presses
+// "Run Follow-Ups" in the CRM (POST /api/run-followups) or hits
+// GET /run-followups?token=ADMIN_TOKEN. Progress is tracked per-customer
+// via the wa_followup_stage column so a repeat press never re-sends a stage.
 //
-// Thresholds: first follow-up after 3 days, then 7, then 15.
-const DRIP_AUTO_ENABLED = process.env.DRIP_AUTO_ENABLED === 'true';
-const DAY3_THRESHOLD    = 3;            // days
-const DRIP_INTERVAL_MS  = 60_000 * 60;  // hourly when auto is enabled
-console.log(`[drip] auto scheduler: ${DRIP_AUTO_ENABLED ? `ENABLED (every ${DRIP_INTERVAL_MS / 1000}s)` : 'DISABLED — use /admin → Run Follow-Ups'}`);
+// Cadence (see FOLLOWUP_CADENCE below):
+//   'single' — one follow-up per customer (day3 template), then done.
+//   'staged' — Day 3 → 7 → 15 progression, one stage advanced per run.
+// Change the constant to switch; no other code changes needed.
+const FOLLOWUP_CADENCE = 'single';
 
-// Templates and their media headers, indexed by drip day. All three are
-// approved with a media header and a static body (no {{1}} variables —
-// passing body params triggers Meta error #132000).
+// Approved templates (media header, static body — no {{1}} variables).
 const DRIP_TEMPLATES = {
   3:  { name: 'day3_follow_up',  header: 'https://ikwyrrzipzfbyzmkrfmu.supabase.co/storage/v1/object/public/media/Untitled%20design%20(1).mp4' },
   7:  { name: 'day7_follow_up',  header: 'https://ikwyrrzipzfbyzmkrfmu.supabase.co/storage/v1/object/public/media/WhatsApp%20Video%202026-06-10%20at%204.08.29%20PM.mp4' },
   15: { name: 'day15_follow_up', header: 'https://ikwyrrzipzfbyzmkrfmu.supabase.co/storage/v1/object/public/media/WhatsApp%20Image%202026-06-10%20at%205.13.53%20PM.jpeg' },
 };
 
-// Process a single lead. Returns one of:
-//   { action: 'sent',    template, stage }
-//   { action: 'skipped', reason }
-//   { action: 'error',   template?, reason }
-async function processOneLeadForDrip(c, opts = {}) {
-  const now = opts.now || Date.now();
+// customers.phone is stored as 10 local digits (e.g. 9545533100). Meta needs
+// a full number with country code. Returns null for unusable numbers.
+function toMetaPhone(raw) {
+  const d = String(raw || '').replace(/\D/g, '');
+  if (d.length === 10) return '91' + d;
+  if (d.length === 12 && d.startsWith('91')) return d;
+  return null;
+}
 
-  if (!c.last_message_at) return { action: 'skipped', reason: 'no last_message_at' };
-  if (c.phone === OWNER_PHONE) return { action: 'skipped', reason: 'owner number' };
+// Which drip day (if any) is next for a given stage under the active cadence.
+function nextDripDay(stage) {
+  if (stage >= 15) return null;
+  if (FOLLOWUP_CADENCE === 'single') return 3;   // one send, then marked done
+  for (const d of [3, 7, 15]) if (stage < d) return d;
+  return null;
+}
 
-  const diffDays = (now - new Date(c.last_message_at)) / (1000 * 60 * 60 * 24);
-  const stage = c.abandonment_drip_stage || 0;
+// Process a single customer. Returns { action: 'sent'|'skipped'|'error', ... }.
+async function processOneCustomerForFollowup(c) {
+  const phone = toMetaPhone(c.phone);
+  if (!phone) return { action: 'skipped', reason: 'invalid phone' };
 
-  // Pick the highest applicable threshold, but only if not yet sent for
-  // that stage. This is what enforces "If a lead has already received
-  // that day's follow-up, do not send it again."
-  let dripDay = null;
-  if (diffDays >= 15 && stage < 15) dripDay = 15;
-  else if (diffDays >= 7 && stage < 7) dripDay = 7;
-  else if (diffDays >= DAY3_THRESHOLD && stage < 3) dripDay = 3;
-
-  if (!dripDay) {
-    if (stage >= 15) return { action: 'skipped', reason: 'all follow-ups already sent' };
-    if (diffDays < DAY3_THRESHOLD) {
-      return {
-        action: 'skipped',
-        reason: 'too recent (not yet day 3)',
-        ageDays: +diffDays.toFixed(1),
-      };
-    }
-    return { action: 'skipped', reason: `already received day${stage} follow-up` };
-  }
+  const stage = c.wa_followup_stage || 0;
+  const dripDay = nextDripDay(stage);
+  if (!dripDay) return { action: 'skipped', reason: 'all follow-ups already sent' };
 
   const tpl = DRIP_TEMPLATES[dripDay];
-  console.log(`[drip] Sending ${tpl.name} to ${c.phone} (Stage: ${dripDay})`);
-  const result = await watiSendTemplate(c.phone, tpl.name, 'en', [], tpl.header);
-  // Advance the stage whether or not the send succeeded — each drip stage
-  // is a best-effort one-shot. This prevents a broken template, bad number,
-  // or rejected send from being retried on every run.
-  await chatStore.updateContactCRM(c.phone, { abandonment_drip_stage: dripDay }).catch(() => {});
+  const result = await watiSendTemplate(phone, tpl.name, 'en', [], tpl.header);
 
-  if (result.ok) {
-    console.log(`[drip] ✓ ${tpl.name} sent to ${c.phone}`);
-    return { action: 'sent', template: tpl.name, stage: dripDay };
-  }
+  // Advance stage whether or not the send succeeded — each stage is a
+  // best-effort one-shot, so a rejected send is not retried every run.
+  // In 'single' mode we jump straight to 15 (done); in 'staged' we step.
+  const newStage = FOLLOWUP_CADENCE === 'single' ? 15 : dripDay;
+  await chatStore.advanceCustomerFollowupStage(c.id, newStage);
+
+  if (result.ok) return { action: 'sent', template: tpl.name, stage: dripDay };
   const reason = result.error?.message || JSON.stringify(result.error || {});
-  console.error(`[drip] ✗ ${tpl.name} FAILED to ${c.phone}: ${reason}`);
   return { action: 'error', template: tpl.name, reason };
 }
 
-// One full drip pass over every active lead. Used by both the manual
-// /run-followups endpoint and (optionally) the auto cron.
+// ─── Maid-revival campaign (dead / closed customers) ─────────
+// Customers marked "Not Interested" or "Didn't Convert" get the photos of
+// the TOP 3 maids nearest to them (one template message per maid) once every
+// 7 days, up to 4 rounds (~1 month), then stop. Paced by the revive_stage /
+// revive_last_sent_at columns so it's safe to press daily.
+//
+// REVIVE_TEMPLATE_NAME must be an approved template with an IMAGE header
+// (the maid photo is passed as the header) and a static caption body — no
+// body variables. Set this to your approved template's exact name.
+const REVIVE_TEMPLATE_NAME = 'maid_nearby_profile';
+const REVIVE_INTERVAL_DAYS = 7;
+const REVIVE_MAX_SENDS      = 4;   // 7 + 14 + 21 + 28 days ≈ one month
+
+async function processOneCustomerForRevive(c, now) {
+  const phone = toMetaPhone(c.phone);
+  if (!phone) return { action: 'skipped', reason: 'invalid phone' };
+
+  const stage = c.revive_stage || 0;
+  if (stage >= REVIVE_MAX_SENDS) return { action: 'skipped', reason: 'revive complete (1 month)' };
+
+  // 7-day gate — don't message again until a week has passed.
+  if (c.revive_last_sent_at) {
+    const daysSince = (now - new Date(c.revive_last_sent_at)) / (1000 * 60 * 60 * 24);
+    if (daysSince < REVIVE_INTERVAL_DAYS) {
+      return { action: 'skipped', reason: `next revive in ${(REVIVE_INTERVAL_DAYS - daysSince).toFixed(1)}d` };
+    }
+  }
+
+  if (!c.latitude || !c.longitude) return { action: 'skipped', reason: 'no location' };
+
+  let maids;
+  try {
+    maids = await matching.getTopMaids(c.latitude, c.longitude);
+  } catch (err) {
+    return { action: 'error', reason: 'maid match failed: ' + err.message };
+  }
+  // Send the top 3 nearby maids — one template (photo header) per maid.
+  // getTopMaids already returns at most 3, sorted P1→P4 zone then distance.
+  const withPhoto = (maids || []).filter(m => m.photo_url).slice(0, 3);
+  if (withPhoto.length === 0) return { action: 'skipped', reason: 'no nearby maid with a photo' };
+
+  const sentMaids = [];
+  const failures  = [];
+  for (const maid of withPhoto) {
+    const result = await watiSendTemplate(phone, REVIVE_TEMPLATE_NAME, 'en', [], maid.photo_url);
+    if (result.ok) sentMaids.push(maid.name);
+    else failures.push(`${maid.name}: ${result.error?.message || 'send failed'}`);
+  }
+
+  // Advance whether or not the sends succeeded — best-effort weekly one-shot.
+  await chatStore.advanceReviveStage(c.id, stage + 1, new Date(now).toISOString());
+
+  if (sentMaids.length > 0) {
+    return { action: 'sent', template: REVIVE_TEMPLATE_NAME, maids: sentMaids, sentCount: sentMaids.length, revive: stage + 1 };
+  }
+  return { action: 'error', template: REVIVE_TEMPLATE_NAME, reason: failures.join(' | ').slice(0, 200) };
+}
+
+// One full pass: the Interested drip, then the dead/closed maid-revival.
 async function runFollowupsBatch() {
-  const abandoned = await chatStore.getAbandonedLeads();
-  const now = Date.now();
-  const summary = {
-    totalLeadsChecked: abandoned.length,
-    followUpsSent: 0,
-    followUpsSkipped: 0,
-    errors: 0,
-  };
+  const summary = { totalLeadsChecked: 0, followUpsSent: 0, followUpsSkipped: 0, errors: 0 };
   const details = [];
-  for (const c of abandoned) {
-    const res = await processOneLeadForDrip(c, { now });
+  const tally = (res) => {
     if (res.action === 'sent') summary.followUpsSent++;
     else if (res.action === 'skipped') summary.followUpsSkipped++;
     else if (res.action === 'error') summary.errors++;
-    details.push({ phone: c.phone, name: c.name || null, ...res });
+  };
+  const now = Date.now();
+
+  // 1) Interested customers → Day 3/7/15 (or single) drip.
+  const interested = await chatStore.getInterestedFollowupCustomers();
+  for (const c of interested) {
+    const res = await processOneCustomerForFollowup(c);
+    tally(res);
+    details.push({ campaign: 'interested', phone: c.phone, name: c.name || null, ...res });
   }
+
+  // 2) Dead / closed customers → weekly nearby-maid photo for one month.
+  const revive = await chatStore.getReviveCustomers();
+  for (const c of revive) {
+    const res = await processOneCustomerForRevive(c, now);
+    tally(res);
+    details.push({ campaign: 'revive', phone: c.phone, name: c.name || null, ...res });
+  }
+
+  summary.totalLeadsChecked = interested.length + revive.length;
   return { summary, details };
 }
 
-// Auto cron — disabled by default (see DRIP_AUTO_ENABLED above).
-if (DRIP_AUTO_ENABLED) {
-  setInterval(async () => {
-    try {
-      const { summary } = await runFollowupsBatch();
-      if (summary.followUpsSent > 0 || summary.errors > 0) {
-        console.log('[drip] auto-run summary:', JSON.stringify(summary));
-      }
-    } catch (err) {
-      console.error('[cron] Drip campaign check failed', err.message);
-    }
-  }, DRIP_INTERVAL_MS);
-}
-
-// Manual trigger — admin clicks "Run Follow-Ups" on /admin (or curl this).
-// Auth: ADMIN_TOKEN query param, same pattern as /send.
-app.get('/run-followups', async (req, res) => {
-  const { token } = req.query;
-  if (!token || token !== process.env.ADMIN_TOKEN) {
-    return res.status(401).json({ ok: false, error: 'Unauthorized' });
-  }
-  const t0 = Date.now();
-  try {
-    const { summary, details } = await runFollowupsBatch();
-    summary.durationMs = Date.now() - t0;
-    console.log(`[drip] manual run done in ${summary.durationMs}ms:`, JSON.stringify(summary));
-    res.json({ ok: true, summary, details });
-  } catch (err) {
-    console.error('[drip] manual run failed:', err.message);
-    res.status(500).json({ ok: false, error: err.message });
-  }
-});
-
-// Same trigger, but using the CRM's session auth (auth-token header).
-// Used by the "Run Follow-Ups" button in /chat. Admin-only.
+// Manual trigger via the CRM "Run Follow-Ups" button (session auth, admin-only).
 app.post('/api/run-followups', authMiddleware, async (req, res) => {
   if (req.user.role !== 'admin') return res.status(403).json({ ok: false, error: 'Admin only' });
   const t0 = Date.now();
   try {
     const { summary, details } = await runFollowupsBatch();
     summary.durationMs = Date.now() - t0;
-    console.log(`[drip] manual run (CRM) by ${req.user.username}: ${JSON.stringify(summary)}`);
+    log('info', 'drip', `manual run (CRM) by ${req.user.username}: ${JSON.stringify(summary)}`);
     res.json({ ok: true, summary, details });
   } catch (err) {
-    console.error('[drip] manual run (CRM) failed:', err.message);
+    log('error', 'drip', 'manual run (CRM) failed:', err.message);
     res.status(500).json({ ok: false, error: err.message });
   }
 });
 
-// --- Start ---──────────────────────────────────────────────────
-app.listen(PORT, () => {
-  console.log(`[server] Meta Cloud API bot ready on :${PORT}`);
-  console.log(`[server] build: ${process.env.RENDER_GIT_COMMIT?.slice(0,7) || 'local'} | phoneId: ${META_PHONE_NUMBER_ID || 'MISSING'} | verifyToken: ${META_VERIFY_TOKEN ? 'set' : 'MISSING'}`);
+// Same trigger via ADMIN_TOKEN query param (for curl / external schedulers).
+app.get('/run-followups', async (req, res) => {
+  if (!req.query.token || req.query.token !== ADMIN_TOKEN) {
+    return res.status(401).json({ ok: false, error: 'Unauthorized' });
+  }
+  const t0 = Date.now();
+  try {
+    const { summary, details } = await runFollowupsBatch();
+    summary.durationMs = Date.now() - t0;
+    log('info', 'drip', `manual run (token): ${JSON.stringify(summary)}`);
+    res.json({ ok: true, summary, details });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message });
+  }
 });
+
+// ─── Maid (worker) follow-ups ────────────────────────────────
+// No bulk campaign: maids are messaged one-by-one from the Maids directory
+// view, where the agent picks the template and video/image per send
+// (POST /api/people/message below).
+
+// ─── People directory (flat_customers / customers / maids) ───
+// Browse the three lead tables and message an individual via template.
+app.get('/api/people', authMiddleware, async (req, res) => {
+  const group = req.query.group;
+  if (!chatStore.isPeopleGroup(group)) {
+    return res.status(400).json({ ok: false, error: 'Unknown group' });
+  }
+  try {
+    const people = await chatStore.getPeople(group);
+    res.json({ ok: true, group, people });
+  } catch (err) {
+    log('error', 'people', `fetch ${group} failed:`, err.message);
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+// Start (or reopen) a normal chat with a person from a directory view.
+// Creates the contact under the Meta-normalized phone (so their replies map
+// to the same thread) tagged with the group's service category.
+const PEOPLE_SERVICE_CATEGORY = {
+  flat_customers: 'cleaning',
+  customers:      'maid',
+  maids:          'worker',
+};
+app.post('/api/people/start-chat', authMiddleware, async (req, res) => {
+  const { group, phone, name } = req.body || {};
+  const to = toMetaPhone(phone);
+  if (!to) return res.status(400).json({ ok: false, error: 'Invalid phone number' });
+  if (!PEOPLE_SERVICE_CATEGORY[group]) return res.status(400).json({ ok: false, error: 'Unknown group' });
+  try {
+    const contact = await chatStore.ensureContact(to, (name || '').trim() || null, PEOPLE_SERVICE_CATEGORY[group]);
+    if (!contact) return res.status(500).json({ ok: false, error: 'Could not create contact' });
+    res.json({ ok: true, contact });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+// ─── Notifications: due follow-up reminders for the CRM tab ──
+// Same data the owner-alert cron uses (contacts with lead_status =
+// 'Follow-up Required' and follow_up_time in the past), served to the UI.
+app.get('/api/notifications', authMiddleware, async (req, res) => {
+  try {
+    const [dues, alerts] = await Promise.all([
+      chatStore.getDueFollowups(),
+      chatStore.getNotifications(50),
+    ]);
+    // Employees only see their own / unassigned follow-ups.
+    const list = req.user.role === 'admin'
+      ? dues
+      : dues.filter(d => !d.assigned_agent || d.assigned_agent === 'Unassigned' || d.assigned_agent === req.user.username);
+    const unreadAlerts = alerts.filter(a => !a.read).length;
+    res.json({ ok: true, notifications: list, alerts, unreadAlerts });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+// Mark all stored alerts as read (called when the Notifications tab is opened).
+app.post('/api/notifications/read', authMiddleware, async (req, res) => {
+  await chatStore.markNotificationsRead();
+  res.json({ ok: true });
+});
+
+// Send one approved template to a single person from a directory view.
+app.post('/api/people/message', authMiddleware, async (req, res) => {
+  const { phone, templateName, languageCode, headerUrl } = req.body || {};
+  const to = toMetaPhone(phone);
+  if (!to) return res.status(400).json({ ok: false, error: 'Invalid phone number' });
+  if (!templateName) return res.status(400).json({ ok: false, error: 'templateName is required' });
+  try {
+    const result = await watiSendTemplate(to, templateName.trim(), languageCode || 'en', [], headerUrl || null);
+    if (result.ok) return res.json({ ok: true });
+    return res.status(502).json({ ok: false, error: result.error?.message || 'Send failed' });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+// ─── Global error handler ───────────────────────────────────
+// Catches unhandled Express errors to return consistent JSON.
+app.use((err, req, res, _next) => {
+  log('error', 'express', `Unhandled error on ${req.method} ${req.path}:`, err.message);
+  if (!res.headersSent) {
+    res.status(500).json({ ok: false, error: 'Internal server error' });
+  }
+});
+
+// ─── 404 handler ────────────────────────────────────────────
+app.use((req, res) => {
+  res.status(404).json({ ok: false, error: `Not found: ${req.method} ${req.path}` });
+});
+
+// --- Start ---──────────────────────────────────────────────────
+const server = app.listen(PORT, () => {
+  log('info', 'server', `Meta Cloud API bot ready on :${PORT}`);
+  log('info', 'server', `build: ${process.env.RENDER_GIT_COMMIT?.slice(0,7) || 'local'} | phoneId: ${META_PHONE_NUMBER_ID || 'MISSING'} | verifyToken: ${META_VERIFY_TOKEN ? 'set' : 'MISSING'} | env: ${NODE_ENV}`);
+});
+
+// ─── Graceful shutdown ──────────────────────────────────────
+function gracefulShutdown(signal) {
+  log('info', 'shutdown', `${signal} received — shutting down gracefully...`);
+  server.close(() => {
+    log('info', 'shutdown', 'HTTP server closed');
+    process.exit(0);
+  });
+  // Force exit after 5 seconds if connections don't drain
+  setTimeout(() => {
+    log('warn', 'shutdown', 'Forcing exit after 5s timeout');
+    process.exit(1);
+  }, 5000).unref();
+}
+process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
+process.on('SIGINT',  () => gracefulShutdown('SIGINT'));

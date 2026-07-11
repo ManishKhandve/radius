@@ -5,23 +5,36 @@ const { createClient } = require('@supabase/supabase-js');
 const supabaseUrl = process.env.SUPABASE_URL;
 const supabaseKey = process.env.SUPABASE_KEY;
 
-let supabase = null;
-if (supabaseUrl && supabaseKey) {
-  supabase = createClient(supabaseUrl, supabaseKey);
+if (!supabaseUrl || !supabaseKey) {
+  console.error(`${new Date().toISOString()} [chat-store] ❌ SUPABASE_URL and SUPABASE_KEY are required — the CRM/chat store cannot run without them.`);
 }
+
+const supabase = createClient(supabaseUrl, supabaseKey);
+
+// Boot-time connection test
+supabase.from('contacts').select('phone', { count: 'exact', head: true }).limit(1)
+  .then(({ error, count }) => {
+    if (error) {
+      console.error(`${new Date().toISOString()} [chat-store] ❌ Supabase connection FAILED:`, error.message);
+    } else {
+      console.log(`${new Date().toISOString()} [chat-store] ✅ Supabase connected (contacts: ${count ?? 'unknown'})`);
+    }
+  })
+  .catch(err => {
+    console.error(`${new Date().toISOString()} [chat-store] ❌ Supabase connection exception:`, err.message);
+  });
 
 /**
  * Ensures the contact exists, updates their name and last_message_at.
  */
 async function upsertContact(phone, name, direction) {
-  if (!supabase) return;
   try {
     const payload = {
       phone: phone,
       last_message_at: new Date().toISOString()
     };
     if (name) payload.name = name;
-    
+
     if (direction === 'inbound') {
       payload.label = 'unread';
       const existing = await getContactByPhone(phone);
@@ -32,7 +45,7 @@ async function upsertContact(phone, name, direction) {
       }
     }
 
-    const { data, error } = await supabase
+    const { error } = await supabase
       .from('contacts')
       .upsert(payload, { onConflict: 'phone' });
 
@@ -47,7 +60,6 @@ async function upsertContact(phone, name, direction) {
  * direction: 'inbound' or 'outbound'
  */
 async function saveMessage(phone, name, direction, content, wamid = null, status = null) {
-  if (!supabase) return;
   try {
     await upsertContact(phone, name, direction);
 
@@ -71,7 +83,6 @@ async function saveMessage(phone, name, direction, content, wamid = null, status
  * Updates the delivery/read status of a specific message.
  */
 async function updateMessageStatus(wamid, status) {
-  if (!supabase || !wamid) return;
   try {
     const { error } = await supabase
       .from('messages')
@@ -88,7 +99,6 @@ async function updateMessageStatus(wamid, status) {
  * Checks if the bot is currently paused for a specific contact.
  */
 async function isBotPaused(phone) {
-  if (!supabase) return false;
   try {
     const { data, error } = await supabase
       .from('contacts')
@@ -100,7 +110,7 @@ async function isBotPaused(phone) {
 
     const pausedUntil = new Date(data.bot_paused_until);
     const now = new Date();
-    
+
     return now < pausedUntil;
   } catch (err) {
     console.error('[chat-store] exception checking bot pause:', err.message);
@@ -113,7 +123,6 @@ async function isBotPaused(phone) {
  * durationHours: number of hours to pause (e.g. 24). If 0 or null, unpauses.
  */
 async function setBotPause(phone, durationHours) {
-  if (!supabase) return;
   try {
     let pausedUntil = null;
     if (durationHours > 0) {
@@ -137,7 +146,6 @@ async function setBotPause(phone, durationHours) {
  * Updates the custom label for a contact.
  */
 async function updateContactLabel(phone, label) {
-  if (!supabase) return;
   try {
     const { error } = await supabase
       .from('contacts')
@@ -154,7 +162,6 @@ async function updateContactLabel(phone, label) {
  * Updates CRM fields for a contact (Phase 1).
  */
 async function updateContactCRM(phone, updates) {
-  if (!supabase) return;
   try {
     const { error } = await supabase
       .from('contacts')
@@ -171,7 +178,6 @@ async function updateContactCRM(phone, updates) {
  * Fetches internal notes for a contact.
  */
 async function getNotes(phone) {
-  if (!supabase) return [];
   try {
     const { data, error } = await supabase
       .from('notes')
@@ -194,7 +200,6 @@ async function getNotes(phone) {
  * Adds an internal note for a contact.
  */
 async function addNote(phone, note, created_by = 'Admin') {
-  if (!supabase) return null;
   try {
     const { data, error } = await supabase
       .from('notes')
@@ -222,10 +227,9 @@ async function addNote(phone, note, created_by = 'Admin') {
  * Admins see all. Employees see only their assigned chats or unassigned chats.
  */
 async function getContacts(role = 'admin', username = '') {
-  if (!supabase) return [];
   try {
     let query = supabase.from('contacts').select('*');
-    
+
     if (role === 'employee') {
       query = query.or(`assigned_agent.eq.${username},assigned_agent.eq.Unassigned,assigned_agent.is.null`);
     }
@@ -247,13 +251,7 @@ async function getContacts(role = 'admin', username = '') {
  * Fetches leads that have abandoned the flow and are eligible for the Drip Campaign.
  */
 async function getAbandonedLeads() {
-  if (!supabase) return [];
   try {
-    // Pull leads still eligible for the drip (stage < 15, or never set).
-    // NOTE: lead_status exclusion is done in JS below — chaining `.neq()`
-    // filters in PostgREST silently drops rows where lead_status IS NULL
-    // (since `NULL <> 'x'` is not TRUE), which would exclude almost every
-    // brand-new abandoned lead and stop follow-ups from ever sending.
     const { data, error } = await supabase.from('contacts')
       .select('*')
       .or('abandonment_drip_stage.is.null,abandonment_drip_stage.lt.15');
@@ -268,9 +266,9 @@ async function getAbandonedLeads() {
     ]);
     return (data || []).filter(c => {
       const stage = c.abandonment_drip_stage || 0;
-      if (stage >= 15) return false;                          // drip done / disabled (99)
+      if (stage >= 15) return false;
       if (c.lead_status && EXCLUDED_STATUSES.has(c.lead_status)) return false;
-      return true;                                            // NULL lead_status → still a lead
+      return true;
     });
   } catch (err) {
     console.error('[chat-store] exception fetching abandoned leads:', err.message);
@@ -282,7 +280,6 @@ async function getAbandonedLeads() {
  * Fetches a single contact by phone.
  */
 async function getContactByPhone(phone) {
-  if (!supabase) return null;
   try {
     const { data, error } = await supabase.from('contacts').select('*').eq('phone', phone).single();
     if (error && error.code !== 'PGRST116') {
@@ -298,7 +295,6 @@ async function getContactByPhone(phone) {
  * Log in a user.
  */
 async function loginUser(username, password) {
-  if (!supabase) return null;
   try {
     const { data, error } = await supabase
       .from('users')
@@ -306,7 +302,7 @@ async function loginUser(username, password) {
       .eq('username', username)
       .eq('password_hash', password)
       .single();
-    
+
     if (error || !data) return null;
 
     // Update last login
@@ -323,7 +319,6 @@ async function loginUser(username, password) {
  * Fetches all system users for agent assignment dropdowns.
  */
 async function getUsers() {
-  if (!supabase) return [];
   try {
     const { data, error } = await supabase
       .from('users')
@@ -341,44 +336,26 @@ async function getUsers() {
   }
 }
 
-const metricUpdateQueue = [];
-let processingQueue = false;
-
-async function processMetricQueue() {
-  if (processingQueue) return;
-  processingQueue = true;
-  while (metricUpdateQueue.length > 0) {
-    const { campaign_name, metric_type, resolve, reject } = metricUpdateQueue[0];
-    try {
-      let { data } = await supabase.from('broadcast_metrics').select(metric_type).eq('campaign_name', campaign_name).single();
-      let currentVal = data ? data[metric_type] || 0 : 0;
-      
-      if (!data) {
-        const insertData = { campaign_name, sent: 0, delivered: 0, read: 0, replied: 0, booked: 0 };
-        insertData[metric_type] = 1;
-        await supabase.from('broadcast_metrics').insert([insertData]);
-      } else {
-        await supabase.from('broadcast_metrics').update({ [metric_type]: currentVal + 1 }).eq('campaign_name', campaign_name);
-      }
-      resolve();
-    } catch (err) {
-      reject(err);
-    }
-    metricUpdateQueue.shift();
-  }
-  processingQueue = false;
-}
-
 async function updateBroadcastMetric(campaign_name, metric_type) {
-  if (!supabase) return;
+  // Chained metrics queue in production
   return new Promise((resolve, reject) => {
-    metricUpdateQueue.push({ campaign_name, metric_type, resolve, reject });
-    processMetricQueue().catch(reject);
+    supabase.from('broadcast_metrics').select(metric_type).eq('campaign_name', campaign_name).single()
+      .then(({ data }) => {
+        let currentVal = data ? data[metric_type] || 0 : 0;
+        if (!data) {
+          const insertData = { campaign_name, sent: 0, delivered: 0, read: 0, replied: 0, booked: 0 };
+          insertData[metric_type] = 1;
+          return supabase.from('broadcast_metrics').insert([insertData]);
+        } else {
+          return supabase.from('broadcast_metrics').update({ [metric_type]: currentVal + 1 }).eq('campaign_name', campaign_name);
+        }
+      })
+      .then(() => resolve())
+      .catch(reject);
   });
 }
 
 async function getBroadcastMetrics() {
-  if (!supabase) return [];
   try {
     const { data } = await supabase.from('broadcast_metrics').select('*').order('campaign_name', { ascending: false });
     return data || [];
@@ -389,7 +366,6 @@ async function getBroadcastMetrics() {
  * Fetch Overdue Follow-ups
  */
 async function getDueFollowups() {
-  if (!supabase) return [];
   try {
     const { data } = await supabase
       .from('contacts')
@@ -406,7 +382,6 @@ async function getDueFollowups() {
  * Quick Replies Management
  */
 async function getQuickReplies() {
-  if (!supabase) return [];
   try {
     const { data } = await supabase.from('quick_replies').select('*').order('shortcut', { ascending: true });
     return data || [];
@@ -414,10 +389,7 @@ async function getQuickReplies() {
 }
 
 async function addQuickReply(shortcut, message) {
-  if (!supabase) return null;
   try {
-    // If the table lacks a unique constraint on shortcut, upsert might fail if not configured. 
-    // We will do a safe delete then insert.
     await supabase.from('quick_replies').delete().eq('shortcut', shortcut);
     const { data } = await supabase.from('quick_replies').insert([{ shortcut, message }]).select().single();
     return data;
@@ -425,7 +397,6 @@ async function addQuickReply(shortcut, message) {
 }
 
 async function deleteQuickReply(shortcut) {
-  if (!supabase) return;
   try {
     await supabase.from('quick_replies').delete().eq('shortcut', shortcut);
   } catch (err) {}
@@ -435,7 +406,6 @@ async function deleteQuickReply(shortcut) {
  * Fetches the conversation history for a specific contact.
  */
 async function getMessages(phone) {
-  if (!supabase) return [];
   try {
     const { data, error } = await supabase
       .from('messages')
@@ -454,8 +424,246 @@ async function getMessages(phone) {
   }
 }
 
+/**
+ * Fetches "Interested" maid-service customers eligible for the WhatsApp
+ * follow-up drip. Reads from the `customers` table (the maid-placement lead
+ * list) — NOT `contacts`. Qualifies rows where status = 'Interested' and the
+ * drip is not yet complete (wa_followup_stage < 15, or unset).
+ *
+ * Requires this column (run once in the Supabase SQL editor):
+ *   ALTER TABLE customers ADD COLUMN IF NOT EXISTS wa_followup_stage smallint DEFAULT 0;
+ */
+async function getInterestedFollowupCustomers() {
+  try {
+    const { data, error } = await supabase
+      .from('customers')
+      .select('id, name, phone, status, created_at, wa_followup_stage')
+      .eq('status', 'Interested')
+      .or('wa_followup_stage.is.null,wa_followup_stage.lt.15');
+    if (error) {
+      console.error('[chat-store] error fetching interested customers (is the wa_followup_stage column added?):', error.message);
+      return [];
+    }
+    return data || [];
+  } catch (err) {
+    console.error('[chat-store] exception fetching interested customers:', err.message);
+    return [];
+  }
+}
+
+/**
+ * Advances a customer's WhatsApp follow-up stage. Called after each send so a
+ * repeat press of "Run Follow-Ups" never re-sends the same stage.
+ */
+async function advanceCustomerFollowupStage(id, stage) {
+  try {
+    const { error } = await supabase
+      .from('customers')
+      .update({ wa_followup_stage: stage })
+      .eq('id', id);
+    if (error) console.error('[chat-store] error advancing followup stage:', error.message);
+  } catch (err) {
+    console.error('[chat-store] exception advancing followup stage:', err.message);
+  }
+}
+
+/**
+ * Fetches "dead / closed" customers eligible for the weekly maid-revival
+ * campaign: status is Not Interested or Didn't Convert, they still have room
+ * in the 1-month window (revive_stage < 4), and they have coordinates to
+ * match a nearby maid.
+ *
+ * Requires these columns (run once in the Supabase SQL editor):
+ *   ALTER TABLE customers ADD COLUMN IF NOT EXISTS revive_stage smallint DEFAULT 0;
+ *   ALTER TABLE customers ADD COLUMN IF NOT EXISTS revive_last_sent_at timestamptz;
+ */
+async function getReviveCustomers() {
+  try {
+    const { data, error } = await supabase
+      .from('customers')
+      .select('id, name, phone, status, latitude, longitude, revive_stage, revive_last_sent_at')
+      .in('status', ['Not Interested', "Didn't Convert"])
+      .or('revive_stage.is.null,revive_stage.lt.4')
+      .not('latitude', 'is', null)
+      .not('longitude', 'is', null);
+    if (error) {
+      console.error('[chat-store] error fetching revive customers (are revive_stage/revive_last_sent_at columns added?):', error.message);
+      return [];
+    }
+    return data || [];
+  } catch (err) {
+    console.error('[chat-store] exception fetching revive customers:', err.message);
+    return [];
+  }
+}
+
+/**
+ * Advances a customer's revive campaign progress (stage 0→4) and stamps the
+ * send time so the 7-day gate can pace the next one.
+ */
+async function advanceReviveStage(id, stage, sentAtISO) {
+  try {
+    const { error } = await supabase
+      .from('customers')
+      .update({ revive_stage: stage, revive_last_sent_at: sentAtISO })
+      .eq('id', id);
+    if (error) console.error('[chat-store] error advancing revive stage:', error.message);
+  } catch (err) {
+    console.error('[chat-store] exception advancing revive stage:', err.message);
+  }
+}
+
+// ─── People directory (the 3 lead systems) ──────────────────
+// Maps each browsable group to its table and the columns that make up a
+// display row. Keeps the front-end generic across the three tables.
+const PEOPLE_SOURCES = {
+  flat_customers: { table: 'flat_customers', name: 'full_name', area: 'area',        tag: 'home_type',      status: 'status' },
+  customers:      { table: 'customers',      name: 'name',      area: 'location',     tag: 'service_needed', status: 'status' },
+  maids:          { table: 'maids',          name: 'name',      area: 'areas_served', tag: 'service_type',   status: 'status' },
+};
+
+function isPeopleGroup(group) {
+  return Object.prototype.hasOwnProperty.call(PEOPLE_SOURCES, group);
+}
+
+/**
+ * Fetches a normalized list of people from one of the three lead tables.
+ * Returns rows shaped { id, name, phone, area, tag, status }.
+ */
+async function getPeople(group) {
+  const src = PEOPLE_SOURCES[group];
+  if (!src) return [];
+  try {
+    const cols = `id, ${src.name}, phone, ${src.area}, ${src.tag}, ${src.status}`;
+    const { data, error } = await supabase
+      .from(src.table)
+      .select(cols)
+      .order('id', { ascending: false })
+      .limit(2000);
+    if (error) {
+      console.error(`[chat-store] error fetching people (${group}):`, error.message);
+      return [];
+    }
+    return (data || []).map(r => ({
+      id:     r.id,
+      name:   r[src.name] || 'Unknown',
+      phone:  r.phone || '',
+      area:   r[src.area] || '',
+      tag:    r[src.tag] || '',
+      status: r[src.status] || '',
+    }));
+  } catch (err) {
+    console.error(`[chat-store] exception fetching people (${group}):`, err.message);
+    return [];
+  }
+}
+
+/**
+ * Ensures a chat contact exists for a person from one of the lead tables so
+ * agents can open a normal conversation with them. Sets name and
+ * service_category without touching label/drip state on existing contacts.
+ * Returns the contact row.
+ */
+async function ensureContact(phone, name, serviceCategory) {
+  try {
+    const existing = await getContactByPhone(phone);
+    if (existing) {
+      const updates = {};
+      if (name && !existing.name) updates.name = name;
+      if (serviceCategory && !existing.service_category) updates.service_category = serviceCategory;
+      if (Object.keys(updates).length) {
+        await supabase.from('contacts').update(updates).eq('phone', phone);
+        return { ...existing, ...updates };
+      }
+      return existing;
+    }
+    const row = {
+      phone,
+      name: name || null,
+      service_category: serviceCategory || null,
+      lead_status: 'New Lead',
+      label: 'read',
+      last_message_at: new Date().toISOString(),
+    };
+    const { data, error } = await supabase.from('contacts').insert(row).select().single();
+    if (error) {
+      console.error('[chat-store] error creating contact:', error.message);
+      return null;
+    }
+    return data;
+  } catch (err) {
+    console.error('[chat-store] exception in ensureContact:', err.message);
+    return null;
+  }
+}
+
+// ─── CRM notifications (admin alerts mirrored into the UI) ───
+// Reuses the shared `notifications` table (also used by the telecalling
+// CRM: user_id / lead_type / lead_id / type / title / body / is_read).
+// WhatsApp alerts are written with lead_type = 'whatsapp' and the customer
+// phone in lead_id, and reads/mark-read are scoped to lead_type='whatsapp'
+// so the other system's notifications and unread state are never touched.
+async function addNotification(title, body, phone = null, type = 'alert') {
+  try {
+    const { error } = await supabase.from('notifications').insert({
+      lead_type: 'whatsapp',
+      lead_id:   phone || null,
+      type,
+      title,
+      body,
+      is_read:   false,
+    });
+    if (error) console.error('[chat-store] error adding notification:', error.message);
+  } catch (err) {
+    console.error('[chat-store] exception adding notification:', err.message);
+  }
+}
+
+async function getNotifications(limit = 50) {
+  try {
+    const { data, error } = await supabase
+      .from('notifications')
+      .select('*')
+      .eq('lead_type', 'whatsapp')
+      .order('created_at', { ascending: false })
+      .limit(limit);
+    if (error) return [];
+    // Normalize to the shape the CRM UI expects.
+    return (data || []).map(n => ({
+      id: n.id,
+      title: n.title,
+      body: n.body,
+      phone: n.lead_id || null,
+      type: n.type,
+      read: !!n.is_read,
+      created_at: n.created_at,
+    }));
+  } catch (err) { return []; }
+}
+
+async function markNotificationsRead() {
+  try {
+    await supabase.from('notifications')
+      .update({ is_read: true })
+      .eq('lead_type', 'whatsapp')
+      .eq('is_read', false);
+  } catch (err) {
+    console.error('[chat-store] exception marking notifications read:', err.message);
+  }
+}
+
 module.exports = {
   saveMessage,
+  ensureContact,
+  addNotification,
+  getNotifications,
+  markNotificationsRead,
+  getInterestedFollowupCustomers,
+  advanceCustomerFollowupStage,
+  getReviveCustomers,
+  advanceReviveStage,
+  getPeople,
+  isPeopleGroup,
   isBotPaused,
   setBotPause,
   getContacts,

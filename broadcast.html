@@ -3,448 +3,720 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>CLEANLY — Broadcast Campaigns</title>
+  <title>Cleanly WhatsApp - Campaigns</title>
   <!-- Google Fonts -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&family=Outfit:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <!-- SheetJS Library for local Excel/CSV parsing -->
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@500;600;700&display=swap" rel="stylesheet">
+  <!-- SheetJS Library -->
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
   
   <style>
     :root {
-      --bg-gradient: linear-gradient(135deg, #0f172a 0%, #020617 100%);
-      --card-bg: rgba(30, 41, 59, 0.4);
-      --card-border: rgba(255, 255, 255, 0.08);
-      --text-main: #f8fafc;
-      --text-muted: #94a3b8;
-      --primary: #38bdf8;
-      --primary-hover: #0ea5e9;
-      --success: #10b981;
-      --error: #ef4444;
-      --glow: rgba(56, 189, 248, 0.15);
+        --bg-main: #f1f5f9;
+        --bg-sidebar: #ffffff;
+        --bg-panel: #ffffff;
+        --border-color: #94a3b8;
+        --text-main: #0f172a;
+        --text-muted: #334155;
+        --primary: #10b981; /* Emerald / WhatsApp Green */
+        --primary-glow: rgba(16, 185, 129, 0.08);
+        --indigo: #4f46e5;
+        --indigo-glow: rgba(79, 70, 229, 0.08);
+        --error: #e11d48;
+        --warning: #d97706;
+        --success: #10b981;
+        --card-bg: #ffffff;
     }
 
     * {
-      box-sizing: border-box;
-      margin: 0;
-      padding: 0;
+        box-sizing: border-box;
+        margin: 0;
+        padding: 0;
+        scrollbar-width: thin;
+        scrollbar-color: rgba(0, 0, 0, 0.1) transparent;
+    }
+
+    /* Custom Scrollbars */
+    ::-webkit-scrollbar {
+        width: 6px;
+        height: 6px;
+    }
+    ::-webkit-scrollbar-track {
+        background: transparent;
+    }
+    ::-webkit-scrollbar-thumb {
+        background: rgba(0, 0, 0, 0.1);
+        border-radius: 4px;
+    }
+    ::-webkit-scrollbar-thumb:hover {
+        background: rgba(0, 0, 0, 0.2);
     }
 
     body {
-      font-family: 'Inter', system-ui, sans-serif;
-      background: var(--bg-gradient);
-      color: var(--text-main);
-      min-height: 100vh;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      padding: 2rem 1rem;
+        font-family: 'Inter', system-ui, sans-serif;
+        background-color: var(--bg-main);
+        color: var(--text-main);
+        height: 100vh;
+        display: flex;
+        overflow: hidden;
     }
 
-    h1, h2, h3 {
-      font-family: 'Outfit', sans-serif;
+    .app-container {
+        display: flex;
+        width: 100vw;
+        height: 100vh;
+        overflow: hidden;
+        background: var(--bg-main);
     }
 
-    .container {
-      width: 100%;
-      max-width: 900px;
-      margin: 0 auto;
+    /* Far-Left Sidebar Navigation (260px) */
+    .sidebar {
+        width: 260px;
+        background: var(--bg-sidebar);
+        border-right: 1px solid var(--border-color);
+        display: flex;
+        flex-direction: column;
+        justify-content: space-between;
+        flex-shrink: 0;
     }
 
-    /* Header styling */
-    header {
-      text-align: center;
-      margin-bottom: 2.5rem;
+    .sidebar-brand {
+        padding: 24px;
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        border-bottom: 1px solid var(--border-color);
     }
 
-    header h1 {
-      font-size: 2.5rem;
-      font-weight: 700;
-      background: linear-gradient(to right, #38bdf8, #818cf8);
-      -webkit-background-clip: text;
-      -webkit-text-fill-color: transparent;
-      margin-bottom: 0.5rem;
+    .brand-logo {
+        width: 38px;
+        height: 38px;
+        background: linear-gradient(135deg, var(--primary) 0%, #047857 100%);
+        border-radius: 10px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        box-shadow: 0 4px 12px rgba(16, 185, 129, 0.3);
+        transform: rotate(-3deg);
     }
 
-    header p {
-      color: var(--text-muted);
-      font-size: 1rem;
+    .brand-logo svg {
+        fill: white;
+        width: 20px;
+        height: 20px;
+    }
+
+    .brand-name {
+        font-family: 'Outfit', sans-serif;
+        font-size: 20px;
+        font-weight: 700;
+        background: linear-gradient(to right, #0f172a, #475569);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+    }
+
+    .sidebar-menu {
+        flex: 1;
+        padding: 24px 16px;
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+    }
+
+    .menu-item {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        padding: 12px 16px;
+        border-radius: 12px;
+        color: var(--text-muted);
+        text-decoration: none;
+        font-weight: 500;
+        font-size: 14.5px;
+        cursor: pointer;
+        transition: all 0.2s ease;
+        background: transparent;
+        border: none;
+        text-align: left;
+        width: 100%;
+    }
+
+    .menu-item svg {
+        width: 20px;
+        height: 20px;
+        transition: stroke 0.2s;
+    }
+
+    .menu-item:hover {
+        color: var(--text-main);
+        background: #f1f5f9;
+    }
+
+    .menu-item.active {
+        color: var(--primary);
+        background: var(--primary-glow);
+        font-weight: 600;
+    }
+
+    .menu-item.active svg {
+        stroke: var(--primary);
+    }
+
+    .sidebar-footer {
+        padding: 20px 16px;
+        border-top: 1px solid var(--border-color);
+        background: #f8fafc;
+    }
+
+    .user-profile {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        margin-bottom: 16px;
+    }
+
+    .user-avatar {
+        width: 40px;
+        height: 40px;
+        border-radius: 50%;
+        background: #e2e8f0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-weight: 600;
+        color: #0f172a;
+        font-size: 16px;
+    }
+
+    .user-details {
+        flex: 1;
+        min-width: 0;
+    }
+
+    .user-name {
+        font-size: 14px;
+        font-weight: 600;
+        color: var(--text-main);
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+
+    .user-role {
+        font-size: 11px;
+        color: var(--text-muted);
+    }
+
+    .btn-logout {
+        width: 100%;
+        padding: 10px;
+        border-radius: 8px;
+        background: rgba(225, 29, 72, 0.06);
+        border: 1px solid rgba(225, 29, 72, 0.1);
+        color: var(--error);
+        font-size: 13px;
+        font-weight: 600;
+        cursor: pointer;
+        transition: all 0.2s;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 8px;
+    }
+
+    .btn-logout:hover {
+        background: var(--error);
+        color: white;
+    }
+
+    /* Main workspace area */
+    .workspace-pane {
+        flex: 1;
+        padding: 40px;
+        overflow-y: auto;
+        background: var(--bg-main);
+    }
+
+    .workspace-container {
+        max-width: 1100px;
+        margin: 0 auto;
+    }
+
+    .page-header {
+        margin-bottom: 32px;
+    }
+
+    .page-title {
+        font-family: 'Outfit', sans-serif;
+        font-size: 26px;
+        font-weight: 700;
+        margin-bottom: 6px;
+        background: linear-gradient(to right, #0f172a, #475569);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+    }
+
+    .page-subtitle {
+        color: var(--text-muted);
+        font-size: 14px;
     }
 
     /* Cards */
     .card {
-      background: var(--card-bg);
-      border: 1px solid var(--card-border);
-      backdrop-filter: blur(16px);
-      -webkit-backdrop-filter: blur(16px);
-      border-radius: 1.25rem;
-      padding: 2rem;
-      margin-bottom: 2rem;
-      box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.3);
-      transition: transform 0.2s, border-color 0.2s;
+        background: var(--bg-panel);
+        border: 1px solid var(--border-color);
+        border-radius: 20px;
+        padding: 28px;
+        margin-bottom: 24px;
+        box-shadow: 0 4px 16px rgba(0, 0, 0, 0.04);
     }
 
-    .card:hover {
-      border-color: rgba(56, 189, 248, 0.25);
+    .card h3 {
+        font-family: 'Outfit', sans-serif;
+        font-size: 16px;
+        font-weight: 600;
+        margin-bottom: 20px;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        border-bottom: 1px solid #f1f5f9;
+        padding-bottom: 12px;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        color: var(--text-muted);
     }
 
-    .card h2 {
-      font-size: 1.25rem;
-      font-weight: 600;
-      margin-bottom: 1.5rem;
-      display: flex;
-      align-items: center;
-      gap: 0.5rem;
-      border-bottom: 1px solid var(--card-border);
-      padding-bottom: 0.75rem;
+    .card h3 svg {
+        width: 18px;
+        height: 18px;
+        stroke: var(--primary);
     }
 
-    /* Grid Form */
+    /* Form Grid */
     .form-grid {
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 1.5rem;
-      margin-bottom: 1.5rem;
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 20px;
     }
 
-    @media (max-width: 600px) {
-      .form-grid {
-        grid-template-columns: 1fr;
-      }
+    @media (max-width: 768px) {
+        .form-grid {
+            grid-template-columns: 1fr;
+        }
     }
 
     .form-group {
-      display: flex;
-      flex-direction: column;
-      gap: 0.5rem;
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+    }
+
+    .form-group.full-width {
+        grid-column: 1 / -1;
     }
 
     label {
-      font-size: 0.875rem;
-      font-weight: 500;
-      color: var(--text-muted);
+        font-size: 13px;
+        font-weight: 500;
+        color: var(--text-muted);
     }
 
     input, select {
-      background: rgba(15, 23, 42, 0.6);
-      border: 1px solid var(--card-border);
-      border-radius: 0.625rem;
-      padding: 0.75rem 1rem;
-      color: var(--text-main);
-      font-family: inherit;
-      font-size: 0.95rem;
-      outline: none;
-      transition: border-color 0.2s, box-shadow 0.2s;
+        background: #ffffff;
+        border: 1px solid var(--border-color);
+        border-radius: 10px;
+        padding: 12px 14px;
+        color: var(--text-main);
+        font-family: inherit;
+        font-size: 14px;
+        outline: none;
+        transition: border-color 0.2s;
     }
 
     input:focus, select:focus {
-      border-color: var(--primary);
-      box-shadow: 0 0 0 3px rgba(56, 189, 248, 0.15);
+        border-color: var(--primary);
     }
 
-    /* Drag & Drop File Zone */
+    /* Drag & Drop Zone */
     .dropzone {
-      border: 2px dashed rgba(255, 255, 255, 0.15);
-      border-radius: 0.75rem;
-      padding: 2.5rem 1.5rem;
-      text-align: center;
-      cursor: pointer;
-      background: rgba(15, 23, 42, 0.3);
-      transition: border-color 0.2s, background 0.2s;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      gap: 0.75rem;
+        border: 2px dashed #cbd5e1;
+        border-radius: 12px;
+        padding: 40px 20px;
+        text-align: center;
+        cursor: pointer;
+        background: #f8fafc;
+        transition: border-color 0.2s, background 0.2s;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 12px;
     }
 
     .dropzone:hover, .dropzone.dragover {
-      border-color: var(--primary);
-      background: rgba(56, 189, 248, 0.04);
+        border-color: var(--primary);
+        background: rgba(16, 185, 129, 0.04);
     }
 
     .dropzone svg {
-      width: 48px;
-      height: 48px;
-      color: var(--text-muted);
-      transition: color 0.2s;
+        width: 44px;
+        height: 44px;
+        color: var(--text-muted);
+        transition: color 0.2s;
     }
 
     .dropzone:hover svg {
-      color: var(--primary);
+        color: var(--primary);
     }
 
     .dropzone p {
-      font-size: 0.9rem;
-      color: var(--text-muted);
+        font-size: 14px;
+        color: var(--text-muted);
     }
 
     .dropzone .highlight {
-      color: var(--primary);
-      font-weight: 500;
+        color: var(--primary);
+        font-weight: 600;
     }
 
-    /* Table Preview */
+    /* Preview Table container */
     .preview-container {
-      margin-top: 1.5rem;
-      max-height: 250px;
-      overflow-y: auto;
-      border: 1px solid var(--card-border);
-      border-radius: 0.625rem;
-      background: rgba(15, 23, 42, 0.4);
+        margin-top: 20px;
+        max-height: 240px;
+        overflow-y: auto;
+        border: 1px solid var(--border-color);
+        border-radius: 10px;
+        background: #f8fafc;
     }
 
     table {
-      width: 100%;
-      border-collapse: collapse;
-      font-size: 0.875rem;
-      text-align: left;
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 13px;
+        text-align: left;
     }
 
     th {
-      background: rgba(15, 23, 42, 0.8);
-      position: sticky;
-      top: 0;
-      padding: 0.75rem 1rem;
-      font-weight: 600;
-      color: var(--text-muted);
-      border-bottom: 1px solid var(--card-border);
+        background: #f1f5f9;
+        position: sticky;
+        top: 0;
+        padding: 10px 16px;
+        font-weight: 600;
+        color: var(--text-muted);
+        border-bottom: 1px solid var(--border-color);
+        z-index: 2;
     }
 
     td {
-      padding: 0.625rem 1rem;
-      border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+        padding: 10px 16px;
+        border-bottom: 1px solid #f1f5f9;
     }
 
     tr:last-child td {
-      border-bottom: none;
+        border-bottom: none;
     }
 
-    /* Action Buttons */
-    .btn {
-      width: 100%;
-      padding: 1rem;
-      border-radius: 0.75rem;
-      border: none;
-      font-size: 1rem;
-      font-weight: 600;
-      cursor: pointer;
-      transition: transform 0.1s, opacity 0.2s;
-      display: flex;
-      justify-content: center;
-      align-items: center;
-      gap: 0.5rem;
-      background: linear-gradient(135deg, var(--primary) 0%, #6366f1 100%);
-      color: white;
-      box-shadow: 0 4px 15px rgba(56, 189, 248, 0.3);
+    .btn-action {
+        width: 100%;
+        padding: 14px;
+        border-radius: 12px;
+        border: none;
+        font-size: 15px;
+        font-weight: 600;
+        cursor: pointer;
+        transition: opacity 0.2s;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        gap: 8px;
+        background: linear-gradient(135deg, var(--primary) 0%, #047857 100%);
+        color: white;
+        box-shadow: 0 4px 12px rgba(16, 185, 129, 0.15);
+        font-family: inherit;
     }
 
-    .btn:hover {
-      opacity: 0.95;
+    .btn-action:hover {
+        opacity: 0.95;
     }
 
-    .btn:active {
-      transform: scale(0.99);
+    .btn-action:disabled {
+        background: #e2e8f0;
+        color: #94a3b8;
+        cursor: not-allowed;
+        box-shadow: none;
     }
 
-    .btn:disabled {
-      background: #334155;
-      color: #64748b;
-      cursor: not-allowed;
-      box-shadow: none;
+    /* Live Analytics */
+    .analytics-grid {
+        display: grid;
+        grid-template-columns: repeat(4, 1fr);
+        gap: 16px;
+        margin-bottom: 24px;
     }
 
-    /* Live Progress Section */
-    .progress-stats {
-      display: grid;
-      grid-template-columns: repeat(4, 1fr);
-      gap: 1rem;
-      margin-bottom: 1.5rem;
+    @media (max-width: 600px) {
+        .analytics-grid {
+            grid-template-columns: repeat(2, 1fr);
+        }
     }
 
-    @media (max-width: 500px) {
-      .progress-stats {
-        grid-template-columns: repeat(2, 1fr);
-      }
+    .analytic-box {
+        background: #f8fafc;
+        border: 1px solid var(--border-color);
+        border-radius: 12px;
+        padding: 16px;
+        text-align: center;
     }
 
-    .stat-box {
-      background: rgba(15, 23, 42, 0.5);
-      border: 1px solid var(--card-border);
-      border-radius: 0.75rem;
-      padding: 1rem;
-      text-align: center;
+    .analytic-label {
+        font-size: 11px;
+        color: var(--text-muted);
+        font-weight: 600;
+        text-transform: uppercase;
+        margin-bottom: 6px;
+        letter-spacing: 0.5px;
     }
 
-    .stat-label {
-      font-size: 0.75rem;
-      color: var(--text-muted);
-      font-weight: 500;
-      text-transform: uppercase;
-      margin-bottom: 0.25rem;
+    .analytic-value {
+        font-size: 20px;
+        font-family: 'Outfit', sans-serif;
+        font-weight: 700;
     }
 
-    .stat-val {
-      font-size: 1.5rem;
-      font-family: 'Outfit', sans-serif;
-      font-weight: 700;
-    }
-
-    .stat-val.total { color: #f1f5f9; }
-    .stat-val.sent { color: var(--primary); }
-    .stat-val.success { color: var(--success); }
-    .stat-val.failed { color: var(--error); }
-
-    /* Progress bar */
-    .progress-bar-container {
-      width: 100%;
-      height: 10px;
-      background: rgba(15, 23, 42, 0.8);
-      border-radius: 9999px;
-      overflow: hidden;
-      margin-bottom: 1.5rem;
-      border: 1px solid var(--card-border);
+    .progress-bar-track {
+        width: 100%;
+        height: 8px;
+        background: #f1f5f9;
+        border-radius: 99px;
+        overflow: hidden;
+        margin-bottom: 24px;
+        border: 1px solid var(--border-color);
     }
 
     .progress-bar-fill {
-      height: 100%;
-      width: 0%;
-      background: linear-gradient(90deg, var(--primary) 0%, var(--success) 100%);
-      transition: width 0.3s ease;
-      box-shadow: 0 0 10px var(--primary);
+        height: 100%;
+        width: 0%;
+        background: linear-gradient(90deg, var(--primary) 0%, var(--indigo) 100%);
+        transition: width 0.3s ease;
+        box-shadow: 0 2px 4px rgba(16, 185, 129, 0.15);
     }
 
-    /* Console Log panel */
+    /* Monospace Console log terminal */
     .console-log {
-      background: #020617;
-      border: 1px solid var(--card-border);
-      border-radius: 0.75rem;
-      padding: 1rem;
-      font-family: monospace;
-      font-size: 0.8rem;
-      height: 180px;
-      overflow-y: auto;
-      color: #a7f3d0;
-      line-height: 1.5;
+        background: #0f172a;
+        border: 1px solid var(--border-color);
+        border-radius: 12px;
+        padding: 16px;
+        font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+        font-size: 12px;
+        height: 200px;
+        overflow-y: auto;
+        color: #38bdf8;
+        line-height: 1.6;
+        box-shadow: inset 0 2px 8px rgba(0, 0, 0, 0.1);
     }
 
     .log-line {
-      margin-bottom: 0.25rem;
-      white-space: pre-wrap;
+        margin-bottom: 4px;
+        white-space: pre-wrap;
     }
-
     .log-line.error { color: #fca5a5; }
-    .log-line.info { color: #93c5fd; }
+    .log-line.info { color: #a7f3d0; }
   </style>
 </head>
 <body>
 
-  <div class="container">
-    <header>
-      <h1>📢 CLEANLY Campaigns</h1>
-      <p>Broadcast WhatsApp Templates securely via Meta Cloud API</p>
-    </header>
-
-    <!-- Configuration Card -->
-    <div class="card">
-      <h2>
-        <svg style="width:20px;height:20px;" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"></path><path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path></svg>
-        Campaign Parameters
-      </h2>
-      <div class="form-grid">
-        <div class="form-group">
-          <label for="templateName">Approved Template Name</label>
-          <input type="text" id="templateName" placeholder="e.g. cleanly_invite" value="cleanly_deep_cleaning_offer">
+<div class="app-container">
+    <!-- COLUMN 1: Shared Left Sidebar Navigation -->
+    <div class="sidebar">
+        <div>
+            <div class="sidebar-brand">
+                <div class="brand-logo">
+                    <svg viewBox="0 0 24 24">
+                        <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 3c1.66 0 3 1.34 3 3s-1.34 3-3 3-3-1.34-3-3 1.34-3 3-3zm0 14.2c-2.5 0-4.71-1.28-6-3.22.03-1.99 4-3.08 6-3.08 1.99 0 5.97 1.09 6 3.08-1.29 1.94-3.5 3.22-6 3.22z"/>
+                    </svg>
+                </div>
+                <span class="brand-name">Cleanly WhatsApp</span>
+            </div>
+            
+            <div class="sidebar-menu">
+                <a href="/chat" id="navChatsBtn" class="menu-item">
+                    <svg fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M8.684 10.742a3 3 0 005.13 0M15.914 10a3 3 0 00-6.828 0M12 21V3"></path>
+                    </svg>
+                    <span>Conversations</span>
+                </a>
+                
+                <a href="/admin/broadcast" id="navBroadcastBtn" class="menu-item active">
+                    <svg fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M10.34 15.84c-.68-.68-1.79-.68-2.47 0M4.16 9.66c-.68-.68-1.79-.68-2.47 0M19.84 9.66c.68-.68 1.79-.68 2.47 0m-6.38 6.18c.68-.68 1.79-.68 2.47 0M12 18.75v-13.5"></path>
+                    </svg>
+                    <span>Campaigns</span>
+                </a>
+                
+                <a href="/chat#analytics" id="analyticsNavBtn" class="menu-item">
+                    <svg fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M3 13.125C3 12.504 3.504 12 4.125 12h2.25c.621 0 1.125.504 1.125 1.125v5.75c0 .621-.504 1.125-1.125 1.125h-2.25A1.125 1.125 0 013 18.875v-5.75zM9.75 8.625c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125v10.25c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 01-1.125-1.125v-10.25zM16.5 4.125c0-.621.504-1.125 1.125-1.125h2.25C20.496 3 21 3.504 21 4.125v14.75c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 01-1.125-1.125V4.125z"></path>
+                    </svg>
+                    <span>Analytics</span>
+                </a>
+            </div>
         </div>
-        <div class="form-group">
-          <label for="languageCode">Language Code</label>
-          <select id="languageCode">
-            <option value="en_US">English US (en_US)</option>
-            <option value="en">English (en)</option>
-            <option value="hi">Hindi (hi)</option>
-            <option value="mr">Marathi (mr)</option>
-          </select>
+        
+        <div class="sidebar-footer">
+            <div class="user-profile">
+                <div class="user-avatar" id="sidebarAvatar">U</div>
+                <div class="user-details">
+                    <div class="user-name" id="loggedInUser">Agent Name</div>
+                    <div class="user-role" id="userRoleBadge">Admin Portal</div>
+                </div>
+            </div>
+            <button class="btn-logout" id="logoutBtn" onclick="logout()">
+                <svg fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24" style="width:16px;height:16px;">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M15.75 9V5.25A2.25 2.25 0 0013.5 3h-6a2.25 2.25 0 00-2.25 2.25v13.5A2.25 2.25 0 007.5 21h6a2.25 2.25 0 002.25-2.25V15M12 9l-3 3m0 0l3 3m-3-3h12.75"></path>
+                </svg>
+                <span>Logout</span>
+            </button>
         </div>
-        <div class="form-group" style="grid-column: 1 / -1;">
-          <label for="headerUrl">Header Media URL (Video/Image)</label>
-          <input type="url" id="headerUrl" placeholder="e.g. https://example.com/video.mp4 (Required if template has a media header)">
-        </div>
-      </div>
     </div>
 
-    <!-- Upload Card -->
-    <div class="card">
-      <h2>
-        <svg style="width:20px;height:20px;" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"></path></svg>
-        Load Target List
-      </h2>
-      <div class="dropzone" id="dropzone">
-        <svg fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m6.75 12H9m1.5-12H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z"></path></svg>
-        <p>Drag and drop your <span class="highlight">Excel (.xlsx, .xls)</span> or <span class="highlight">CSV (.csv)</span> here</p>
-        <p style="font-size:0.78rem;opacity:0.7;">Make sure column headers contain <b>"Phone"</b> and <b>"Name"</b></p>
-        <input type="file" id="fileInput" accept=".xlsx, .xls, .csv" style="display:none;">
-      </div>
+    <!-- COLUMN 2 & 3: Workspace area -->
+    <div class="workspace-pane">
+        <div class="workspace-container">
+            <div class="page-header">
+                <h1 class="page-title">Broadcast Campaigns</h1>
+                <p class="page-subtitle">Schedule and send official WhatsApp templates to database leads</p>
+            </div>
 
-      <!-- Preview Table -->
-      <div id="previewWrapper" style="display:none;">
-        <div class="preview-container">
-          <table id="previewTable">
-            <thead>
-              <tr>
-                <th>Row</th>
-                <th>Name</th>
-                <th>Phone Number</th>
-              </tr>
-            </thead>
-            <tbody id="previewBody"></tbody>
-          </table>
+            <!-- Campaign config grid -->
+            <div class="card">
+                <h3>
+                    <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"></path>
+                    </svg>
+                    Campaign settings
+                </h3>
+                <div class="form-grid">
+                    <div class="form-group">
+                        <label for="templateName">Approved Template Name</label>
+                        <input type="text" id="templateName" placeholder="e.g. day3_follow_up" value="cleanly_deep_cleaning_offer">
+                    </div>
+                    <div class="form-group">
+                        <label for="languageCode">Language Code</label>
+                        <select id="languageCode">
+                            <option value="en_US">English US (en_US)</option>
+                            <option value="en">English (en)</option>
+                            <option value="hi">Hindi (hi)</option>
+                            <option value="mr">Marathi (mr)</option>
+                        </select>
+                    </div>
+                    <div class="form-group full-width">
+                        <label for="headerUrl">Header Media URL (Optional video/image header link)</label>
+                        <input type="url" id="headerUrl" placeholder="e.g. https://domain.com/video.mp4">
+                    </div>
+                </div>
+            </div>
+
+            <!-- Upload contacts list card -->
+            <div class="card">
+                <h3>
+                    <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"></path>
+                    </svg>
+                    Recipient Database
+                </h3>
+                <div class="dropzone" id="dropzone">
+                    <svg fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M12 16.5V9.75m0 0l3 3m-3-3l-3 3M6.75 19.5a4.5 4.5 0 01-1.41-8.775 5.25 5.25 0 0110.233-2.33 3 3 0 013.758 3.848A3.752 3.752 0 0118 19.5H6.75z"></path>
+                    </svg>
+                    <p>Drag and drop your spreadsheet <span class="highlight">Excel (.xlsx, .xls)</span> or <span class="highlight">CSV (.csv)</span></p>
+                    <p style="font-size:12px; opacity:0.65; margin-top:-4px;">Ensure spreadsheet columns include "Phone" and "Name"</p>
+                    <input type="file" id="fileInput" accept=".xlsx, .xls, .csv" style="display:none;">
+                </div>
+
+                <!-- Preview Table -->
+                <div id="previewWrapper" style="display:none;">
+                    <div class="preview-container">
+                        <table id="previewTable">
+                            <thead>
+                                <tr>
+                                    <th>Row</th>
+                                    <th>Name</th>
+                                    <th>Phone Number</th>
+                                </tr>
+                            </thead>
+                            <tbody id="previewBody"></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Execute Trigger -->
+            <div style="margin-bottom: 32px;">
+                <button class="btn-action" id="sendBtn" disabled>
+                    <svg style="width:20px;height:20px;" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M6 12L3.269 3.126A59.768 59.768 0 0121.485 12 59.77 59.77 0 013.27 20.876L5.999 12zm0 0h7.5"></path>
+                    </svg>
+                    Launch Campaign Broadcast
+                </button>
+            </div>
+
+            <!-- Live Status and Console Log -->
+            <div class="card" id="statusCard" style="display:none;">
+                <h3>
+                    <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"></path>
+                    </svg>
+                    Campaign Execution Stream
+                </h3>
+                <div class="analytics-grid">
+                    <div class="analytic-box">
+                        <div class="analytic-label">Recipients</div>
+                        <div class="analytic-value" id="statTotal" style="color:var(--text-main);">0</div>
+                    </div>
+                    <div class="analytic-box">
+                        <div class="analytic-label">Processed</div>
+                        <div class="analytic-value" id="statSent" style="color:var(--indigo);">0</div>
+                    </div>
+                    <div class="analytic-box">
+                        <div class="analytic-label">Delivered</div>
+                        <div class="analytic-value" id="statSuccess" style="color:var(--primary);">0</div>
+                    </div>
+                    <div class="analytic-box">
+                        <div class="analytic-label">Failed</div>
+                        <div class="analytic-value" id="statFailed" style="color:var(--error);">0</div>
+                    </div>
+                </div>
+
+                <div class="progress-bar-track">
+                    <div class="progress-bar-fill" id="progressBar"></div>
+                </div>
+
+                <div class="console-log" id="consoleLog"></div>
+            </div>
         </div>
-      </div>
     </div>
+</div>
 
-    <!-- Actions -->
-    <div style="margin-bottom: 2rem;">
-      <button class="btn" id="sendBtn" disabled>
-        <svg style="width:18px;height:18px;" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M6 12L3.269 3.126A59.768 59.768 0 0121.485 12 59.77 59.77 0 013.27 20.876L5.999 12zm0 0h7.5"></path></svg>
-        Execute Broadcast Campaign
-      </button>
-    </div>
+<script>
+    // Verify authentication and role
+    const token = localStorage.getItem('crm_token');
+    if (!token) window.location.href = '/login';
+    const currentUser = localStorage.getItem('crm_user');
+    const currentRole = localStorage.getItem('crm_role');
+    if (currentRole !== 'admin') {
+        alert("Unauthorized access! Admin privileges required.");
+        window.location.href = '/chat';
+    }
 
-    <!-- Live Status Monitoring -->
-    <div class="card" id="statusCard" style="display:none;">
-      <h2>
-        <svg style="width:20px;height:20px;" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"></path></svg>
-        Campaign Analytics & Console
-      </h2>
-      <div class="progress-stats">
-        <div class="stat-box">
-          <div class="stat-label">Recipients</div>
-          <div class="stat-val total" id="statTotal">0</div>
-        </div>
-        <div class="stat-box">
-          <div class="stat-label">Processed</div>
-          <div class="stat-val sent" id="statSent">0</div>
-        </div>
-        <div class="stat-box">
-          <div class="stat-label">Delivered</div>
-          <div class="stat-val success" id="statSuccess">0</div>
-        </div>
-        <div class="stat-box">
-          <div class="stat-label">Failed</div>
-          <div class="stat-val failed" id="statFailed">0</div>
-        </div>
-      </div>
+    document.getElementById('loggedInUser').innerText = currentUser;
+    document.getElementById('sidebarAvatar').innerText = currentUser.substring(0, 1).toUpperCase();
 
-      <div class="progress-bar-container">
-        <div class="progress-bar-fill" id="progressBar"></div>
-      </div>
+    function logout() {
+        localStorage.clear();
+        window.location.href = '/login';
+    }
 
-      <div class="console-log" id="consoleLog"></div>
-    </div>
-  </div>
-
-  <script>
-    // State management variables
     let recipientsList = [];
     let isUploading = false;
     let pollInterval = null;
@@ -458,7 +730,6 @@
     const languageCodeInput = document.getElementById('languageCode');
     const headerUrlInput = document.getElementById('headerUrl');
     
-    // Status metrics
     const statusCard = document.getElementById('statusCard');
     const statTotal = document.getElementById('statTotal');
     const statSent = document.getElementById('statSent');
@@ -467,10 +738,8 @@
     const progressBar = document.getElementById('progressBar');
     const consoleLog = document.getElementById('consoleLog');
 
-    // Trigger file dialog
     dropzone.addEventListener('click', () => fileInput.click());
 
-    // Drag-and-drop styles
     ['dragenter', 'dragover'].forEach(eventName => {
       dropzone.addEventListener(eventName, (e) => {
         e.preventDefault();
@@ -485,19 +754,16 @@
       }, false);
     });
 
-    // Handle dropped files
     dropzone.addEventListener('drop', (e) => {
       const dt = e.dataTransfer;
       const files = dt.files;
       if (files.length) handleFile(files[0]);
     });
 
-    // Handle selected files
     fileInput.addEventListener('change', (e) => {
       if (fileInput.files.length) handleFile(fileInput.files[0]);
     });
 
-    // Validate parameters to enable Send button
     function updateSendButtonState() {
       const templateName = templateNameInput.value.trim();
       sendBtn.disabled = !(recipientsList.length > 0 && templateName.length > 0);
@@ -505,7 +771,6 @@
 
     templateNameInput.addEventListener('input', updateSendButtonState);
 
-    // Parse Excel/CSV file locally
     function handleFile(file) {
       const reader = new FileReader();
       reader.onload = function(e) {
@@ -521,12 +786,10 @@
             return;
           }
 
-          // Parse column mapping
           const firstRowKeys = Object.keys(rawRows[0]);
           let nameKey = null;
           let phoneKey = null;
 
-          // Intelligently scan for columns matching "Name" and "Phone"
           firstRowKeys.forEach(k => {
             const cleanKey = k.toLowerCase().replace(/[\s_\-]/g, '');
             if (cleanKey.includes('name') || cleanKey.includes('customername')) {
@@ -537,7 +800,6 @@
             }
           });
 
-          // Fallbacks if matching headers aren't found
           if (!nameKey) nameKey = firstRowKeys[0];
           if (!phoneKey) phoneKey = firstRowKeys[1] || firstRowKeys[0];
 
@@ -546,7 +808,6 @@
 
           rawRows.forEach((row, idx) => {
             const rawPhone = String(row[phoneKey] || '').replace(/\D/g, '');
-            // Simple validation: make sure it has a valid-looking phone number length
             if (rawPhone.length >= 10) {
               const cleanRow = {
                 name: String(row[nameKey] || 'Customer').trim(),
@@ -554,7 +815,6 @@
               };
               recipientsList.push(cleanRow);
 
-              // Append preview row
               const tr = document.createElement('tr');
               tr.innerHTML = `
                 <td>${idx + 1}</td>
@@ -566,11 +826,11 @@
           });
 
           if (recipientsList.length === 0) {
-            alert("Could not extract any valid phone numbers (min 10 digits required)!");
+            alert("Could not extract any valid phone numbers!");
             previewWrapper.style.display = 'none';
           } else {
             previewWrapper.style.display = 'block';
-            dropzone.innerHTML = `<svg style="color:var(--success)" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg><p style="color:var(--success)"><b>File parsed successfully!</b></p><p style="font-size:0.8rem">${recipientsList.length} valid recipients loaded</p>`;
+            dropzone.innerHTML = `<svg style="color:var(--success)" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg><p style="color:var(--success)"><b>File parsed successfully!</b></p><p style="font-size:12px; opacity:0.8;">${recipientsList.length} valid recipients loaded</p>`;
           }
           updateSendButtonState();
 
@@ -582,7 +842,6 @@
       reader.readAsArrayBuffer(file);
     }
 
-    // Trigger Campaign Broadcast
     sendBtn.addEventListener('click', async () => {
       const templateName = templateNameInput.value.trim();
       const languageCode = languageCodeInput.value;
@@ -634,7 +893,6 @@
       }
     });
 
-    // Status Polling logic
     function startStatusPolling() {
       if (pollInterval) clearInterval(pollInterval);
       pollInterval = setInterval(async () => {
@@ -647,11 +905,9 @@
           statSuccess.textContent = data.success;
           statFailed.textContent = data.failed;
 
-          // Compute percentage
           const progressPct = data.total > 0 ? Math.round((data.sent / data.total) * 100) : 0;
           progressBar.style.width = `${progressPct}%`;
 
-          // Draw logs
           consoleLog.innerHTML = '';
           (data.log || []).forEach(line => {
             const div = document.createElement('div');
@@ -659,10 +915,8 @@
             div.textContent = line;
             consoleLog.appendChild(div);
           });
-          // Auto scroll to bottom
           consoleLog.scrollTop = consoleLog.scrollHeight;
 
-          // Stop polling if complete
           if (!data.running) {
             clearInterval(pollInterval);
             addLogLine("[System] Campaign execution completed.");
@@ -689,6 +943,6 @@
       languageCodeInput.disabled = false;
       updateSendButtonState();
     }
-  </script>
+</script>
 </body>
 </html>

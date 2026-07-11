@@ -4,11 +4,9 @@ require('dotenv').config();
 const supabaseUrl = process.env.SUPABASE_URL;
 const supabaseKey = process.env.SUPABASE_KEY;
 
-// ws package fixes Node.js 20 WebSocket compatibility with Supabase
-const ws = require('ws');
-const supabase = (supabaseUrl && supabaseKey) ? createClient(supabaseUrl, supabaseKey, {
-  realtime: { transport: ws }
-}) : null;
+// Plain REST client — matching only runs .select() queries, so no realtime
+// transport (and no `ws` dependency) is needed.
+const supabase = (supabaseUrl && supabaseKey) ? createClient(supabaseUrl, supabaseKey) : null;
 
 /**
  * Calculates the distance between two coordinates using the Haversine formula

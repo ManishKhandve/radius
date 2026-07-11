@@ -1,14 +1,31 @@
 services:
   - type: web
-    name: maid-service-bot
+    name: cleanly-whatsapp
     env: node
-    plan: free
+    plan: starter
     buildCommand: npm install
-    startCommand: node index.js
+    startCommand: NODE_ENV=production node index.js
+    healthCheckPath: /ping
     envVars:
       - key: NODE_ENV
         value: production
-      - key: GOOGLE_CREDENTIALS_PATH
-        value: ./credentials.json
+      - key: PORT
+        value: "3000"
+      - key: META_ACCESS_TOKEN
+        sync: false
+      - key: META_PHONE_NUMBER_ID
+        sync: false
+      - key: META_VERIFY_TOKEN
+        sync: false
+      - key: ADMIN_TOKEN
+        sync: false
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_KEY
+        sync: false
+      - key: GOOGLE_CREDENTIALS
+        sync: false
       - key: SPREADSHEET_ID
-        value: YOUR_SHEET_ID_HERE
+        sync: false
+      - key: OWNER_PHONE
+        sync: false

@@ -1,10 +1,14 @@
 {
-  "name": "maid-service-whatsapp-bot",
+  "name": "cleanly-whatsapp",
   "version": "1.0.0",
-  "description": "WhatsApp chatbot for maid placement service using whatsapp-web.js",
+  "description": "WhatsApp CRM chatbot for Cleanly using Meta Cloud API, Supabase, and Google Sheets",
   "main": "index.js",
+  "engines": {
+    "node": ">=18.0.0"
+  },
   "scripts": {
     "start": "node index.js",
+    "start:prod": "NODE_ENV=production node index.js",
     "dev": "node index.js",
     "test": "playwright test",
     "test:ui": "playwright test --ui",
@@ -23,18 +27,15 @@
     "whatsapp",
     "chatbot",
     "maid-service",
-    "whatsapp-web.js"
+    "meta-cloud-api"
   ],
   "author": "",
   "license": "ISC",
   "dependencies": {
     "@supabase/supabase-js": "^2.105.4",
-    "@whiskeysockets/baileys": "^6.7.9",
     "dotenv": "^17.4.2",
     "express": "^4.18.2",
-    "googleapis": "^131.0.0",
-    "pino": "^8.21.0",
-    "qrcode": "^1.5.3"
+    "googleapis": "^131.0.0"
   },
   "devDependencies": {
     "@playwright/test": "^1.48.0"
