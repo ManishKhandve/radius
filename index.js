@@ -569,6 +569,36 @@ The bot couldn't deliver this reply. Please contact the customer manually.`;
   _metaSendOnce(OWNER_PHONE, alert).catch(() => {});
 }
 
+// ─── New inbound message notification ────────────────────────
+// Every incoming customer message creates a CRM notification (type='message',
+// shown in the "New Messages" section) and is forwarded to the admin's
+// WhatsApp. The WhatsApp forward is throttled per-phone so an active
+// back-and-forth doesn't spam the admin; the CRM notification is always made.
+const lastInboundAdminAlert = new Map(); // phone -> timestamp
+const INBOUND_ALERT_THROTTLE_MS = 3 * 60 * 1000; // 3 min per phone
+
+function notifyNewInboundMessage(phone, name, text, msgType) {
+  // Skip pure menu navigation (button/list taps) — not real messages.
+  if (msgType === 'interactive' || msgType === 'button') return;
+  const who = name || `+${phone}`;
+  const isMedia = ['image', 'document', 'video', 'audio', 'voice'].includes(msgType);
+  const preview = (isMedia ? `[${msgType}]${text ? ' ' + text : ''}` : (text || '')).slice(0, 300);
+
+  // 1) CRM notification — its own "New Messages" section.
+  chatStore.addNotification(`💬 ${who}`, `+${phone}: ${preview}`, phone, 'message').catch(() => {});
+
+  // 2) Forward to admin WhatsApp (throttled per phone).
+  const last = lastInboundAdminAlert.get(phone) || 0;
+  if (Date.now() - last >= INBOUND_ALERT_THROTTLE_MS) {
+    lastInboundAdminAlert.set(phone, Date.now());
+    if (lastInboundAdminAlert.size > 5000) lastInboundAdminAlert.clear(); // bound memory
+    const alert = `💬 *New message*\nFrom: ${who}\nPhone: +${phone}\n\n${preview}`;
+    watiSend(OWNER_PHONE, alert)
+      .then(r => console.log(r.ok ? '[inbound-alert] sent to owner' : '[inbound-alert] FAILED'))
+      .catch(() => {});
+  }
+}
+
 // ─── Inactivity nudge ───────────────────────────────────────
 // 10 seconds before the session times out, send a "are you still there?"
 // prompt so the user has a chance to resume. Re-scheduled on every
@@ -851,6 +881,9 @@ async function handleMetaMessage(m, senderName) {
   // time they message while paused, then nothing until /release is hit.
   const paused = await isPaused(phone);
   await chatStore.saveMessage(phone, senderName, 'inbound', msgType === 'image' || msgType === 'document' ? `[${msgType}] ${text}` : text, m.id || null, 'delivered');
+
+  // Alert the CRM + admin about the new incoming message.
+  notifyNewInboundMessage(phone, senderName, text, msgType);
 
   if (paused) {
     if (flow.restartIntent(text) || flow.isAdMessage(text)) {
@@ -1850,16 +1883,17 @@ app.post('/api/people/start-chat', authMiddleware, async (req, res) => {
 // 'Follow-up Required' and follow_up_time in the past), served to the UI.
 app.get('/api/notifications', authMiddleware, async (req, res) => {
   try {
-    const [dues, alerts] = await Promise.all([
+    const [dues, alerts, messages] = await Promise.all([
       chatStore.getDueFollowups(),
-      chatStore.getNotifications(50),
+      chatStore.getNotifications(40, 'not-message'),
+      chatStore.getNotifications(40, 'message'),
     ]);
     // Employees only see their own / unassigned follow-ups.
     const list = req.user.role === 'admin'
       ? dues
       : dues.filter(d => !d.assigned_agent || d.assigned_agent === 'Unassigned' || d.assigned_agent === req.user.username);
-    const unreadAlerts = alerts.filter(a => !a.read).length;
-    res.json({ ok: true, notifications: list, alerts, unreadAlerts });
+    const unreadAlerts = [...alerts, ...messages].filter(a => !a.read).length;
+    res.json({ ok: true, notifications: list, alerts, messages, unreadAlerts });
   } catch (err) {
     res.status(500).json({ ok: false, error: err.message });
   }

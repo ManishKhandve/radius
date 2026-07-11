@@ -644,12 +644,15 @@ async function addNotification(title, body, phone = null, type = 'alert') {
   }
 }
 
-async function getNotifications(limit = 50) {
+async function getNotifications(limit = 50, filter = null) {
   try {
-    const { data, error } = await supabase
+    let q = supabase
       .from('notifications')
       .select('*')
-      .eq('lead_type', 'whatsapp')
+      .eq('lead_type', 'whatsapp');
+    if (filter === 'message') q = q.eq('type', 'message');
+    else if (filter === 'not-message') q = q.neq('type', 'message');
+    const { data, error } = await q
       .order('created_at', { ascending: false })
       .limit(limit);
     if (error) return [];

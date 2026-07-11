@@ -2077,6 +2077,7 @@
     // ── Notifications (admin alerts + due follow-up reminders) ──
     let notifData = [];
     let alertData = [];
+    let messageData = [];
     let unreadAlerts = 0;
 
     async function loadNotifications() {
@@ -2085,8 +2086,9 @@
             const j = await res.json();
             notifData = (j && j.notifications) || [];
             alertData = (j && j.alerts) || [];
+            messageData = (j && j.messages) || [];
             unreadAlerts = (j && j.unreadAlerts) || 0;
-        } catch (e) { notifData = []; alertData = []; unreadAlerts = 0; }
+        } catch (e) { notifData = []; alertData = []; messageData = []; unreadAlerts = 0; }
         const badge = document.getElementById('notifBadge');
         const count = notifData.length + unreadAlerts;
         if (count > 0) {
@@ -2102,20 +2104,30 @@
         const list = document.getElementById('notifList');
         let html = '';
 
-        // 1) Booking / payment / callback alerts (stored, newest first)
-        html += '<h3 style="font-family:\'Outfit\',sans-serif; font-size:14px; text-transform:uppercase; letter-spacing:0.5px; color:var(--text-muted); margin:4px 0 12px;">🔔 Alerts</h3>';
-        if (!alertData.length) {
-            html += '<div class="notif-card" style="justify-content:center; color:var(--text-muted); font-size:13.5px;">No alerts yet — bookings, payment receipts and callback requests will appear here.</div>';
-        } else {
-            html += alertData.map(a => `<div class="notif-card${a.read ? '' : ' overdue'}">
+        // Inbound messages and alerts are fetched separately by the API.
+        const messages = messageData;
+        const alerts = alertData;
+
+        const notifCard = (a) => `<div class="notif-card${a.read ? '' : ' overdue'}">
                 <div class="notif-info">
-                    <div class="notif-name">${a.read ? '' : '🔴 '}${esc(a.title || 'Alert')}</div>
+                    <div class="notif-name">${a.read ? '' : '🔴 '}${esc(a.title || 'Notification')}</div>
                     <div class="notif-meta" style="white-space:pre-wrap;">${esc((a.body || '').slice(0, 400))}</div>
                     <div class="notif-meta">${new Date(a.created_at).toLocaleString()}</div>
                 </div>
                 ${a.phone ? `<button class="pmsg-btn" onclick="openNotifChat('${esc(a.phone)}')">💬 Open Chat</button>` : ''}
-            </div>`).join('');
-        }
+            </div>`;
+
+        // 1) New inbound messages (separate section)
+        html += '<h3 style="font-family:\'Outfit\',sans-serif; font-size:14px; text-transform:uppercase; letter-spacing:0.5px; color:var(--text-muted); margin:4px 0 12px;">💬 New Messages</h3>';
+        html += messages.length
+            ? messages.map(notifCard).join('')
+            : '<div class="notif-card" style="justify-content:center; color:var(--text-muted); font-size:13.5px;">No new messages.</div>';
+
+        // 2) Booking / payment / callback alerts
+        html += '<h3 style="font-family:\'Outfit\',sans-serif; font-size:14px; text-transform:uppercase; letter-spacing:0.5px; color:var(--text-muted); margin:24px 0 12px;">🔔 Alerts</h3>';
+        html += alerts.length
+            ? alerts.map(notifCard).join('')
+            : '<div class="notif-card" style="justify-content:center; color:var(--text-muted); font-size:13.5px;">No alerts yet — bookings, payment receipts and callback requests will appear here.</div>';
 
         // 2) Due follow-up reminders — grouped by service, with select + bulk send
         html += `<div style="display:flex; align-items:center; gap:12px; margin:24px 0 12px; flex-wrap:wrap;">
