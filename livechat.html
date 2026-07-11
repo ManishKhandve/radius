@@ -2079,6 +2079,7 @@
     let alertData = [];
     let messageData = [];
     let unreadAlerts = 0;
+    let dueCount = 0;
 
     async function loadNotifications() {
         try {
@@ -2088,9 +2089,10 @@
             alertData = (j && j.alerts) || [];
             messageData = (j && j.messages) || [];
             unreadAlerts = (j && j.unreadAlerts) || 0;
-        } catch (e) { notifData = []; alertData = []; messageData = []; unreadAlerts = 0; }
+            dueCount = (j && j.dueCount) || 0;
+        } catch (e) { notifData = []; alertData = []; messageData = []; unreadAlerts = 0; dueCount = 0; }
         const badge = document.getElementById('notifBadge');
-        const count = notifData.length + unreadAlerts;
+        const count = dueCount + unreadAlerts;
         if (count > 0) {
             badge.innerText = count > 99 ? '99+' : count;
             badge.style.display = 'inline-flex';
@@ -2129,9 +2131,9 @@
             ? alerts.map(notifCard).join('')
             : '<div class="notif-card" style="justify-content:center; color:var(--text-muted); font-size:13.5px;">No alerts yet — bookings, payment receipts and callback requests will appear here.</div>';
 
-        // 2) Due follow-up reminders — grouped by service, with select + bulk send
+        // 3) Scheduled follow-ups — grouped by service, with select + bulk send
         html += `<div style="display:flex; align-items:center; gap:12px; margin:24px 0 12px; flex-wrap:wrap;">
-            <h3 style="font-family:'Outfit',sans-serif; font-size:14px; text-transform:uppercase; letter-spacing:0.5px; color:var(--text-muted); margin:0;">⏰ Due Follow-ups</h3>
+            <h3 style="font-family:'Outfit',sans-serif; font-size:14px; text-transform:uppercase; letter-spacing:0.5px; color:var(--text-muted); margin:0;">⏰ Follow-ups</h3>
             <div id="notifBulkBar" style="display:none; align-items:center; gap:10px;">
                 <span id="notifSelCount" style="font-size:13px; font-weight:600; color:var(--primary);"></span>
                 <button class="pmsg-btn" onclick="openNotifBulkMsg()">📨 Send Template to Selected</button>
@@ -2140,7 +2142,7 @@
         </div>`;
 
         if (!notifData.length) {
-            html += '<div class="notif-card" style="justify-content:center; color:var(--text-muted); font-size:13.5px;">🎉 No follow-ups due. All caught up!</div>';
+            html += '<div class="notif-card" style="justify-content:center; color:var(--text-muted); font-size:13.5px;">No follow-ups scheduled. Set one from a chat (Status = Follow-up Required + a date).</div>';
             list.innerHTML = html;
             updateNotifBulkBar();
             return;
@@ -2159,17 +2161,24 @@
                 <span style="font-size:12px; color:var(--text-muted);">(${rows.length})</span>
             </div>`;
             html += rows.map(n => {
-                const due = new Date(n.follow_up_time);
-                const hrsOver = Math.max(0, (Date.now() - due) / 36e5);
-                const overdueTxt = hrsOver >= 24 ? `${Math.floor(hrsOver/24)}d ${Math.floor(hrsOver%24)}h overdue`
-                                  : `${Math.floor(hrsOver)}h ${Math.floor((hrsOver%1)*60)}m overdue`;
-                return `<div class="notif-card overdue">
+                const when = new Date(n.follow_up_time);
+                const extra = (n.all_dates && n.all_dates.length > 1) ? ` (+${n.all_dates.length - 1} more)` : '';
+                let statusLine;
+                if (n.is_due) {
+                    const hrsOver = Math.max(0, (Date.now() - when) / 36e5);
+                    const overdueTxt = hrsOver >= 24 ? `${Math.floor(hrsOver/24)}d ${Math.floor(hrsOver%24)}h overdue`
+                                      : `${Math.floor(hrsOver)}h ${Math.floor((hrsOver%1)*60)}m overdue`;
+                    statusLine = `<div class="notif-due">⏰ Due · ${overdueTxt}</div>`;
+                } else {
+                    statusLine = `<div class="notif-meta" style="color:var(--primary); font-weight:600;">📅 Upcoming · ${when.toLocaleString()}</div>`;
+                }
+                return `<div class="notif-card${n.is_due ? ' overdue' : ''}">
                     <input type="checkbox" ${notifSel.has(n.phone) ? 'checked' : ''} onchange="toggleNotifSel('${esc(n.phone)}', this.checked)" style="width:16px;height:16px;cursor:pointer;">
                     <div class="avatar" style="width:42px;height:42px;border-radius:50%;display:flex;align-items:center;justify-content:center;color:#fff;font-weight:600;background:hsl(${(n.phone||'0').slice(-3) * 37 % 360},55%,45%)">${esc((n.name||'C').substring(0,1).toUpperCase())}</div>
                     <div class="notif-info">
                         <div class="notif-name">${esc(n.name || n.phone)}</div>
-                        <div class="notif-meta">+${esc(n.phone)} · Assigned: ${esc(n.assigned_agent || 'Unassigned')} · Due ${due.toLocaleString()}</div>
-                        <div class="notif-due">⏰ ${overdueTxt}</div>
+                        <div class="notif-meta">+${esc(n.phone)} · Assigned: ${esc(n.assigned_agent || 'Unassigned')} · ${when.toLocaleString()}${extra}</div>
+                        ${statusLine}
                     </div>
                     <button class="pmsg-btn" onclick="openNotifChat('${esc(n.phone)}')">💬 Open Chat</button>
                 </div>`;

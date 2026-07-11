@@ -1883,17 +1883,18 @@ app.post('/api/people/start-chat', authMiddleware, async (req, res) => {
 // 'Follow-up Required' and follow_up_time in the past), served to the UI.
 app.get('/api/notifications', authMiddleware, async (req, res) => {
   try {
-    const [dues, alerts, messages] = await Promise.all([
-      chatStore.getDueFollowups(),
+    const [scheduled, alerts, messages] = await Promise.all([
+      chatStore.getScheduledFollowups(),
       chatStore.getNotifications(40, 'not-message'),
       chatStore.getNotifications(40, 'message'),
     ]);
     // Employees only see their own / unassigned follow-ups.
     const list = req.user.role === 'admin'
-      ? dues
-      : dues.filter(d => !d.assigned_agent || d.assigned_agent === 'Unassigned' || d.assigned_agent === req.user.username);
+      ? scheduled
+      : scheduled.filter(d => !d.assigned_agent || d.assigned_agent === 'Unassigned' || d.assigned_agent === req.user.username);
+    const dueCount = list.filter(d => d.is_due).length;
     const unreadAlerts = [...alerts, ...messages].filter(a => !a.read).length;
-    res.json({ ok: true, notifications: list, alerts, messages, unreadAlerts });
+    res.json({ ok: true, notifications: list, dueCount, alerts, messages, unreadAlerts });
   } catch (err) {
     res.status(500).json({ ok: false, error: err.message });
   }

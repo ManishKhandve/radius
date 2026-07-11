@@ -404,6 +404,45 @@ async function getDueFollowups() {
 }
 
 /**
+ * Every contact that has a follow-up scheduled (past OR future), for the
+ * Notifications tab. follow_up_time is kept synced to the soonest date, so
+ * "has a follow-up" == follow_up_time is not null. Each row is flagged is_due.
+ */
+async function getScheduledFollowups() {
+  try {
+    let { data, error } = await supabase
+      .from('contacts')
+      .select('phone, name, assigned_agent, follow_up_time, follow_up_times, service_category')
+      .not('follow_up_time', 'is', null)
+      .order('follow_up_time', { ascending: true });
+    if (error) {
+      // follow_up_times column not added yet — single field still works.
+      ({ data } = await supabase
+        .from('contacts')
+        .select('phone, name, assigned_agent, follow_up_time, service_category')
+        .not('follow_up_time', 'is', null)
+        .order('follow_up_time', { ascending: true }));
+    }
+    const now = Date.now();
+    return (data || []).map(c => {
+      const times = Array.isArray(c.follow_up_times) ? c.follow_up_times : [];
+      const all = [...times, c.follow_up_time].filter(Boolean).sort((a, b) => new Date(a) - new Date(b));
+      return {
+        phone: c.phone,
+        name: c.name,
+        assigned_agent: c.assigned_agent,
+        service_category: c.service_category || null,
+        follow_up_time: c.follow_up_time,
+        all_dates: all,
+        is_due: new Date(c.follow_up_time).getTime() <= now,
+      };
+    });
+  } catch (err) {
+    return [];
+  }
+}
+
+/**
  * Quick Replies Management
  */
 async function getQuickReplies() {
@@ -707,6 +746,7 @@ module.exports = {
   updateBroadcastMetric,
   getBroadcastMetrics,
   getDueFollowups,
+  getScheduledFollowups,
   getQuickReplies,
   addQuickReply,
   deleteQuickReply,
