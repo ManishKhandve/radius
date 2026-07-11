@@ -1862,13 +1862,16 @@ app.post('/api/notifications/read', authMiddleware, async (req, res) => {
 });
 
 // Send one approved template to a single person from a directory view.
+// bodyParams maps to the template's {{1}}, {{2}}… body variables; headerUrl is
+// the media header. Both must match the approved template exactly (Meta #132000).
 app.post('/api/people/message', authMiddleware, async (req, res) => {
-  const { phone, templateName, languageCode, headerUrl } = req.body || {};
+  const { phone, templateName, languageCode, headerUrl, bodyParams } = req.body || {};
   const to = toMetaPhone(phone);
   if (!to) return res.status(400).json({ ok: false, error: 'Invalid phone number' });
   if (!templateName) return res.status(400).json({ ok: false, error: 'templateName is required' });
+  const params = Array.isArray(bodyParams) ? bodyParams.map(String) : [];
   try {
-    const result = await watiSendTemplate(to, templateName.trim(), languageCode || 'en', [], headerUrl || null);
+    const result = await watiSendTemplate(to, templateName.trim(), languageCode || 'en', params, headerUrl || null);
     if (result.ok) return res.json({ ok: true });
     return res.status(502).json({ ok: false, error: result.error?.message || 'Send failed' });
   } catch (err) {
