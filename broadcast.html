@@ -625,6 +625,25 @@
                     </svg>
                     Recipient Database
                 </h3>
+
+                <!-- Load recipients straight from the Maids table by status -->
+                <div id="maidLoader" style="border:1px solid var(--border,#e5e7eb); border-radius:12px; padding:16px; margin-bottom:16px;">
+                    <div style="font-weight:600; margin-bottom:4px;">Load Maids by Status</div>
+                    <p style="font-size:12px; opacity:0.7; margin:0 0 12px;">Pull maids straight from the database — no spreadsheet needed.</p>
+                    <div id="maidStatusOptions" style="display:flex; flex-wrap:wrap; gap:10px 18px; margin-bottom:12px;">
+                        <label style="display:flex; align-items:center; gap:6px; cursor:pointer;"><input type="checkbox" class="maid-status" value="Interested" checked> Interested</label>
+                        <label style="display:flex; align-items:center; gap:6px; cursor:pointer;"><input type="checkbox" class="maid-status" value="Available" checked> Available</label>
+                        <label style="display:flex; align-items:center; gap:6px; cursor:pointer;"><input type="checkbox" class="maid-status" value="Not Contacted"> Not Contacted</label>
+                        <label style="display:flex; align-items:center; gap:6px; cursor:pointer;"><input type="checkbox" class="maid-status" value="No Answer"> No Answer</label>
+                        <label style="display:flex; align-items:center; gap:6px; cursor:pointer;"><input type="checkbox" class="maid-status" value="Call Back Requested"> Call Back Requested</label>
+                        <label style="display:flex; align-items:center; gap:6px; cursor:pointer;"><input type="checkbox" class="maid-status" value="Contacted"> Contacted</label>
+                        <label style="display:flex; align-items:center; gap:6px; cursor:pointer;"><input type="checkbox" class="maid-status" value="Not Interested"> Not Interested</label>
+                    </div>
+                    <button type="button" class="btn-action" id="loadMaidsBtn" style="width:auto; padding:10px 18px;">Load Maids</button>
+                    <span id="maidLoadInfo" style="font-size:12px; margin-left:12px; opacity:0.85;"></span>
+                </div>
+                <div style="text-align:center; font-size:12px; opacity:0.55; margin:8px 0 16px;">— or upload a spreadsheet —</div>
+
                 <div class="dropzone" id="dropzone">
                     <svg fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" d="M12 16.5V9.75m0 0l3 3m-3-3l-3 3M6.75 19.5a4.5 4.5 0 01-1.41-8.775 5.25 5.25 0 0110.233-2.33 3 3 0 013.758 3.848A3.752 3.752 0 0118 19.5H6.75z"></path>
@@ -715,6 +734,17 @@
     function logout() {
         localStorage.clear();
         window.location.href = '/login';
+    }
+
+    // All admin API calls must carry the auth-token header, else authMiddleware
+    // returns 401. (This wrapper mirrors livechat.html — without it the broadcast
+    // endpoints silently rejected every request.)
+    async function authFetch(url, options = {}) {
+        if (!options.headers) options.headers = {};
+        options.headers['auth-token'] = token;
+        const res = await fetch(url, options);
+        if (res.status === 401) logout();
+        return res;
     }
 
     let recipientsList = [];
@@ -842,6 +872,61 @@
       reader.readAsArrayBuffer(file);
     }
 
+    // ─── Load recipients from the Maids table by status ─────────
+    const loadMaidsBtn = document.getElementById('loadMaidsBtn');
+    const maidLoadInfo = document.getElementById('maidLoadInfo');
+
+    loadMaidsBtn.addEventListener('click', async () => {
+      const statuses = Array.from(document.querySelectorAll('.maid-status:checked')).map(c => c.value);
+      if (statuses.length === 0) {
+        alert('Select at least one status.');
+        return;
+      }
+
+      loadMaidsBtn.disabled = true;
+      maidLoadInfo.textContent = 'Loading…';
+      try {
+        const res = await authFetch('/api/people?group=maids');
+        const data = await res.json();
+        if (!res.ok || !data.ok) throw new Error(data.error || 'Failed to load maids');
+
+        const wanted = new Set(statuses);
+        const seen = new Set();
+        recipientsList = [];
+        previewBody.innerHTML = '';
+
+        (data.people || []).forEach(p => {
+          if (!wanted.has(p.status)) return;
+          const rawPhone = String(p.phone || '').replace(/\D/g, '');
+          if (rawPhone.length < 10) return;
+          if (seen.has(rawPhone)) return;      // de-dupe repeated numbers
+          seen.add(rawPhone);
+          recipientsList.push({ name: String(p.name || 'Maid').trim(), phone: rawPhone });
+        });
+
+        recipientsList.forEach((r, idx) => {
+          const tr = document.createElement('tr');
+          tr.innerHTML = `<td>${idx + 1}</td><td><b>${r.name}</b></td><td>${r.phone}</td>`;
+          previewBody.appendChild(tr);
+        });
+
+        if (recipientsList.length === 0) {
+          previewWrapper.style.display = 'none';
+          maidLoadInfo.textContent = `No maids with a valid phone matched: ${statuses.join(', ')}`;
+        } else {
+          previewWrapper.style.display = 'block';
+          maidLoadInfo.textContent = `${recipientsList.length} maids loaded (${statuses.join(', ')})`;
+          // Reset the file dropzone so it's clear the maid list is what will send.
+          dropzone.innerHTML = `<svg style="color:var(--success)" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg><p style="color:var(--success)"><b>${recipientsList.length} maids loaded from database</b></p><p style="font-size:12px; opacity:0.8;">${statuses.join(', ')}</p>`;
+        }
+        updateSendButtonState();
+      } catch (err) {
+        maidLoadInfo.textContent = 'Error: ' + err.message;
+      } finally {
+        loadMaidsBtn.disabled = false;
+      }
+    });
+
     sendBtn.addEventListener('click', async () => {
       const templateName = templateNameInput.value.trim();
       const languageCode = languageCodeInput.value;
@@ -866,7 +951,7 @@
       consoleLog.innerHTML = `<div class="log-line info">[System] Starting campaign background job...</div>`;
 
       try {
-        const res = await fetch('/api/broadcast', {
+        const res = await authFetch('/api/broadcast', {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json'
@@ -897,7 +982,7 @@
       if (pollInterval) clearInterval(pollInterval);
       pollInterval = setInterval(async () => {
         try {
-          const res = await fetch('/api/broadcast/status');
+          const res = await authFetch('/api/broadcast/status');
           const data = await res.json();
 
           statTotal.textContent = data.total;
