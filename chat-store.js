@@ -29,15 +29,18 @@ supabase.from('contacts').select('phone', { count: 'exact', head: true }).limit(
  */
 async function upsertContact(phone, name, direction) {
   try {
+    const existing = await getContactByPhone(phone);
     const payload = {
       phone: phone,
       last_message_at: new Date().toISOString()
     };
-    if (name) payload.name = name;
+    // Only set the name when we don't already have one stored. A name we saved
+    // from a source table (maids/customers) or captured on first contact should
+    // win over the WhatsApp profile name on every later message.
+    if (name && !(existing && existing.name)) payload.name = name;
 
     if (direction === 'inbound') {
       payload.label = 'unread';
-      const existing = await getContactByPhone(phone);
       if (existing && existing.abandonment_drip_stage === 99) {
         payload.abandonment_drip_stage = 99;
       } else {

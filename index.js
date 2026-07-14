@@ -1586,6 +1586,18 @@ app.post('/api/broadcast', authMiddleware, (req, res) => {
         activeCampaign.log.push(`[${new Date().toLocaleTimeString()}] Exception for ${displayName} (${cleanPhone}): ${err.message}`);
       }
 
+      // Stamp the recipient's stored name onto the contact so the chat list
+      // shows the DB name (e.g. the maid's real name) instead of their
+      // WhatsApp profile name when they reply. ensureContact only sets the
+      // name if the contact doesn't already have one, so this never clobbers.
+      if (displayName && displayName !== 'Customer') {
+        try {
+          await chatStore.ensureContact(cleanPhone, displayName, null);
+        } catch (err) {
+          console.error('[broadcast] failed to set contact name for', cleanPhone, err.message);
+        }
+      }
+
       // Add invite to invite-store so their incoming replies work immediately
       try {
         await addInvite(cleanPhone);
