@@ -1978,9 +1978,10 @@
         renderPeople();
     }
 
-    // Checkbox selection — enabled for customer groups; maids stay one-by-one.
+    // Checkbox selection — enabled for all directory groups so maids can be
+    // bulk-selected (e.g. filter to "interested" / "available") and sent a template.
     let peopleSel = new Set();
-    const selectableGroup = () => peopleGroup === 'flat_customers' || peopleGroup === 'customers';
+    const selectableGroup = () => peopleGroup === 'flat_customers' || peopleGroup === 'customers' || peopleGroup === 'maids';
 
     // Search across every visible column. Space-separated terms must ALL match
     // ("interested cooking" = Interested customers who need cooking).
