@@ -1632,7 +1632,7 @@
             <p style="color:var(--text-muted); font-size:13px; margin-bottom:18px;">To <span id="pmTo" style="font-weight:600; color:var(--text-main);"></span></p>
             <div style="display:flex; flex-direction:column; gap:12px;">
                 <div><label style="font-size:13px; color:var(--text-muted);">Template</label>
-                    <select id="pmTemplateSel" onchange="pmToggleCustom()" style="width:100%; margin-top:6px; padding:11px 14px; border:1px solid var(--border-color); border-radius:10px; font-family:inherit; font-size:14px; outline:none;">
+                    <select id="pmTemplateSel" onchange="onTemplateChange()" style="width:100%; margin-top:6px; padding:11px 14px; border:1px solid var(--border-color); border-radius:10px; font-family:inherit; font-size:14px; outline:none;">
                         <option value="day3_follow_up">day3_follow_up (video)</option>
                         <option value="day7_follow_up">day7_follow_up (video)</option>
                         <option value="day15_follow_up">day15_follow_up (image)</option>
@@ -2270,7 +2270,7 @@
         modal.dataset.phone = phone;
         modal.dataset.bulk = '';
         modal.style.display = 'flex';
-        pmToggleCustom();
+        onTemplateChange();
     }
 
     // Generic bulk target list [{phone, name}] + a callback to run after sending.
@@ -2283,7 +2283,7 @@
         modal.dataset.phone = '';
         modal.dataset.bulk = '1';
         modal.style.display = 'flex';
-        pmToggleCustom();
+        onTemplateChange();
     }
 
     function openBulkMsg() {
@@ -2316,7 +2316,31 @@
         return (tSel === '__custom' ? document.getElementById('pmTemplateCustom').value : tSel).trim();
     }
 
-    // Show/hide manual header + body inputs, and hint, based on the template.
+    // Point the header dropdown at a URL — pick the matching option, or fall
+    // back to the "Custom URL…" text box when it isn't one of the presets.
+    function setHeaderSelValue(url) {
+        const sel = document.getElementById('pmHeaderSel');
+        const match = Array.from(sel.options).some(o => o.value === url);
+        if (match) {
+            sel.value = url;
+        } else {
+            sel.value = '__custom';
+            document.getElementById('pmHeaderCustom').value = url;
+        }
+    }
+
+    // Called when the TEMPLATE changes: default the header to the template's
+    // approved media (still editable), then refresh visibility/hints.
+    function onTemplateChange() {
+        const spec = TEMPLATE_SPEC[document.getElementById('pmTemplateSel').value];
+        if (spec) setHeaderSelValue(spec.header || '');
+        pmToggleCustom();
+    }
+
+    // Show/hide manual inputs + hint. The header row stays visible for EVERY
+    // template so a video/image URL can always be added or overridden (single
+    // or bulk). For known templates the header is pre-filled with the approved
+    // media as an editable default; body variables stay auto (name → {{1}}).
     function pmToggleCustom() {
         const tSel = document.getElementById('pmTemplateSel').value;
         const isCustom = tSel === '__custom';
@@ -2327,19 +2351,18 @@
         const spec = TEMPLATE_SPEC[tSel];
         const hint = document.getElementById('pmHint');
         const langSel = document.getElementById('pmLang');
+        document.getElementById('pmHeaderRow').style.display = 'block';
         if (spec) {
-            // Known template — auto-configure language, header and variables.
+            // Known template — auto language + variables; header editable default.
             langSel.value = spec.lang;
             langSel.disabled = true;
-            document.getElementById('pmHeaderRow').style.display = 'none';
             document.getElementById('pmBodyRow').style.display = 'none';
             const hdr = spec.header ? (spec.header.endsWith('.jpeg') || spec.header.endsWith('.jpg') || spec.header.endsWith('.png') ? 'image header' : 'video header') : 'no header';
-            hint.innerText = `Auto: ${spec.lang} · ${hdr}${spec.nameParam ? " · personalized with the contact's name ({{1}})" : ' · no text variables'}.`;
+            hint.innerText = `Auto: ${spec.lang} · ${hdr}${spec.nameParam ? " · personalized with the contact's name ({{1}})" : ' · no text variables'}. You can change the header below.`;
             hint.style.display = 'block';
         } else {
             // Custom template — you control language, header + variables.
             langSel.disabled = false;
-            document.getElementById('pmHeaderRow').style.display = 'block';
             document.getElementById('pmBodyRow').style.display = 'block';
             hint.innerText = 'Custom: set the language, header + body variables to EXACTLY match your approved template, or Meta returns #132000.';
             hint.style.display = 'block';
@@ -2347,14 +2370,17 @@
     }
 
     // Resolve { headerUrl, bodyParams } for a given template + contact name.
+    // The header always comes from the (always-visible) header field, so a
+    // video/image URL can be set or overridden for any template. Body params
+    // stay auto (name → {{1}}) for known templates to avoid Meta #132000.
     function resolveSend(templateName, personName) {
-        const spec = TEMPLATE_SPEC[templateName];
-        if (spec) {
-            return { headerUrl: spec.header || '', bodyParams: spec.nameParam ? [personName || 'Customer'] : [] };
-        }
-        // Custom: use the manual fields.
         const hSel = document.getElementById('pmHeaderSel').value;
         const headerUrl = (hSel === '__custom' ? document.getElementById('pmHeaderCustom').value : hSel).trim();
+        const spec = TEMPLATE_SPEC[templateName];
+        if (spec) {
+            return { headerUrl, bodyParams: spec.nameParam ? [personName || 'Customer'] : [] };
+        }
+        // Custom: use the manual body fields.
         const raw = (document.getElementById('pmBodyParams').value || '').trim();
         const bodyParams = raw ? raw.split(',').map(s => s.trim()).filter(Boolean) : [];
         return { headerUrl, bodyParams };
