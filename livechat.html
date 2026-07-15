@@ -1073,6 +1073,13 @@
         .pmsg-btn { padding: 6px 14px; border-radius: 8px; border: 1px solid var(--primary); background: var(--primary-glow); color: var(--primary); font-weight: 600; font-size: 12.5px; cursor: pointer; white-space: nowrap; }
         .pmsg-btn:hover { background: var(--primary); color: #fff; }
 
+        /* ── Proximity match modal table ── */
+        #matchTable { width: 100%; border-collapse: collapse; font-size: 13px; text-align: left; }
+        #matchTable th { background: #f1f5f9; position: sticky; top: 0; padding: 10px 12px; font-weight: 600; color: var(--text-muted); border-bottom: 1px solid var(--border-color); z-index: 1; }
+        #matchTable td { padding: 9px 12px; border-bottom: 1px solid #f1f5f9; color: var(--text-main); }
+        #matchTable tr:last-child td { border-bottom: none; }
+        .zone-badge { padding: 2px 9px; border-radius: 99px; font-weight: 700; font-size: 11.5px; white-space: nowrap; }
+
         /* ── Notifications ── */
         .notif-badge {
             margin-left: auto; background: var(--error); color: #fff; font-size: 11px; font-weight: 700;
@@ -1666,6 +1673,38 @@
             </div>
         </div>
     </div>
+
+    <!-- Proximity match modal (z-index below the template modal so it stacks under) -->
+    <div id="matchModal" style="display:none; position:fixed; inset:0; background:rgba(15,23,42,0.45); z-index:990; align-items:center; justify-content:center;">
+        <div style="background:#fff; border-radius:16px; padding:22px; width:820px; max-width:95%; max-height:88vh; display:flex; flex-direction:column; box-shadow:0 20px 50px rgba(0,0,0,0.25);">
+            <h3 id="matchTitle" style="font-family:'Outfit',sans-serif; font-size:16px; margin-bottom:4px;">Nearby Matches</h3>
+            <p id="matchSubtitle" style="color:var(--text-muted); font-size:13px; margin-bottom:14px;"></p>
+            <div style="display:flex; align-items:center; gap:14px; margin-bottom:12px; flex-wrap:wrap;">
+                <label style="display:flex; align-items:center; gap:7px; font-size:13px; color:var(--text-muted); cursor:pointer;">
+                    <input type="checkbox" id="matchExact" onchange="loadMatches()" style="width:16px;height:16px;cursor:pointer;">
+                    Exact service match only
+                </label>
+                <span id="matchCounts" style="font-size:12.5px; color:var(--text-muted);"></span>
+                <div id="matchBulkBar" style="display:none; align-items:center; gap:8px; margin-left:auto;">
+                    <span id="matchSelCount" style="font-size:13px; font-weight:600; color:var(--primary);"></span>
+                    <button class="pmsg-btn" onclick="openMatchBulkMsg()">📨 Send Template to Selected</button>
+                </div>
+            </div>
+            <div style="flex:1; overflow:auto; border:1px solid var(--border-color); border-radius:10px;">
+                <table id="matchTable">
+                    <thead><tr>
+                        <th style="width:36px;"><input type="checkbox" id="matchSelAll" onchange="toggleMatchSelAll(this.checked)" style="width:16px;height:16px;cursor:pointer;"></th>
+                        <th>Zone</th><th>Distance</th><th>Name</th><th>Phone</th>
+                        <th id="matchServiceHead">Service</th><th>Status</th>
+                    </tr></thead>
+                    <tbody id="matchBody"></tbody>
+                </table>
+            </div>
+            <div style="display:flex; gap:10px; margin-top:16px; justify-content:flex-end;">
+                <button onclick="closeMatchModal()" style="padding:10px 18px; border-radius:10px; border:1px solid var(--border-color); background:#fff; color:var(--text-muted); font-weight:600; cursor:pointer;">Close</button>
+            </div>
+        </div>
+    </div>
 </div>
 
 <script>
@@ -1982,6 +2021,8 @@
     // bulk-selected (e.g. filter to "interested" / "available") and sent a template.
     let peopleSel = new Set();
     const selectableGroup = () => peopleGroup === 'flat_customers' || peopleGroup === 'customers' || peopleGroup === 'maids';
+    // Proximity matching only spans the customers ⇄ maids tables.
+    const matchableGroup = () => peopleGroup === 'customers' || peopleGroup === 'maids';
 
     // Search across every visible column. Space-separated terms must ALL match
     // ("interested cooking" = Interested customers who need cooking).
@@ -2017,6 +2058,7 @@
             <td>${esc(p.tag)}</td>
             <td>${esc(p.status)}</td>
             <td style="text-align:right; white-space:nowrap;">
+                ${matchableGroup() ? `<button class="pmsg-btn" style="border-color:#8b5cf6; color:#8b5cf6; background:rgba(139,92,246,0.08);" title="Find nearby ${peopleGroup === 'maids' ? 'customers' : 'maids'}" onclick="openMatchModal('${esc(String(p.id))}')">🔍 Match</button>` : ''}
                 <button class="pmsg-btn" onclick="openPeopleChat('${esc(p.phone)}')">💬 Chat</button>
                 <button class="pmsg-btn" style="border-color:var(--indigo); color:var(--indigo); background:var(--indigo-glow);" onclick="openPeopleMsg('${esc(p.phone)}')">Template</button>
             </td>
@@ -2262,6 +2304,112 @@
     // Badge refresh: on load + every 60s
     loadNotifications();
     setInterval(loadNotifications, 60000);
+
+    // ── Proximity matching (nearest maids ⇄ nearest customers) ──
+    // Read-only lookup against /api/match. Results can be selected and sent an
+    // approved template using the same picker as the directory views.
+    let matchState = { group: null, id: null, results: [], sel: new Set() };
+
+    async function openMatchModal(id) {
+        matchState = { group: peopleGroup, id, results: [], sel: new Set() };
+        document.getElementById('matchExact').checked = false;
+        document.getElementById('matchModal').style.display = 'flex';
+        await loadMatches();
+    }
+
+    function closeMatchModal() {
+        document.getElementById('matchModal').style.display = 'none';
+    }
+
+    async function loadMatches() {
+        const { group, id } = matchState;
+        if (!id) return;
+        const exact = document.getElementById('matchExact').checked;
+        const url = group === 'maids'
+            ? `/api/match/maid/${encodeURIComponent(id)}?exactMatch=${exact}`
+            : `/api/match/${encodeURIComponent(id)}?exactMatch=${exact}`;
+        document.getElementById('matchBody').innerHTML = '<tr><td colspan="7" style="padding:24px; text-align:center; color:var(--text-muted);">Finding matches…</td></tr>';
+        try {
+            const res = await authFetch(url);
+            const j = await res.json();
+            if (!res.ok || j.error) {
+                matchState.results = [];
+                document.getElementById('matchBody').innerHTML = `<tr><td colspan="7" style="padding:24px; text-align:center; color:var(--error);">${esc(j.error || 'Could not load matches')}</td></tr>`;
+                document.getElementById('matchCounts').innerText = '';
+                updateMatchBulkBar();
+                return;
+            }
+            if (group === 'maids') {
+                matchState.results = j.customers || [];
+                document.getElementById('matchTitle').innerText = `Nearest customers for ${j.maid.name}`;
+                document.getElementById('matchSubtitle').innerText = `Offers: ${j.maid.service_type || '—'}${j.maid.areas_served ? ' · ' + j.maid.areas_served : ''}`;
+                document.getElementById('matchCounts').innerText = `Checked ${j.total_pending_jobs} customers with GPS · ${j.matches_found} within 8 km`;
+                document.getElementById('matchServiceHead').innerText = 'Service Needed';
+            } else {
+                matchState.results = j.maids || [];
+                document.getElementById('matchTitle').innerText = `Nearest maids for ${j.customer.name}`;
+                document.getElementById('matchSubtitle').innerText = `Needs: ${j.customer.service_needed || '—'}${j.customer.location ? ' · ' + j.customer.location : ''}`;
+                document.getElementById('matchCounts').innerText = `Checked ${j.total_available} maids with GPS · ${j.matches_found} within 8 km`;
+                document.getElementById('matchServiceHead').innerText = 'Service Type';
+            }
+            matchState.sel.clear();
+            renderMatches();
+        } catch (e) {
+            document.getElementById('matchBody').innerHTML = `<tr><td colspan="7" style="padding:24px; text-align:center; color:var(--error);">Network error: ${esc(e.message)}</td></tr>`;
+        }
+    }
+
+    function renderMatches() {
+        const rows = matchState.results;
+        const body = document.getElementById('matchBody');
+        if (!rows.length) {
+            body.innerHTML = '<tr><td colspan="7" style="padding:24px; text-align:center; color:var(--text-muted);">No matches within 8 km.</td></tr>';
+            document.getElementById('matchSelAll').checked = false;
+            updateMatchBulkBar();
+            return;
+        }
+        body.innerHTML = rows.map(r => `<tr>
+            <td><input type="checkbox" ${matchState.sel.has(r.phone) ? 'checked' : ''} onchange="toggleMatchSel('${esc(r.phone)}', this.checked)" style="width:16px;height:16px;cursor:pointer;"></td>
+            <td><span class="zone-badge" title="${esc(r.label)}" style="background:${esc(r.color)}1a; color:${esc(r.color)}; border:1px solid ${esc(r.color)}55;">${esc(r.zone)}</span></td>
+            <td style="font-weight:600;">${r.distance_km} km</td>
+            <td><b>${esc(r.name)}</b></td>
+            <td>${esc(r.phone)}</td>
+            <td>${esc(r.service_type || r.service_needed || '')}</td>
+            <td>${esc(r.status || '')}</td>
+        </tr>`).join('');
+        document.getElementById('matchSelAll').checked = rows.every(r => matchState.sel.has(r.phone));
+        updateMatchBulkBar();
+    }
+
+    function toggleMatchSel(phone, checked) {
+        if (checked) matchState.sel.add(phone); else matchState.sel.delete(phone);
+        renderMatches();
+    }
+
+    function toggleMatchSelAll(checked) {
+        matchState.results.forEach(r => { if (checked) matchState.sel.add(r.phone); else matchState.sel.delete(r.phone); });
+        renderMatches();
+    }
+
+    function updateMatchBulkBar() {
+        const bar = document.getElementById('matchBulkBar');
+        if (matchState.sel.size > 0) {
+            document.getElementById('matchSelCount').innerText = `${matchState.sel.size} selected`;
+            bar.style.display = 'flex';
+        } else {
+            bar.style.display = 'none';
+        }
+    }
+
+    function openMatchBulkMsg() {
+        if (!matchState.sel.size) { alert('Select at least one match first.'); return; }
+        bulkTargets = [...matchState.sel].map(ph => {
+            const r = matchState.results.find(x => x.phone === ph);
+            return { phone: ph, name: r && r.name };
+        });
+        bulkOnDone = () => { matchState.sel.clear(); renderMatches(); };
+        openBulkModal(`${bulkTargets.length} selected ${matchState.group === 'maids' ? 'customers' : 'maids'}`);
+    }
 
     function openPeopleMsg(phone) {
         const person = peopleData.find(p => p.phone === phone);

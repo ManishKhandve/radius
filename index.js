@@ -13,6 +13,7 @@ const sheets  = require('./sheets');
 const { addInvite, isInvited, uploadReceipt } = require('./invite-store');
 const chatStore = require('./chat-store');
 const matching = require('./matching');
+const match = require('./match');
 
 // ─── Structured logging ─────────────────────────────────────
 function log(level, tag, ...args) {
@@ -1851,6 +1852,38 @@ app.get('/run-followups', async (req, res) => {
 // No bulk campaign: maids are messaged one-by-one from the Maids directory
 // view, where the agent picks the template and video/image per send
 // (POST /api/people/message below).
+
+// ─── Proximity matching (CRM chat interface) ─────────────────
+// Read-only. Uses the GPS coordinates already stored on the records —
+// no geocoding or external location API. See match.js for the rules.
+//
+//   GET /api/match/maid/:maidId?exactMatch=true|false  → nearest customers
+//   GET /api/match/:customerId?exactMatch=true|false   → nearest maids
+//
+// The maid route is registered first so "maid" is never read as a customer id.
+app.get('/api/match/maid/:maidId', authMiddleware, async (req, res) => {
+  const exactMatch = req.query.exactMatch === 'true';
+  try {
+    const result = await match.matchCustomersForMaid(req.params.maidId, { exactMatch, role: req.user.role });
+    if (result.error) return res.status(result.status || 400).json({ error: result.error });
+    res.json(result); // 200 even when matches_found is 0 — that's a valid result
+  } catch (err) {
+    log('error', 'match', `maid ${req.params.maidId} failed:`, err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.get('/api/match/:customerId', authMiddleware, async (req, res) => {
+  const exactMatch = req.query.exactMatch === 'true';
+  try {
+    const result = await match.matchMaidsForCustomer(req.params.customerId, { exactMatch, role: req.user.role });
+    if (result.error) return res.status(result.status || 400).json({ error: result.error });
+    res.json(result); // 200 even when matches_found is 0 — that's a valid result
+  } catch (err) {
+    log('error', 'match', `customer ${req.params.customerId} failed:`, err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
 
 // ─── People directory (flat_customers / customers / maids) ───
 // Browse the three lead tables and message an individual via template.
