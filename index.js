@@ -14,6 +14,8 @@ const { addInvite, isInvited, uploadReceipt } = require('./invite-store');
 const chatStore = require('./chat-store');
 const matching = require('./matching');
 const match = require('./match');
+const wfStore = require('./workflow-store');
+const wfEngine = require('./workflow-engine');
 
 // ─── Structured logging ─────────────────────────────────────
 function log(level, tag, ...args) {
@@ -1969,6 +1971,286 @@ app.post('/api/people/message', authMiddleware, async (req, res) => {
   }
 });
 
+// ═════════════════════════════════════════════════════════════
+// AUTOMATION — no-code workflow builder (schedule/follow-up messaging)
+// ═════════════════════════════════════════════════════════════
+// Admin-only mutations; employees get read-only access. Every edit and
+// execution is logged to workflow_logs. Engine lives in workflow-engine.js.
+
+app.get('/automation', (req, res) => {
+  res.sendFile(__dirname + '/automation.html');
+});
+
+function requireAdmin(req, res) {
+  if (req.user.role !== 'admin') {
+    res.status(403).json({ ok: false, error: 'Admin only' });
+    return false;
+  }
+  return true;
+}
+
+const audit = (wfId, user, action, msg = '') =>
+  wfStore.addLog(wfId, null, null, 'audit', user, action, msg).catch(() => {});
+
+// Curated filterable fields per audience source (real columns only).
+const WORKFLOW_META = {
+  sources: {
+    customers: {
+      label: 'Maid Customers',
+      fields: ['status', 'service_needed', 'location', 'priority', 'gender', 'budget', 'availability', 'assigned_to', 'stage', 'campaign_name', 'source', 'pincode', 'created_at', 'last_called_date', 'next_follow_up'],
+    },
+    flat_customers: {
+      label: 'Flat Customers',
+      fields: ['status', 'home_type', 'area', 'requirement', 'assigned_to', 'priority', 'availability', 'stage', 'source', 'pincode', 'created_at', 'last_called_date', 'follow_up'],
+    },
+    maids: {
+      label: 'Maids (Workers)',
+      fields: ['status', 'service_type', 'areas_served', 'job_preference', 'gender', 'experience', 'salary_expectation', 'availability', 'stage', 'pincode', 'created_at', 'last_called_date', 'worker'],
+    },
+    contacts: {
+      label: 'WhatsApp Contacts',
+      fields: ['lead_status', 'service_category', 'assigned_agent', 'lead_temperature', 'label', 'attribution_campaign', 'last_message_at', 'follow_up_time'],
+    },
+  },
+  operators: [
+    { id: 'eq', label: 'equals' }, { id: 'neq', label: 'not equals' },
+    { id: 'contains', label: 'contains' }, { id: 'not_contains', label: 'does not contain' },
+    { id: 'empty', label: 'is empty' }, { id: 'not_empty', label: 'is not empty' },
+    { id: 'in_last_days', label: 'within last N days' }, { id: 'older_than_days', label: 'older than N days' },
+    { id: 'before', label: 'date before' }, { id: 'after', label: 'date after' },
+    { id: 'gt', label: 'greater than' }, { id: 'lt', label: 'less than' },
+  ],
+  knownTemplates: ['day3_follow_up', 'day7_follow_up', 'day15_follow_up', 'cleanly_deep_cleaning_offer'],
+};
+
+// Ready-to-use workflow templates (loadable into the editor, then customized).
+const WORKFLOW_TEMPLATES = [
+  {
+    key: 'new_customer_followup', name: 'New Customer Follow-up',
+    description: 'When a new maid-customer is created, wait 1 day, then send a welcome/follow-up template.',
+    definition: { settings: { preventDuplicates: true, timezone: 'Asia/Kolkata' }, nodes: [
+      { id: 't', type: 'trigger_customer_created', x: 60, y: 140, config: { source: 'customers' } },
+      { id: 'd', type: 'logic_delay', x: 330, y: 140, config: { n: 1, unit: 'days' } },
+      { id: 's', type: 'action_send_template', x: 600, y: 140, config: { templateName: 'day3_follow_up', lang: 'en', personalizeName: false } },
+      { id: 'e', type: 'end', x: 870, y: 140, config: {} },
+    ], connections: [ { from: 't', port: 'out', to: 'd' }, { from: 'd', port: 'out', to: 's' }, { from: 's', port: 'out', to: 'e' } ] },
+  },
+  {
+    key: 'weekly_followup_4', name: 'Weekly Follow-up (4 weeks)',
+    description: 'Every week for 4 weeks, message Interested maid-customers — stops early if their status changes.',
+    definition: { settings: { preventDuplicates: false, timezone: 'Asia/Kolkata' }, nodes: [
+      { id: 't', type: 'trigger_manual', x: 60, y: 160, config: {} },
+      { id: 'a', type: 'audience', x: 300, y: 160, config: { source: 'customers', groups: [ { conditions: [ { field: 'status', op: 'eq', value: 'Interested' } ] } ] } },
+      { id: 'l', type: 'logic_loop', x: 560, y: 160, config: { intervalN: 1, intervalUnit: 'weeks', maxIterations: 4, stopGroups: [ { conditions: [ { field: 'status', op: 'neq', value: 'Interested' } ] } ] } },
+      { id: 's', type: 'action_send_template', x: 830, y: 90, config: { templateName: 'day7_follow_up', lang: 'en' } },
+      { id: 'e', type: 'end', x: 830, y: 240, config: {} },
+    ], connections: [ { from: 't', port: 'out', to: 'a' }, { from: 'a', port: 'out', to: 'l' }, { from: 'l', port: 'do', to: 's' }, { from: 'l', port: 'exit', to: 'e' } ] },
+  },
+  {
+    key: 'inactive_reengage', name: 'Inactive Customer Re-engagement',
+    description: 'Monthly: message customers marked Not Interested / not contacted recently.',
+    definition: { settings: { preventDuplicates: false, timezone: 'Asia/Kolkata' }, nodes: [
+      { id: 't', type: 'trigger_schedule', x: 60, y: 160, config: { mode: 'monthly', monthDay: 1, time: '10:00', timezone: 'Asia/Kolkata', neverExpire: true } },
+      { id: 'a', type: 'audience', x: 330, y: 160, config: { source: 'customers', groups: [ { conditions: [ { field: 'status', op: 'eq', value: 'Not Interested' } ] }, { conditions: [ { field: 'status', op: 'eq', value: "Didn't Convert" } ] } ] } },
+      { id: 's', type: 'action_send_template', x: 600, y: 160, config: { templateName: 'day15_follow_up', lang: 'en' } },
+      { id: 'e', type: 'end', x: 870, y: 160, config: {} },
+    ], connections: [ { from: 't', port: 'out', to: 'a' }, { from: 'a', port: 'out', to: 's' }, { from: 's', port: 'out', to: 'e' } ] },
+  },
+  {
+    key: 'daily_until_response', name: 'Daily Reminder Until Status Changes',
+    description: 'Send a daily reminder (max 7) until the customer is no longer "Not Contacted".',
+    definition: { settings: { preventDuplicates: false, timezone: 'Asia/Kolkata' }, nodes: [
+      { id: 't', type: 'trigger_manual', x: 60, y: 160, config: {} },
+      { id: 'a', type: 'audience', x: 300, y: 160, config: { source: 'customers', groups: [ { conditions: [ { field: 'status', op: 'eq', value: 'Not Contacted' } ] } ] } },
+      { id: 'l', type: 'logic_loop', x: 560, y: 160, config: { intervalN: 1, intervalUnit: 'days', maxIterations: 7, stopGroups: [ { conditions: [ { field: 'status', op: 'neq', value: 'Not Contacted' } ] } ] } },
+      { id: 's', type: 'action_send_template', x: 830, y: 90, config: { templateName: 'day3_follow_up', lang: 'en' } },
+      { id: 'e', type: 'end', x: 830, y: 240, config: {} },
+    ], connections: [ { from: 't', port: 'out', to: 'a' }, { from: 'a', port: 'out', to: 'l' }, { from: 'l', port: 'do', to: 's' }, { from: 'l', port: 'exit', to: 'e' } ] },
+  },
+  {
+    key: 'maid_reg_reminder', name: 'Maid Registration Reminder',
+    description: 'Weekly nudge to maids still marked Not Contacted, for 3 weeks.',
+    definition: { settings: { preventDuplicates: false, timezone: 'Asia/Kolkata' }, nodes: [
+      { id: 't', type: 'trigger_manual', x: 60, y: 160, config: {} },
+      { id: 'a', type: 'audience', x: 300, y: 160, config: { source: 'maids', groups: [ { conditions: [ { field: 'status', op: 'eq', value: 'Not Contacted' } ] } ] } },
+      { id: 'l', type: 'logic_loop', x: 560, y: 160, config: { intervalN: 1, intervalUnit: 'weeks', maxIterations: 3, stopGroups: [ { conditions: [ { field: 'status', op: 'neq', value: 'Not Contacted' } ] } ] } },
+      { id: 's', type: 'action_send_template', x: 830, y: 90, config: { templateName: 'day3_follow_up', lang: 'en' } },
+      { id: 'e', type: 'end', x: 830, y: 240, config: {} },
+    ], connections: [ { from: 't', port: 'out', to: 'a' }, { from: 'a', port: 'out', to: 'l' }, { from: 'l', port: 'do', to: 's' }, { from: 'l', port: 'exit', to: 'e' } ] },
+  },
+  {
+    key: 'monthly_checkin', name: 'Monthly Customer Check-in',
+    description: 'On the 1st of every month, check in with Booked customers and set a CRM follow-up reminder.',
+    definition: { settings: { preventDuplicates: false, timezone: 'Asia/Kolkata' }, nodes: [
+      { id: 't', type: 'trigger_schedule', x: 60, y: 160, config: { mode: 'monthly', monthDay: 1, time: '11:00', timezone: 'Asia/Kolkata', neverExpire: true } },
+      { id: 'a', type: 'audience', x: 320, y: 160, config: { source: 'contacts', groups: [ { conditions: [ { field: 'lead_status', op: 'eq', value: 'Booked' } ] } ] } },
+      { id: 's', type: 'action_send_template', x: 580, y: 160, config: { templateName: 'day7_follow_up', lang: 'en' } },
+      { id: 'r', type: 'action_create_reminder', x: 840, y: 160, config: { daysFromNow: 2, time: '10:00' } },
+      { id: 'e', type: 'end', x: 1080, y: 160, config: {} },
+    ], connections: [ { from: 't', port: 'out', to: 'a' }, { from: 'a', port: 'out', to: 's' }, { from: 's', port: 'out', to: 'r' }, { from: 'r', port: 'out', to: 'e' } ] },
+  },
+];
+
+// ─── Meta / templates (must precede /:id routes) ─────────────
+app.get('/api/workflows/meta', authMiddleware, async (req, res) => {
+  const users = await chatStore.getUsers().catch(() => []);
+  res.json({ ok: true, meta: WORKFLOW_META, agents: users.map(u => u.username), role: req.user.role });
+});
+
+app.get('/api/workflows/templates', authMiddleware, (req, res) => {
+  res.json({ ok: true, templates: WORKFLOW_TEMPLATES });
+});
+
+app.get('/api/automation/stats', authMiddleware, async (req, res) => {
+  res.json({ ok: true, stats: await wfStore.dashboardStats() });
+});
+
+app.get('/api/automation/executions', authMiddleware, async (req, res) => {
+  const logs = await wfStore.listLogs({ workflowId: req.query.workflow_id || undefined, type: req.query.type || undefined, limit: 200 });
+  const runs = await wfStore.listRuns(req.query.workflow_id || undefined, 25);
+  res.json({ ok: true, logs, runs });
+});
+
+// ─── Workflow CRUD ───────────────────────────────────────────
+app.get('/api/workflows', authMiddleware, async (req, res) => {
+  res.json({ ok: true, workflows: await wfStore.listWorkflows(), role: req.user.role });
+});
+
+app.post('/api/workflows', authMiddleware, async (req, res) => {
+  if (!requireAdmin(req, res)) return;
+  try {
+    const { name, definition } = req.body || {};
+    if (!name) return res.status(400).json({ ok: false, error: 'Name required' });
+    const wf = await wfStore.createWorkflow(name.trim(), definition || { nodes: [], connections: [], settings: { timezone: 'Asia/Kolkata' } }, req.user.username);
+    audit(wf.id, req.user.username, 'created', name);
+    res.json({ ok: true, workflow: wf });
+  } catch (err) { res.status(500).json({ ok: false, error: err.message }); }
+});
+
+app.get('/api/workflows/:id', authMiddleware, async (req, res) => {
+  const wf = await wfStore.getWorkflow(req.params.id);
+  if (!wf) return res.status(404).json({ ok: false, error: 'Workflow not found' });
+  res.json({ ok: true, workflow: wf, role: req.user.role });
+});
+
+app.put('/api/workflows/:id', authMiddleware, async (req, res) => {
+  if (!requireAdmin(req, res)) return;
+  try {
+    const { name, definition } = req.body || {};
+    let wf = await wfStore.getWorkflow(req.params.id);
+    if (!wf) return res.status(404).json({ ok: false, error: 'Workflow not found' });
+    if (definition) wf = await wfStore.saveDefinition(wf.id, definition, req.user.username);
+    if (name && name !== wf.name) wf = await wfStore.updateWorkflow(wf.id, { name: name.trim() }, req.user.username);
+    audit(wf.id, req.user.username, 'saved', `v${wf.version}`);
+    res.json({ ok: true, workflow: wf });
+  } catch (err) { res.status(500).json({ ok: false, error: err.message }); }
+});
+
+app.delete('/api/workflows/:id', authMiddleware, async (req, res) => {
+  if (!requireAdmin(req, res)) return;
+  try {
+    audit(Number(req.params.id), req.user.username, 'deleted');
+    await wfStore.deleteWorkflow(req.params.id);
+    res.json({ ok: true });
+  } catch (err) { res.status(500).json({ ok: false, error: err.message }); }
+});
+
+// ─── Lifecycle: validate / publish / pause / resume / duplicate ──
+app.post('/api/workflows/:id/validate', authMiddleware, async (req, res) => {
+  const def = (req.body && req.body.definition) || (await wfStore.getWorkflow(req.params.id) || {}).definition || {};
+  res.json({ ok: true, errors: wfEngine.validate(def) });
+});
+
+app.post('/api/workflows/:id/publish', authMiddleware, async (req, res) => {
+  if (!requireAdmin(req, res)) return;
+  try {
+    let wf = await wfStore.getWorkflow(req.params.id);
+    if (!wf) return res.status(404).json({ ok: false, error: 'Workflow not found' });
+    if (req.body && req.body.definition) wf = await wfStore.saveDefinition(wf.id, req.body.definition, req.user.username);
+    const errors = wfEngine.validate(wf.definition || {});
+    if (errors.length) return res.status(400).json({ ok: false, errors });
+    const trig = (wf.definition.nodes || []).find(n => n.type.startsWith('trigger_'));
+    const patch = { status: 'active', engine_state: {} };
+    if (trig.type === 'trigger_schedule') {
+      const next = wfEngine.computeNextRun(trig.config || {}, new Date());
+      if (!next) return res.status(400).json({ ok: false, errors: ['Schedule never fires (already expired?) — check dates.'] });
+      patch.next_run_at = next.toISOString();
+    }
+    wf = await wfStore.updateWorkflow(wf.id, patch, req.user.username);
+    audit(wf.id, req.user.username, 'published', `v${wf.version}`);
+    res.json({ ok: true, workflow: wf });
+  } catch (err) { res.status(500).json({ ok: false, error: err.message }); }
+});
+
+app.post('/api/workflows/:id/pause', authMiddleware, async (req, res) => {
+  if (!requireAdmin(req, res)) return;
+  const wf = await wfStore.updateWorkflow(req.params.id, { status: 'paused' }, req.user.username);
+  audit(wf.id, req.user.username, 'paused');
+  res.json({ ok: true, workflow: wf });
+});
+
+app.post('/api/workflows/:id/resume', authMiddleware, async (req, res) => {
+  if (!requireAdmin(req, res)) return;
+  let wf = await wfStore.getWorkflow(req.params.id);
+  if (!wf) return res.status(404).json({ ok: false, error: 'Workflow not found' });
+  const trig = ((wf.definition || {}).nodes || []).find(n => n.type.startsWith('trigger_'));
+  const patch = { status: 'active' };
+  if (trig && trig.type === 'trigger_schedule') {
+    const next = wfEngine.computeNextRun(trig.config || {}, new Date());
+    patch.next_run_at = next ? next.toISOString() : null;
+    if (!next) patch.status = 'paused';
+  }
+  wf = await wfStore.updateWorkflow(wf.id, patch, req.user.username);
+  audit(wf.id, req.user.username, 'resumed');
+  res.json({ ok: true, workflow: wf });
+});
+
+app.post('/api/workflows/:id/duplicate', authMiddleware, async (req, res) => {
+  if (!requireAdmin(req, res)) return;
+  const wf = await wfStore.getWorkflow(req.params.id);
+  if (!wf) return res.status(404).json({ ok: false, error: 'Workflow not found' });
+  const copy = await wfStore.createWorkflow(wf.name + ' (copy)', wf.definition, req.user.username);
+  audit(copy.id, req.user.username, 'duplicated', `from #${wf.id}`);
+  res.json({ ok: true, workflow: copy });
+});
+
+// ─── Versions ───────────────────────────────────────────────
+app.get('/api/workflows/:id/versions', authMiddleware, async (req, res) => {
+  res.json({ ok: true, versions: await wfStore.listVersions(req.params.id) });
+});
+
+app.post('/api/workflows/:id/restore', authMiddleware, async (req, res) => {
+  if (!requireAdmin(req, res)) return;
+  const v = await wfStore.getVersion(req.params.id, req.body.version);
+  if (!v) return res.status(404).json({ ok: false, error: 'Version not found' });
+  const wf = await wfStore.saveDefinition(req.params.id, v.definition, req.user.username);
+  audit(wf.id, req.user.username, 'restored', `v${req.body.version} → v${wf.version}`);
+  res.json({ ok: true, workflow: wf });
+});
+
+// ─── Manual trigger / run-now ───────────────────────────────
+app.post('/api/workflows/:id/run-now', authMiddleware, async (req, res) => {
+  if (!requireAdmin(req, res)) return;
+  const wf = await wfStore.getWorkflow(req.params.id);
+  if (!wf) return res.status(404).json({ ok: false, error: 'Workflow not found' });
+  const errors = wfEngine.validate(wf.definition || {});
+  if (errors.length) return res.status(400).json({ ok: false, errors });
+  if (wf.status !== 'active') return res.status(400).json({ ok: false, error: 'Publish the workflow first (Run Now only executes active workflows).' });
+  const run = await wfEngine.startRun(wf, `manual by ${req.user.username}`);
+  audit(wf.id, req.user.username, 'run-now', run ? `run #${run.id} (${run.total} recipients)` : 'failed');
+  await wfEngine.tick(); // process immediately instead of waiting for the next tick
+  res.json({ ok: true, run });
+});
+
+// Custom trigger — external systems can fire a workflow via URL.
+app.post('/api/workflows/hook/:id', async (req, res) => {
+  if (!req.query.token || req.query.token !== ADMIN_TOKEN) return res.status(401).json({ ok: false, error: 'Unauthorized' });
+  const wf = await wfStore.getWorkflow(req.params.id);
+  if (!wf || wf.status !== 'active') return res.status(404).json({ ok: false, error: 'Active workflow not found' });
+  const run = await wfEngine.startRun(wf, 'webhook');
+  res.json({ ok: true, run });
+});
+
 // ─── Global error handler ───────────────────────────────────
 // Catches unhandled Express errors to return consistent JSON.
 app.use((err, req, res, _next) => {
@@ -1987,6 +2269,8 @@ app.use((req, res) => {
 const server = app.listen(PORT, () => {
   log('info', 'server', `Meta Cloud API bot ready on :${PORT}`);
   log('info', 'server', `build: ${process.env.RENDER_GIT_COMMIT?.slice(0,7) || 'local'} | phoneId: ${META_PHONE_NUMBER_ID || 'MISSING'} | verifyToken: ${META_VERIFY_TOKEN ? 'set' : 'MISSING'} | env: ${NODE_ENV}`);
+  // Automation engine — persisted in Supabase, safe across restarts.
+  wfEngine.init({ sendTemplate: watiSendTemplate, toMetaPhone, log, chatStore });
 });
 
 // ─── Graceful shutdown ──────────────────────────────────────

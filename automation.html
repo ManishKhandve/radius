@@ -1,0 +1,647 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Cleanly WhatsApp - Automation</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@500;600;700&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg-main:#f1f5f9; --bg-panel:#ffffff; --border-color:#94a3b8; --text-main:#0f172a;
+  --text-muted:#334155; --primary:#10b981; --primary-glow:rgba(16,185,129,0.08);
+  --indigo:#4f46e5; --indigo-glow:rgba(79,70,229,0.08); --error:#e11d48; --warning:#d97706;
+}
+*{box-sizing:border-box;margin:0;padding:0;scrollbar-width:thin;}
+::-webkit-scrollbar{width:8px;height:8px}::-webkit-scrollbar-thumb{background:rgba(0,0,0,.15);border-radius:4px}
+body{font-family:'Inter',system-ui,sans-serif;background:var(--bg-main);color:var(--text-main);height:100vh;display:flex;flex-direction:column;overflow:hidden}
+.topbar{height:58px;background:var(--bg-panel);border-bottom:1px solid var(--border-color);display:flex;align-items:center;gap:12px;padding:0 18px;flex-shrink:0}
+.brand{font-family:'Outfit',sans-serif;font-weight:700;font-size:17px;white-space:nowrap}
+.btn{padding:8px 14px;border-radius:9px;border:1px solid var(--border-color);background:#fff;color:var(--text-main);font-size:13px;font-weight:600;cursor:pointer;font-family:inherit;white-space:nowrap}
+.btn:hover{background:#f1f5f9}
+.btn.primary{background:linear-gradient(135deg,var(--primary) 0%,#047857 100%);color:#fff;border:none}
+.btn.indigo{background:var(--indigo);color:#fff;border:none}
+.btn.danger{color:var(--error);border-color:rgba(225,29,72,.35)}
+.btn:disabled{opacity:.45;cursor:not-allowed}
+.chip{padding:3px 10px;border-radius:99px;font-size:11.5px;font-weight:700;text-transform:uppercase}
+.chip.active{background:rgba(16,185,129,.12);color:#059669}
+.chip.draft{background:#e2e8f0;color:#475569}
+.chip.paused{background:rgba(217,119,6,.12);color:var(--warning)}
+/* ── Dashboard ── */
+#dashView{flex:1;overflow-y:auto;padding:26px 30px}
+.stats-row{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:14px;margin-bottom:22px}
+.stat-card{background:var(--bg-panel);border:1px solid var(--border-color);border-radius:14px;padding:14px 16px}
+.stat-label{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--text-muted)}
+.stat-value{font-family:'Outfit',sans-serif;font-size:24px;font-weight:700;margin-top:4px}
+.card{background:var(--bg-panel);border:1px solid var(--border-color);border-radius:16px;padding:18px;margin-bottom:20px}
+table{width:100%;border-collapse:collapse;font-size:13px;text-align:left}
+th{background:#f1f5f9;padding:10px 12px;font-weight:600;color:var(--text-muted);border-bottom:1px solid var(--border-color);position:sticky;top:0}
+td{padding:10px 12px;border-bottom:1px solid #f1f5f9;vertical-align:middle}
+tr:last-child td{border-bottom:none}
+input,select,textarea{background:#fff;border:1px solid var(--border-color);border-radius:9px;padding:9px 12px;color:var(--text-main);font-family:inherit;font-size:13px;outline:none}
+input:focus,select:focus{border-color:var(--primary)}
+/* ── Editor ── */
+#editorView{flex:1;display:none;overflow:hidden}
+.editor-grid{display:flex;height:100%}
+.palette{width:212px;background:var(--bg-panel);border-right:1px solid var(--border-color);overflow-y:auto;padding:12px;flex-shrink:0}
+.pal-cat{font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.6px;color:var(--text-muted);margin:12px 4px 6px}
+.pal-item{display:flex;align-items:center;gap:8px;padding:8px 10px;border:1px solid var(--border-color);border-radius:9px;margin-bottom:6px;font-size:12.5px;font-weight:500;cursor:grab;background:#fff;user-select:none}
+.pal-item:hover{border-color:var(--primary);background:var(--primary-glow)}
+.canvas-wrap{flex:1;overflow:auto;position:relative;background:radial-gradient(circle,#cbd5e1 1px,transparent 1px);background-size:22px 22px}
+#canvas{position:relative;width:3000px;height:2000px}
+#wires{position:absolute;inset:0;width:3000px;height:2000px;pointer-events:none}
+#wires path{pointer-events:stroke;cursor:pointer}
+.node{position:absolute;width:210px;background:#fff;border:2px solid var(--border-color);border-radius:12px;box-shadow:0 4px 14px rgba(0,0,0,.07);user-select:none}
+.node.selected{border-color:var(--primary);box-shadow:0 0 0 3px var(--primary-glow)}
+.node-head{padding:8px 10px;font-size:12.5px;font-weight:700;display:flex;align-items:center;gap:7px;cursor:move;border-bottom:1px solid #f1f5f9;border-radius:10px 10px 0 0}
+.node-body{padding:7px 10px;font-size:11px;color:var(--text-muted);min-height:26px;word-break:break-word}
+.port{position:absolute;width:14px;height:14px;border-radius:50%;background:#fff;border:2.5px solid var(--indigo);cursor:crosshair;z-index:5}
+.port.in{left:-8px;top:50%;transform:translateY(-50%);border-color:var(--primary)}
+.port.out{right:-8px}
+.port:hover{background:var(--indigo)}
+.port.in:hover{background:var(--primary)}
+.port-label{position:absolute;right:10px;font-size:9.5px;font-weight:700;color:var(--text-muted);transform:translateY(-50%);pointer-events:none}
+.config{width:300px;background:var(--bg-panel);border-left:1px solid var(--border-color);overflow-y:auto;padding:16px;flex-shrink:0}
+.cfg-label{font-size:11.5px;font-weight:600;color:var(--text-muted);margin:12px 0 5px}
+.config input,.config select,.config textarea{width:100%}
+.cond-group{border:1px dashed var(--border-color);border-radius:10px;padding:9px;margin-bottom:8px;background:#f8fafc}
+.cond-row{display:flex;gap:5px;margin-bottom:5px;align-items:center}
+.cond-row select,.cond-row input{flex:1;min-width:0;padding:6px 8px;font-size:12px}
+.mini{padding:4px 9px;font-size:11.5px;border-radius:7px;border:1px solid var(--border-color);background:#fff;cursor:pointer;font-weight:600}
+.or-sep{text-align:center;font-size:10.5px;font-weight:700;color:var(--text-muted);margin:6px 0}
+.modal-bg{display:none;position:fixed;inset:0;background:rgba(15,23,42,.45);z-index:1000;align-items:center;justify-content:center}
+.modal{background:#fff;border-radius:16px;padding:22px;width:560px;max-width:94%;max-height:85vh;overflow-y:auto;box-shadow:0 20px 50px rgba(0,0,0,.25)}
+.ro-banner{background:rgba(217,119,6,.1);color:var(--warning);font-size:12.5px;font-weight:600;padding:8px 14px;border-radius:9px;display:none}
+.tpl-card{border:1px solid var(--border-color);border-radius:12px;padding:14px;margin-bottom:10px;cursor:pointer}
+.tpl-card:hover{border-color:var(--primary);background:var(--primary-glow)}
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <span class="brand">⚡ Automation</span>
+  <span id="roBanner" class="ro-banner">View-only — admin access required to edit</span>
+  <div id="dashBar" style="display:flex;gap:10px;margin-left:auto;">
+    <button class="btn" onclick="location.href='/chat'">← Back to CRM</button>
+    <button class="btn indigo admin-only" onclick="openTemplates()">📋 New from Template</button>
+    <button class="btn primary admin-only" onclick="newWorkflow()">+ New Workflow</button>
+  </div>
+  <div id="editBar" style="display:none;gap:10px;margin-left:auto;align-items:center;">
+    <button class="btn" onclick="backToDash()">← Workflows</button>
+    <input id="wfName" placeholder="Workflow name" style="width:220px;" class="admin-edit">
+    <span id="wfStatus" class="chip draft">draft</span>
+    <button class="btn admin-only" onclick="doValidate()">✓ Validate</button>
+    <button class="btn admin-only" onclick="saveDraft()">💾 Save Draft</button>
+    <button class="btn primary admin-only" onclick="publishWf()">🚀 Publish</button>
+  </div>
+</div>
+
+<!-- ═══ DASHBOARD ═══ -->
+<div id="dashView">
+  <div class="stats-row" id="statsRow"></div>
+  <div class="card">
+    <div style="display:flex;align-items:center;gap:12px;margin-bottom:12px;flex-wrap:wrap;">
+      <h3 style="font-family:'Outfit',sans-serif;font-size:15px;">Workflows</h3>
+      <input id="wfSearch" placeholder="Search workflows…" oninput="renderWfList()" style="width:220px;margin-left:auto;">
+      <select id="wfFilter" onchange="renderWfList()">
+        <option value="all">All statuses</option><option value="active">Active</option>
+        <option value="draft">Draft</option><option value="paused">Paused</option>
+      </select>
+    </div>
+    <div style="overflow-x:auto;"><table>
+      <thead><tr><th>Name</th><th>Status</th><th>Ver</th><th>Next Run</th><th>Last Run</th><th>Updated By</th><th style="text-align:right;">Actions</th></tr></thead>
+      <tbody id="wfBody"></tbody>
+    </table></div>
+  </div>
+  <div class="card">
+    <div style="display:flex;align-items:center;gap:12px;margin-bottom:12px;flex-wrap:wrap;">
+      <h3 style="font-family:'Outfit',sans-serif;font-size:15px;">Recent Executions</h3>
+      <select id="logType" onchange="loadExecutions()" style="margin-left:auto;">
+        <option value="">All events</option><option value="send">Messages</option>
+        <option value="run">Runs</option><option value="action">Actions</option>
+        <option value="error">Errors</option><option value="audit">Audit trail</option>
+      </select>
+    </div>
+    <div style="overflow-x:auto;max-height:420px;overflow-y:auto;"><table>
+      <thead><tr><th>Time</th><th>Workflow</th><th>Type</th><th>Recipient</th><th>Status</th><th>Detail</th><th>Retry</th></tr></thead>
+      <tbody id="logBody"></tbody>
+    </table></div>
+  </div>
+</div>
+
+<!-- ═══ EDITOR ═══ -->
+<div id="editorView">
+  <div class="editor-grid">
+    <div class="palette" id="palette"></div>
+    <div class="canvas-wrap" id="canvasWrap">
+      <div id="canvas">
+        <svg id="wires"></svg>
+      </div>
+    </div>
+    <div class="config" id="configPanel">
+      <div style="color:var(--text-muted);font-size:13px;">Select a node to configure it.<br><br>💡 Drag items from the left palette onto the canvas, then drag from a purple output port to a green input port to connect them.</div>
+    </div>
+  </div>
+</div>
+
+<!-- Modals -->
+<div class="modal-bg" id="tplModal"><div class="modal">
+  <h3 style="font-family:'Outfit',sans-serif;margin-bottom:14px;">Start from a template</h3>
+  <div id="tplList"></div>
+  <div style="text-align:right;margin-top:10px;"><button class="btn" onclick="tplModal.style.display='none'">Cancel</button></div>
+</div></div>
+<div class="modal-bg" id="verModal"><div class="modal">
+  <h3 style="font-family:'Outfit',sans-serif;margin-bottom:14px;">Version history</h3>
+  <div id="verList"></div>
+  <div style="text-align:right;margin-top:10px;"><button class="btn" onclick="verModal.style.display='none'">Close</button></div>
+</div></div>
+
+<script>
+const token = localStorage.getItem('crm_token');
+if (!token) location.href = '/login';
+let role = localStorage.getItem('crm_role') || 'employee';
+const isAdmin = () => role === 'admin';
+async function api(url, opts = {}) {
+  opts.headers = Object.assign({ 'auth-token': token, 'Content-Type': 'application/json' }, opts.headers || {});
+  const res = await fetch(url, opts);
+  if (res.status === 401) { localStorage.clear(); location.href = '/login'; }
+  return res;
+}
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const tplModal = document.getElementById('tplModal'), verModal = document.getElementById('verModal');
+
+// ═══ Node catalog (mirrors workflow-engine.js) ═══
+const CATALOG = {
+  trigger_manual:          { cat:'Triggers', icon:'▶️', label:'Manual Trigger', outs:[{id:'out'}] },
+  trigger_schedule:        { cat:'Triggers', icon:'⏰', label:'Schedule', outs:[{id:'out'}] },
+  trigger_customer_created:{ cat:'Triggers', icon:'✨', label:'Record Created', outs:[{id:'out'}] },
+  trigger_followup_due:    { cat:'Triggers', icon:'📅', label:'Follow-up Due', outs:[{id:'out'}] },
+  trigger_webhook:         { cat:'Triggers', icon:'🔗', label:'Custom Trigger (URL)', outs:[{id:'out'}] },
+  audience:                { cat:'Audience', icon:'👥', label:'Audience', outs:[{id:'out'}] },
+  action_send_template:    { cat:'Actions', icon:'💬', label:'Send WhatsApp Template', outs:[{id:'out'}] },
+  action_create_reminder:  { cat:'Actions', icon:'🔔', label:'Create Reminder', outs:[{id:'out'}] },
+  action_update_status:    { cat:'Actions', icon:'🏷️', label:'Update Status', outs:[{id:'out'}] },
+  action_add_note:         { cat:'Actions', icon:'📝', label:'Add Note', outs:[{id:'out'}] },
+  action_assign:           { cat:'Actions', icon:'🧑‍💼', label:'Assign Follow-up', outs:[{id:'out'}] },
+  logic_if:                { cat:'Logic', icon:'🔀', label:'If / Else', outs:[{id:'true',label:'yes'},{id:'false',label:'no'}] },
+  logic_switch:            { cat:'Logic', icon:'🔢', label:'Switch', outs:[{id:'case0',label:'1'},{id:'case1',label:'2'},{id:'case2',label:'3'},{id:'default',label:'else'}] },
+  logic_delay:             { cat:'Logic', icon:'⏳', label:'Delay / Wait', outs:[{id:'out'}] },
+  logic_wait_until:        { cat:'Logic', icon:'📆', label:'Wait Until Date', outs:[{id:'out'}] },
+  logic_loop:              { cat:'Logic', icon:'🔁', label:'Loop / Repeat Until', outs:[{id:'do',label:'do'},{id:'exit',label:'exit'}] },
+  split:                   { cat:'Logic', icon:'🪓', label:'Split Path', outs:[{id:'out1',label:'1'},{id:'out2',label:'2'},{id:'out3',label:'3'}] },
+  merge:                   { cat:'Logic', icon:'🧲', label:'Merge Path', outs:[{id:'out'}] },
+  end:                     { cat:'Logic', icon:'🏁', label:'End Workflow', outs:[] },
+};
+
+// ═══ State ═══
+let META = { sources: {}, operators: [] }, AGENTS = [], TEMPLATES = [];
+let workflows = [], currentWf = null, def = { nodes: [], connections: [], settings: { timezone: 'Asia/Kolkata' } };
+let selectedNode = null, drag = null, nid = 0;
+
+// ═══ Boot ═══
+(async () => {
+  const m = await (await api('/api/workflows/meta')).json();
+  META = m.meta; AGENTS = m.agents || []; role = m.role || role;
+  if (!isAdmin()) {
+    document.getElementById('roBanner').style.display = 'block';
+    document.querySelectorAll('.admin-only').forEach(b => b.style.display = 'none');
+  }
+  buildPalette();
+  await refreshDash();
+})();
+
+// ═══ Dashboard ═══
+async function refreshDash() {
+  const [wRes, sRes] = await Promise.all([api('/api/workflows'), api('/api/automation/stats')]);
+  workflows = (await wRes.json()).workflows || [];
+  const s = (await sRes.json()).stats || {};
+  document.getElementById('statsRow').innerHTML = [
+    ['Active', s.active ?? 0, 'var(--primary)'], ['Draft', s.draft ?? 0, 'var(--text-muted)'],
+    ['Paused', s.paused ?? 0, 'var(--warning)'], ['Messages Sent', s.sent ?? 0, 'var(--indigo)'],
+    ['Failed', s.failed ?? 0, 'var(--error)'],
+    ['Next Run', s.nextRun ? new Date(s.nextRun).toLocaleString() : '—', 'var(--text-main)'],
+  ].map(([l, v, c]) => `<div class="stat-card"><div class="stat-label">${l}</div><div class="stat-value" style="color:${c};font-size:${String(v).length > 8 ? 14 : 24}px;">${esc(v)}</div></div>`).join('');
+  renderWfList();
+  loadExecutions();
+}
+
+function renderWfList() {
+  const q = (document.getElementById('wfSearch').value || '').toLowerCase();
+  const f = document.getElementById('wfFilter').value;
+  const rows = workflows.filter(w => (f === 'all' || w.status === f) && (!q || w.name.toLowerCase().includes(q)));
+  document.getElementById('wfBody').innerHTML = rows.length ? rows.map(w => `<tr>
+    <td><b>${esc(w.name)}</b></td>
+    <td><span class="chip ${esc(w.status)}">${esc(w.status)}</span></td>
+    <td>v${w.version}</td>
+    <td>${w.next_run_at ? new Date(w.next_run_at).toLocaleString() : '—'}</td>
+    <td>${w.last_run_at ? new Date(w.last_run_at).toLocaleString() : '—'}</td>
+    <td>${esc(w.updated_by || '')}</td>
+    <td style="text-align:right;white-space:nowrap;">
+      <button class="mini" onclick="openEditor(${w.id})">${isAdmin() ? '✏️ Edit' : '👁 View'}</button>
+      ${isAdmin() ? `
+      <button class="mini" onclick="runNow(${w.id})" ${w.status !== 'active' ? 'disabled' : ''}>▶ Run</button>
+      ${w.status === 'active' ? `<button class="mini" onclick="lifecycle(${w.id},'pause')">⏸ Pause</button>` : ''}
+      ${w.status === 'paused' ? `<button class="mini" onclick="lifecycle(${w.id},'resume')">▶ Resume</button>` : ''}
+      <button class="mini" onclick="lifecycle(${w.id},'duplicate')">⧉</button>
+      <button class="mini" onclick="showVersions(${w.id})">🕘</button>
+      <button class="mini" style="color:var(--error);" onclick="delWf(${w.id},'${esc(w.name)}')">🗑</button>` : ''}
+    </td></tr>`).join('') : '<tr><td colspan="7" style="text-align:center;color:var(--text-muted);padding:26px;">No workflows yet. Create one or start from a template.</td></tr>';
+}
+
+async function loadExecutions() {
+  const t = document.getElementById('logType').value;
+  const j = await (await api('/api/automation/executions' + (t ? '?type=' + t : ''))).json();
+  const names = Object.fromEntries(workflows.map(w => [w.id, w.name]));
+  document.getElementById('logBody').innerHTML = (j.logs || []).length ? j.logs.map(l => `<tr>
+    <td style="white-space:nowrap;">${new Date(l.created_at).toLocaleString()}</td>
+    <td>${esc(names[l.workflow_id] || '#' + l.workflow_id)}</td>
+    <td>${esc(l.type)}</td><td>${esc(l.recipient || '—')}</td>
+    <td style="font-weight:600;color:${l.status === 'sent' || l.status === 'ok' ? 'var(--primary)' : l.status === 'failed' || l.status === 'error' ? 'var(--error)' : 'var(--text-muted)'};">${esc(l.status)}</td>
+    <td style="max-width:320px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${esc(l.message)}">${esc(l.message || '')}</td>
+    <td>${l.retry_count || 0}</td></tr>`).join('') : '<tr><td colspan="7" style="text-align:center;color:var(--text-muted);padding:22px;">No executions yet.</td></tr>';
+}
+
+async function runNow(id) {
+  if (!confirm('Run this workflow now for its full audience?')) return;
+  const j = await (await api(`/api/workflows/${id}/run-now`, { method: 'POST' })).json();
+  alert(j.ok ? `✅ Run started — ${j.run ? j.run.total : 0} recipients queued.` : '❌ ' + (j.error || (j.errors || []).join('\n')));
+  refreshDash();
+}
+async function lifecycle(id, action) {
+  const j = await (await api(`/api/workflows/${id}/${action}`, { method: 'POST' })).json();
+  if (!j.ok) alert('❌ ' + (j.error || ''));
+  refreshDash();
+}
+async function delWf(id, name) {
+  if (!confirm(`Delete workflow "${name}" and all its history? This cannot be undone.`)) return;
+  await api('/api/workflows/' + id, { method: 'DELETE' });
+  refreshDash();
+}
+async function showVersions(id) {
+  const j = await (await api(`/api/workflows/${id}/versions`)).json();
+  document.getElementById('verList').innerHTML = (j.versions || []).map(v =>
+    `<div style="display:flex;align-items:center;gap:10px;padding:8px 4px;border-bottom:1px solid #f1f5f9;">
+      <b>v${v.version}</b><span style="color:var(--text-muted);font-size:12px;">${new Date(v.saved_at).toLocaleString()} · ${esc(v.saved_by || '')}</span>
+      ${isAdmin() ? `<button class="mini" style="margin-left:auto;" onclick="restoreVer(${id},${v.version})">Restore</button>` : ''}
+    </div>`).join('') || '<div style="color:var(--text-muted);">No versions.</div>';
+  verModal.style.display = 'flex';
+}
+async function restoreVer(id, version) {
+  if (!confirm(`Restore version ${version}? Current definition is kept in history.`)) return;
+  await api(`/api/workflows/${id}/restore`, { method: 'POST', body: JSON.stringify({ version }) });
+  verModal.style.display = 'none';
+  refreshDash();
+}
+
+// ═══ Templates ═══
+async function openTemplates() {
+  const j = await (await api('/api/workflows/templates')).json();
+  TEMPLATES = j.templates || [];
+  document.getElementById('tplList').innerHTML = TEMPLATES.map((t, i) =>
+    `<div class="tpl-card" onclick="useTemplate(${i})"><b>${esc(t.name)}</b><div style="font-size:12.5px;color:var(--text-muted);margin-top:4px;">${esc(t.description)}</div></div>`).join('');
+  tplModal.style.display = 'flex';
+}
+async function useTemplate(i) {
+  tplModal.style.display = 'none';
+  const t = TEMPLATES[i];
+  const j = await (await api('/api/workflows', { method: 'POST', body: JSON.stringify({ name: t.name, definition: t.definition }) })).json();
+  if (j.ok) openEditor(j.workflow.id); else alert('❌ ' + j.error);
+}
+async function newWorkflow() {
+  const name = prompt('Workflow name:', 'My reminder workflow');
+  if (!name) return;
+  const j = await (await api('/api/workflows', { method: 'POST', body: JSON.stringify({ name }) })).json();
+  if (j.ok) openEditor(j.workflow.id); else alert('❌ ' + j.error);
+}
+
+// ═══ Editor ═══
+function buildPalette() {
+  const cats = {};
+  for (const [type, c] of Object.entries(CATALOG)) (cats[c.cat] = cats[c.cat] || []).push([type, c]);
+  document.getElementById('palette').innerHTML = Object.entries(cats).map(([cat, items]) =>
+    `<div class="pal-cat">${cat}</div>` + items.map(([type, c]) =>
+      `<div class="pal-item" draggable="${isAdmin()}" data-type="${type}">${c.icon} ${c.label}</div>`).join('')).join('');
+  document.querySelectorAll('.pal-item').forEach(el => {
+    el.addEventListener('dragstart', e => e.dataTransfer.setData('text/node-type', el.dataset.type));
+  });
+}
+
+async function openEditor(id) {
+  const j = await (await api('/api/workflows/' + id)).json();
+  if (!j.ok) return alert('❌ ' + j.error);
+  currentWf = j.workflow;
+  def = currentWf.definition && currentWf.definition.nodes ? currentWf.definition : { nodes: [], connections: [], settings: { timezone: 'Asia/Kolkata' } };
+  def.settings = def.settings || { timezone: 'Asia/Kolkata' };
+  selectedNode = null;
+  document.getElementById('wfName').value = currentWf.name;
+  document.getElementById('wfName').disabled = !isAdmin();
+  setStatusChip(currentWf.status);
+  document.getElementById('dashView').style.display = 'none';
+  document.getElementById('dashBar').style.display = 'none';
+  document.getElementById('editorView').style.display = 'block';
+  document.getElementById('editBar').style.display = 'flex';
+  renderCanvas(); renderConfig();
+}
+function setStatusChip(s) {
+  const el = document.getElementById('wfStatus');
+  el.className = 'chip ' + s; el.textContent = s;
+}
+function backToDash() {
+  document.getElementById('editorView').style.display = 'none';
+  document.getElementById('editBar').style.display = 'none';
+  document.getElementById('dashView').style.display = 'block';
+  document.getElementById('dashBar').style.display = 'flex';
+  refreshDash();
+}
+
+// Canvas rendering
+const canvas = document.getElementById('canvas'), wires = document.getElementById('wires');
+function renderCanvas() {
+  canvas.querySelectorAll('.node').forEach(n => n.remove());
+  for (const n of def.nodes) {
+    const c = CATALOG[n.type] || { icon: '❓', label: n.type, outs: [{ id: 'out' }] };
+    const el = document.createElement('div');
+    el.className = 'node' + (selectedNode === n.id ? ' selected' : '');
+    el.style.left = n.x + 'px'; el.style.top = n.y + 'px'; el.dataset.id = n.id;
+    const outs = c.outs.map((o, i) => {
+      const top = 34 + i * 22;
+      return `<div class="port out" data-port="${o.id}" style="top:${top}px;"></div>` +
+             (o.label ? `<div class="port-label" style="top:${top + 7}px;">${o.label}</div>` : '');
+    }).join('');
+    el.innerHTML = `<div class="node-head">${c.icon} ${c.label}</div><div class="node-body">${nodeSummary(n)}</div>` +
+      (n.type.startsWith('trigger_') ? '' : '<div class="port in"></div>') + outs;
+    el.style.minHeight = (40 + (c.outs.length * 22)) + 'px';
+    canvas.appendChild(el);
+    el.querySelector('.node-head').addEventListener('mousedown', e => startNodeDrag(e, n));
+    el.addEventListener('mousedown', () => { selectedNode = n.id; renderCanvas(); renderConfig(); });
+    el.querySelectorAll('.port.out').forEach(p => p.addEventListener('mousedown', e => startWire(e, n.id, p.dataset.port)));
+  }
+  drawWires();
+}
+function nodeSummary(n) {
+  const c = n.config || {};
+  switch (n.type) {
+    case 'trigger_schedule': return esc(c.mode ? `${c.mode}${c.time ? ' @ ' + c.time : ''}${c.daysFilter && c.daysFilter !== 'all' ? ' (' + c.daysFilter + ')' : ''}` : 'not configured');
+    case 'trigger_customer_created': return 'new rows in ' + esc(c.source || '?');
+    case 'audience': return esc((META.sources[c.source] || {}).label || c.source || 'choose source') + (c.groups && c.groups.length ? ` · ${c.groups.reduce((a, g) => a + (g.conditions || []).length, 0)} filters` : '');
+    case 'action_send_template': return esc(c.templateName || 'choose template');
+    case 'action_update_status': return '→ ' + esc(c.value || '?');
+    case 'action_create_reminder': return `in ${c.daysFromNow || 1} day(s)`;
+    case 'action_assign': return '→ ' + esc(c.agent || '?');
+    case 'logic_delay': return `${c.n || 1} ${c.unit || 'days'}`;
+    case 'logic_wait_until': return esc(c.date || 'set date');
+    case 'logic_loop': return `every ${c.intervalN || 1} ${c.intervalUnit || 'days'}, max ${c.maxIterations || '∞'}`;
+    case 'logic_if': case 'logic_switch': return 'condition';
+    default: return '';
+  }
+}
+function portPos(nodeId, portId) {
+  const el = canvas.querySelector(`.node[data-id="${nodeId}"]`);
+  if (!el) return null;
+  const x = parseFloat(el.style.left), y = parseFloat(el.style.top);
+  if (portId === 'in') return { x, y: y + el.offsetHeight / 2 };
+  const p = el.querySelector(`.port.out[data-port="${portId}"]`);
+  if (!p) return { x: x + el.offsetWidth, y: y + el.offsetHeight / 2 };
+  return { x: x + el.offsetWidth, y: y + parseFloat(p.style.top) + 7 };
+}
+function drawWires(tempTo) {
+  let html = '';
+  for (let i = 0; i < def.connections.length; i++) {
+    const c = def.connections[i];
+    const a = portPos(c.from, c.port || 'out'), b = portPos(c.to, 'in');
+    if (!a || !b) continue;
+    const mx = (a.x + b.x) / 2;
+    html += `<path d="M${a.x},${a.y} C${mx},${a.y} ${mx},${b.y} ${b.x},${b.y}" stroke="#4f46e5" stroke-width="2.5" fill="none" data-ci="${i}"/>`;
+  }
+  if (drag && drag.kind === 'wire' && tempTo) {
+    const a = portPos(drag.from, drag.port);
+    if (a) html += `<path d="M${a.x},${a.y} C${(a.x + tempTo.x) / 2},${a.y} ${(a.x + tempTo.x) / 2},${tempTo.y} ${tempTo.x},${tempTo.y}" stroke="#10b981" stroke-width="2.5" stroke-dasharray="6 4" fill="none"/>`;
+  }
+  wires.innerHTML = html;
+  wires.querySelectorAll('path[data-ci]').forEach(p => p.addEventListener('click', () => {
+    if (!isAdmin()) return;
+    if (confirm('Remove this connection?')) { def.connections.splice(+p.dataset.ci, 1); drawWires(); }
+  }));
+}
+
+// Drag: nodes + wires + palette drop
+function canvasXY(e) {
+  const r = canvas.getBoundingClientRect();
+  return { x: e.clientX - r.left, y: e.clientY - r.top };
+}
+function startNodeDrag(e, n) {
+  if (!isAdmin()) return;
+  e.stopPropagation();
+  drag = { kind: 'node', node: n, dx: canvasXY(e).x - n.x, dy: canvasXY(e).y - n.y };
+}
+function startWire(e, from, port) {
+  if (!isAdmin()) return;
+  e.stopPropagation(); e.preventDefault();
+  drag = { kind: 'wire', from, port };
+}
+document.addEventListener('mousemove', e => {
+  if (!drag) return;
+  const p = canvasXY(e);
+  if (drag.kind === 'node') {
+    drag.node.x = Math.max(0, Math.round(p.x - drag.dx));
+    drag.node.y = Math.max(0, Math.round(p.y - drag.dy));
+    const el = canvas.querySelector(`.node[data-id="${drag.node.id}"]`);
+    if (el) { el.style.left = drag.node.x + 'px'; el.style.top = drag.node.y + 'px'; }
+    drawWires();
+  } else if (drag.kind === 'wire') {
+    drawWires(p);
+  }
+});
+document.addEventListener('mouseup', e => {
+  if (!drag) return;
+  if (drag.kind === 'wire') {
+    const target = e.target.closest && e.target.closest('.node');
+    if (target && target.dataset.id !== drag.from) {
+      const to = target.dataset.id;
+      const toNode = def.nodes.find(n => n.id === to);
+      if (toNode && !toNode.type.startsWith('trigger_')) {
+        def.connections = def.connections.filter(c => !(c.from === drag.from && (c.port || 'out') === drag.port));
+        def.connections.push({ from: drag.from, port: drag.port, to });
+      }
+    }
+    drag = null; drawWires();
+  } else drag = null;
+});
+const wrap = document.getElementById('canvasWrap');
+wrap.addEventListener('dragover', e => e.preventDefault());
+wrap.addEventListener('drop', e => {
+  e.preventDefault();
+  const type = e.dataTransfer.getData('text/node-type');
+  if (!type || !isAdmin()) return;
+  const p = canvasXY(e);
+  if (type.startsWith('trigger_') && def.nodes.some(n => n.type.startsWith('trigger_'))) {
+    return alert('A workflow can only have one trigger. Delete the existing one first.');
+  }
+  const id = 'n' + Date.now().toString(36) + (nid++);
+  def.nodes.push({ id, type, x: Math.max(0, p.x - 100), y: Math.max(0, p.y - 20), config: {} });
+  selectedNode = id;
+  renderCanvas(); renderConfig();
+});
+
+// ═══ Config panel ═══
+function fieldOptions(sel) {
+  // Fields come from the audience source (or all sources merged as fallback).
+  const aud = def.nodes.find(n => n.type === 'audience');
+  const src = aud && aud.config.source ? [aud.config.source] : Object.keys(META.sources);
+  const fields = [...new Set(src.flatMap(s => (META.sources[s] || {}).fields || []))];
+  return fields.map(f => `<option ${f === sel ? 'selected' : ''}>${f}</option>`).join('');
+}
+function condGroupsHtml(groups, key) {
+  groups = groups || [];
+  let h = '';
+  groups.forEach((g, gi) => {
+    if (gi) h += '<div class="or-sep">— OR —</div>';
+    h += `<div class="cond-group">` + (g.conditions || []).map((c, ci) => `
+      <div class="cond-row">
+        <select onchange="setCond('${key}',${gi},${ci},'field',this.value)"><option value="">field…</option>${fieldOptions(c.field)}</select>
+        <select onchange="setCond('${key}',${gi},${ci},'op',this.value)">${META.operators.map(o => `<option value="${o.id}" ${o.id === c.op ? 'selected' : ''}>${o.label}</option>`).join('')}</select>
+        <input value="${esc(c.value || '')}" placeholder="value" onchange="setCond('${key}',${gi},${ci},'value',this.value)">
+        <button class="mini" onclick="delCond('${key}',${gi},${ci})">×</button>
+      </div>`).join('') +
+      `<button class="mini" onclick="addCond('${key}',${gi})">+ AND condition</button>
+       <button class="mini" style="color:var(--error);" onclick="delGroup('${key}',${gi})">remove group</button></div>`;
+  });
+  h += `<button class="mini" onclick="addGroup('${key}')">+ OR group</button>`;
+  return h;
+}
+function groupsRef(key) {
+  const n = def.nodes.find(x => x.id === selectedNode);
+  n.config[key] = n.config[key] || [];
+  return n.config[key];
+}
+function setCond(key, gi, ci, f, v) { groupsRef(key)[gi].conditions[ci][f] = v; touchSummary(); }
+function addCond(key, gi) { groupsRef(key)[gi].conditions.push({ field: '', op: 'eq', value: '' }); renderConfig(); }
+function delCond(key, gi, ci) { groupsRef(key)[gi].conditions.splice(ci, 1); renderConfig(); }
+function addGroup(key) { groupsRef(key).push({ conditions: [{ field: '', op: 'eq', value: '' }] }); renderConfig(); }
+function delGroup(key, gi) { groupsRef(key).splice(gi, 1); renderConfig(); }
+function cfgSet(k, v) {
+  const n = def.nodes.find(x => x.id === selectedNode);
+  if (!n) return;
+  n.config[k] = v;
+  if (k === 'mode') renderConfig();
+  touchSummary();
+}
+function settingsSet(k, v) { def.settings[k] = v; }
+function touchSummary() {
+  const n = def.nodes.find(x => x.id === selectedNode);
+  const el = canvas.querySelector(`.node[data-id="${selectedNode}"] .node-body`);
+  if (n && el) el.innerHTML = nodeSummary(n);
+}
+function deleteSelected() {
+  def.nodes = def.nodes.filter(n => n.id !== selectedNode);
+  def.connections = def.connections.filter(c => c.from !== selectedNode && c.to !== selectedNode);
+  selectedNode = null;
+  renderCanvas(); renderConfig();
+}
+
+function renderConfig() {
+  const panel = document.getElementById('configPanel');
+  const n = def.nodes.find(x => x.id === selectedNode);
+  const dis = isAdmin() ? '' : 'disabled';
+  if (!n) {
+    panel.innerHTML = `<h4 style="font-family:'Outfit',sans-serif;">Workflow settings</h4>
+      <div class="cfg-label">Prevent duplicate sends (same person never messaged twice by this workflow)</div>
+      <select ${dis} onchange="settingsSet('preventDuplicates', this.value==='yes')">
+        <option value="no" ${!def.settings.preventDuplicates ? 'selected' : ''}>No</option>
+        <option value="yes" ${def.settings.preventDuplicates ? 'selected' : ''}>Yes</option></select>
+      <div class="cfg-label">Timezone</div>
+      <input ${dis} value="${esc(def.settings.timezone || 'Asia/Kolkata')}" onchange="settingsSet('timezone', this.value)">
+      <div style="margin-top:18px;color:var(--text-muted);font-size:12.5px;">💡 Click any node to configure it. Click a wire to delete it.</div>`;
+    return;
+  }
+  const c = n.config, cat = CATALOG[n.type];
+  let h = `<h4 style="font-family:'Outfit',sans-serif;">${cat.icon} ${cat.label}</h4>`;
+  const inp = (label, key, type = 'text', ph = '') => `<div class="cfg-label">${label}</div><input ${dis} type="${type}" value="${esc(c[key] ?? '')}" placeholder="${ph}" onchange="cfgSet('${key}', this.value)">`;
+  const sel = (label, key, opts) => `<div class="cfg-label">${label}</div><select ${dis} onchange="cfgSet('${key}', this.value)">${opts.map(o => `<option value="${o[0]}" ${String(c[key] ?? '') === String(o[0]) ? 'selected' : ''}>${o[1]}</option>`).join('')}</select>`;
+  const num = (label, key, ph) => `<div class="cfg-label">${label}</div><input ${dis} type="number" min="1" value="${esc(c[key] ?? '')}" placeholder="${ph || ''}" onchange="cfgSet('${key}', parseInt(this.value)||0)">`;
+
+  switch (n.type) {
+    case 'trigger_manual':
+      h += `<div style="font-size:12.5px;color:var(--text-muted);">Fires only when an admin presses <b>▶ Run</b> on the dashboard.</div>`; break;
+    case 'trigger_webhook':
+      h += `<div style="font-size:12.5px;color:var(--text-muted);">Fires when an external system calls:<br><code style="font-size:11px;word-break:break-all;">POST /api/workflows/hook/${currentWf.id}?token=ADMIN_TOKEN</code></div>`; break;
+    case 'trigger_schedule':
+      h += sel('Recurrence', 'mode', [['', 'choose…'], ['once', 'One-time (date & time)'], ['hourly', 'Hourly'], ['daily', 'Daily'], ['weekly', 'Weekly'], ['monthly', 'Monthly'], ['yearly', 'Yearly'], ['every_x', 'Every X days/weeks/months'], ['cron', 'Custom cron expression']]);
+      if (c.mode === 'cron') h += inp('Cron (min hour day month weekday)', 'cron', 'text', '0 10 * * 1-5');
+      if (c.mode === 'weekly') h += sel('Weekday', 'weekday', [[1, 'Monday'], [2, 'Tuesday'], [3, 'Wednesday'], [4, 'Thursday'], [5, 'Friday'], [6, 'Saturday'], [0, 'Sunday']]);
+      if (c.mode === 'monthly') h += num('Day of month (1–28)', 'monthDay', '1');
+      if (c.mode === 'every_x') h += num('Every N', 'everyN', '2') + sel('Unit', 'everyUnit', [['days', 'Days'], ['weeks', 'Weeks'], ['months', 'Months']]);
+      if (c.mode && c.mode !== 'cron') h += inp('Time of day', 'time', 'time');
+      h += sel('Day filter', 'daysFilter', [['all', 'Every day'], ['business', 'Business days only (Mon–Fri)'], ['weekend', 'Weekends only']]);
+      h += inp('Start date', 'startDate', 'date');
+      h += `<div class="cfg-label">Never expire</div><select ${dis} onchange="cfgSet('neverExpire', this.value==='1'); renderConfig();"><option value="" ${!c.neverExpire ? 'selected' : ''}>No — use end date</option><option value="1" ${c.neverExpire ? 'selected' : ''}>Yes — repeat forever</option></select>`;
+      if (!c.neverExpire) h += inp('End date (repeat until)', 'endDate', 'date');
+      h += inp('Timezone', 'timezone', 'text', 'Asia/Kolkata');
+      break;
+    case 'trigger_customer_created':
+      h += sel('Watch table', 'source', Object.entries(META.sources).filter(([k]) => k !== 'contacts').map(([k, v]) => [k, v.label]));
+      h += `<div class="cfg-label">Extra filters (optional)</div>` + condGroupsHtml(c.groups, 'groups');
+      break;
+    case 'trigger_followup_due':
+      h += `<div style="font-size:12.5px;color:var(--text-muted);">Fires for each contact whose scheduled follow-up time passes (status "Follow-up Required").</div>`; break;
+    case 'audience':
+      h += sel('Data source', 'source', [['', 'choose…'], ...Object.entries(META.sources).map(([k, v]) => [k, v.label])]);
+      h += `<div class="cfg-label">Filters — groups are OR'd, rows inside a group are AND'd</div>` + condGroupsHtml(c.groups, 'groups');
+      break;
+    case 'action_send_template':
+      h += `<div class="cfg-label">Approved template</div>
+        <select ${dis} onchange="cfgSet('templateName', this.value)">${['', ...META.knownTemplates].map(t => `<option ${c.templateName === t ? 'selected' : ''}>${t}</option>`).join('')}</select>
+        <div style="font-size:11px;color:var(--text-muted);margin-top:3px;">or type a custom name below</div>`;
+      h += inp('Custom template name', 'templateName');
+      h += sel('Language', 'lang', [['en', 'en'], ['en_US', 'en_US'], ['hi', 'hi'], ['mr', 'mr']]);
+      h += inp('Header media URL (optional)', 'headerUrl', 'text', 'https://…/video.mp4');
+      h += `<div class="cfg-label">Personalize {{1}} with the contact's name</div><select ${dis} onchange="cfgSet('personalizeName', this.value==='1')"><option value="" ${!c.personalizeName ? 'selected' : ''}>No — template has no variables</option><option value="1" ${c.personalizeName ? 'selected' : ''}>Yes — send name as {{1}}</option></select>`;
+      break;
+    case 'action_update_status': h += inp('New status value', 'value', 'text', 'e.g. Contacted'); break;
+    case 'action_add_note': h += `<div class="cfg-label">Note text</div><textarea ${dis} rows="3" onchange="cfgSet('text', this.value)">${esc(c.text || '')}</textarea>`; break;
+    case 'action_create_reminder': h += num('Days from now', 'daysFromNow', '1') + inp('At time', 'time', 'time'); break;
+    case 'action_assign': h += sel('Assign to agent', 'agent', [['', 'choose…'], ...AGENTS.map(a => [a, a])]); break;
+    case 'logic_if': h += `<div class="cfg-label">Condition (yes → top port, no → bottom)</div>` + condGroupsHtml(c.groups, 'groups'); break;
+    case 'logic_switch':
+      h += `<div class="cfg-label">Field</div><select ${dis} onchange="cfgSet('field', this.value)"><option value="">field…</option>${fieldOptions(c.field)}</select>`;
+      for (let i = 0; i < 3; i++) h += `<div class="cfg-label">Case ${i + 1} value</div><input ${dis} value="${esc((c.cases || [])[i] || '')}" onchange="(function(v){const n=def.nodes.find(x=>x.id===selectedNode);n.config.cases=n.config.cases||['','',''];n.config.cases[${i}]=v;})(this.value)">`;
+      break;
+    case 'logic_delay': h += num('Wait for', 'n', '1') + sel('Unit', 'unit', [['minutes', 'Minutes'], ['hours', 'Hours'], ['days', 'Days']]); break;
+    case 'logic_wait_until': h += inp('Wait until', 'date', 'datetime-local'); break;
+    case 'logic_loop':
+      h += num('Repeat every N', 'intervalN', '1') + sel('Unit', 'intervalUnit', [['minutes', 'Minutes'], ['hours', 'Hours'], ['days', 'Days'], ['weeks', 'Weeks']]);
+      h += num('Max iterations (safety cap)', 'maxIterations', '4');
+      h += `<div class="cfg-label">Stop early when… (checked before each round)</div>` + condGroupsHtml(c.stopGroups, 'stopGroups');
+      h += `<div style="font-size:11.5px;color:var(--text-muted);margin-top:6px;">Connect the <b>do</b> port to the repeated steps and <b>exit</b> to what happens after.</div>`;
+      break;
+    case 'split': h += `<div style="font-size:12.5px;color:var(--text-muted);">Runs up to 3 branches in parallel for each recipient.</div>`; break;
+    case 'merge': h += `<div style="font-size:12.5px;color:var(--text-muted);">Joins multiple paths back into one.</div>`; break;
+    case 'end': h += `<div style="font-size:12.5px;color:var(--text-muted);">Stops the workflow for this recipient.</div>`; break;
+  }
+  if (isAdmin()) h += `<button class="btn danger" style="margin-top:18px;width:100%;" onclick="deleteSelected()">🗑 Delete node</button>`;
+  panel.innerHTML = h;
+}
+
+// ═══ Save / validate / publish ═══
+async function saveDraft(silent) {
+  const name = document.getElementById('wfName').value.trim() || currentWf.name;
+  const j = await (await api('/api/workflows/' + currentWf.id, { method: 'PUT', body: JSON.stringify({ name, definition: def }) })).json();
+  if (!j.ok) { alert('❌ ' + j.error); return false; }
+  currentWf = j.workflow;
+  if (!silent) alert('💾 Saved as v' + currentWf.version);
+  return true;
+}
+async function doValidate() {
+  const j = await (await api(`/api/workflows/${currentWf.id}/validate`, { method: 'POST', body: JSON.stringify({ definition: def }) })).json();
+  alert(j.errors && j.errors.length ? '⚠️ Issues:\n\n• ' + j.errors.join('\n• ') : '✅ Workflow is valid and ready to publish.');
+}
+async function publishWf() {
+  const j = await (await api(`/api/workflows/${currentWf.id}/publish`, { method: 'POST', body: JSON.stringify({ definition: def }) })).json();
+  if (!j.ok) return alert('⚠️ Cannot publish:\n\n• ' + (j.errors || [j.error]).join('\n• '));
+  currentWf = j.workflow; setStatusChip('active');
+  alert('🚀 Published!' + (currentWf.next_run_at ? '\nNext run: ' + new Date(currentWf.next_run_at).toLocaleString() : '\nIt will fire on its trigger.'));
+}
+</script>
+</body>
+</html>
