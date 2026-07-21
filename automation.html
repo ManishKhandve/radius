@@ -509,33 +509,125 @@ function fieldOptions(sel) {
   const fields = [...new Set(src.flatMap(s => (META.sources[s] || {}).fields || []))];
   return fields.map(f => `<option ${f === sel ? 'selected' : ''}>${f}</option>`).join('');
 }
+const isMultiOp = op => ['in', 'not_in', 'contains_any'].includes(op);
+let valueCache = {};   // "source|field" → {values:[{value,count}], tooMany}
+let valueSearch = {};  // "key.gi.ci"    → keyword filter text
+
+function currentSource() {
+  const n = def.nodes.find(x => x.id === selectedNode);
+  if (n && n.type === 'audience' && n.config.source) return n.config.source;
+  const aud = def.nodes.find(x => x.type === 'audience');
+  return aud ? aud.config.source : null;
+}
+
+// Fetch distinct values for a field, then re-render so checkboxes appear.
+async function loadValues(source, field) {
+  const ck = source + '|' + field;
+  if (valueCache[ck]) return valueCache[ck];
+  valueCache[ck] = { loading: true, values: [] };
+  const j = await (await api(`/api/workflows/field-values?source=${encodeURIComponent(source)}&field=${encodeURIComponent(field)}`)).json();
+  valueCache[ck] = j.ok ? { values: j.values, tooMany: j.tooMany, blank: j.blank, total: j.total } : { values: [], error: j.error };
+  renderConfig();
+  return valueCache[ck];
+}
+
+function checkboxList(key, gi, ci, c) {
+  const source = currentSource();
+  if (!source || !c.field) return `<div style="font-size:11.5px;color:var(--text-muted);padding:4px;">Pick a data source and field first.</div>`;
+  const ck = source + '|' + c.field, cached = valueCache[ck];
+  if (!cached) { loadValues(source, c.field); return `<div style="font-size:11.5px;color:var(--text-muted);padding:4px;">Loading values…</div>`; }
+  if (cached.loading) return `<div style="font-size:11.5px;color:var(--text-muted);padding:4px;">Loading values…</div>`;
+  if (cached.tooMany) return `<input value="${esc(Array.isArray(c.value)?c.value.join('|'):(c.value||''))}" placeholder="too many distinct values — type manually" onchange="setCond('${key}',${gi},${ci},'value',this.value)">`;
+  const sk = `${key}.${gi}.${ci}`;
+  const q = (valueSearch[sk] || '').toLowerCase();
+  const sel = new Set((Array.isArray(c.value) ? c.value : String(c.value || '').split('|')).map(s => String(s).trim()).filter(Boolean));
+  const shown = cached.values.filter(v => !q || v.value.toLowerCase().includes(q));
+  return `
+    <input placeholder="🔍 search values…" value="${esc(valueSearch[sk] || '')}" style="width:100%;padding:5px 8px;font-size:11.5px;margin-bottom:4px;"
+           oninput="valueSearch['${sk}']=this.value; renderConfig(); setTimeout(()=>{const el=document.getElementById('vs_${sk.replace(/\./g,'_')}'); if(el){el.focus();el.setSelectionRange(el.value.length,el.value.length);} },0);"
+           id="vs_${sk.replace(/\./g, '_')}">
+    <div style="max-height:150px;overflow-y:auto;border:1px solid var(--border-color);border-radius:7px;background:#fff;padding:4px;">
+      ${shown.length ? shown.map(v => `
+        <label style="display:flex;align-items:center;gap:6px;padding:3px 4px;font-size:12px;cursor:pointer;">
+          <input type="checkbox" ${sel.has(v.value) ? 'checked' : ''} style="width:14px;height:14px;"
+                 onchange="toggleVal('${key}',${gi},${ci},this.checked,this.dataset.v)" data-v="${esc(v.value)}">
+          <span style="flex:1;">${esc(v.value)}</span>
+          <span style="color:var(--text-muted);font-size:11px;">${v.count}</span>
+        </label>`).join('') : `<div style="font-size:11.5px;color:var(--text-muted);padding:6px;">No matching values.</div>`}
+    </div>
+    <div style="font-size:11px;color:var(--text-muted);margin-top:3px;">${sel.size} selected${cached.blank ? ` · ${cached.blank} rows have this field empty` : ''}</div>`;
+}
+
+function toggleVal(key, gi, ci, checked, val) {
+  const c = groupsRef(key)[gi].conditions[ci];
+  const cur = new Set((Array.isArray(c.value) ? c.value : String(c.value || '').split('|')).map(s => String(s).trim()).filter(Boolean));
+  if (checked) cur.add(val); else cur.delete(val);
+  c.value = [...cur];
+  renderConfig(); touchSummary();
+}
+
 function condGroupsHtml(groups, key) {
   groups = groups || [];
   let h = '';
   groups.forEach((g, gi) => {
     if (gi) h += '<div class="or-sep">— OR —</div>';
-    h += `<div class="cond-group">` + (g.conditions || []).map((c, ci) => `
+    h += `<div class="cond-group">` + (g.conditions || []).map((c, ci) => {
+      const multi = isMultiOp(c.op);
+      return `
       <div class="cond-row">
         <select onchange="setCond('${key}',${gi},${ci},'field',this.value)"><option value="">field…</option>${fieldOptions(c.field)}</select>
         <select onchange="setCond('${key}',${gi},${ci},'op',this.value)">${META.operators.map(o => `<option value="${o.id}" ${o.id === c.op ? 'selected' : ''}>${o.label}</option>`).join('')}</select>
-        <input value="${esc(c.value || '')}" placeholder="value" onchange="setCond('${key}',${gi},${ci},'value',this.value)">
+        ${multi ? '' : `<input value="${esc(Array.isArray(c.value) ? c.value.join('|') : (c.value || ''))}" placeholder="value" onchange="setCond('${key}',${gi},${ci},'value',this.value)">`}
         <button class="mini" onclick="delCond('${key}',${gi},${ci})">×</button>
-      </div>`).join('') +
+      </div>
+      ${multi ? checkboxList(key, gi, ci, c) : ''}`;
+    }).join('') +
       `<button class="mini" onclick="addCond('${key}',${gi})">+ AND condition</button>
        <button class="mini" style="color:var(--error);" onclick="delGroup('${key}',${gi})">remove group</button></div>`;
   });
   h += `<button class="mini" onclick="addGroup('${key}')">+ OR group</button>`;
   return h;
 }
+
+// ── Live audience preview ──
+let previewBusy = false;
+async function previewAudience() {
+  const n = def.nodes.find(x => x.id === selectedNode);
+  if (!n || previewBusy) return;
+  previewBusy = true;
+  const box = document.getElementById('audPreview');
+  if (box) box.innerHTML = '<div style="color:var(--text-muted);font-size:12px;">Checking…</div>';
+  const j = await (await api('/api/workflows/preview-audience', { method: 'POST', body: JSON.stringify({ node: n }) })).json();
+  previewBusy = false;
+  if (!box) return;
+  if (!j.ok) { box.innerHTML = `<div style="color:var(--error);font-size:12px;">${esc(j.error)}</div>`; return; }
+  box.innerHTML = `
+    <div style="font-weight:700;font-size:13px;color:${j.count ? 'var(--primary)' : 'var(--error)'};margin-bottom:6px;">
+      ${j.count} recipient${j.count === 1 ? '' : 's'} <span style="font-weight:500;color:var(--text-muted);">of ${j.totalRows} rows</span>
+    </div>
+    ${j.count === 0 ? '<div style="font-size:11.5px;color:var(--error);">Nothing matches — check your filter values (typos match nobody).</div>' : ''}
+    <div style="max-height:160px;overflow-y:auto;font-size:11.5px;">
+      ${(j.sample || []).map(p => `<div style="padding:3px 0;border-bottom:1px solid #f1f5f9;">${esc(p.name)} <span style="color:var(--text-muted);">+${esc(p.phone)}</span></div>`).join('')}
+      ${j.count > (j.sample || []).length ? `<div style="color:var(--text-muted);padding-top:4px;">…and ${j.count - j.sample.length} more</div>` : ''}
+    </div>`;
+}
 function groupsRef(key) {
   const n = def.nodes.find(x => x.id === selectedNode);
   n.config[key] = n.config[key] || [];
   return n.config[key];
 }
-function setCond(key, gi, ci, f, v) { groupsRef(key)[gi].conditions[ci][f] = v; touchSummary(); }
-function addCond(key, gi) { groupsRef(key)[gi].conditions.push({ field: '', op: 'eq', value: '' }); renderConfig(); }
+function setCond(key, gi, ci, f, v) {
+  const c = groupsRef(key)[gi].conditions[ci];
+  c[f] = v;
+  // Changing the field or switching between single/multi resets the value so a
+  // stale selection can't silently filter on the wrong thing.
+  if (f === 'field') c.value = isMultiOp(c.op) ? [] : '';
+  if (f === 'op') c.value = isMultiOp(v) ? [] : '';
+  renderConfig(); touchSummary();
+}
+function addCond(key, gi) { groupsRef(key)[gi].conditions.push({ field: '', op: 'in', value: [] }); renderConfig(); }
 function delCond(key, gi, ci) { groupsRef(key)[gi].conditions.splice(ci, 1); renderConfig(); }
-function addGroup(key) { groupsRef(key).push({ conditions: [{ field: '', op: 'eq', value: '' }] }); renderConfig(); }
+function addGroup(key) { groupsRef(key).push({ conditions: [{ field: '', op: 'in', value: [] }] }); renderConfig(); }
 function delGroup(key, gi) { groupsRef(key).splice(gi, 1); renderConfig(); }
 function cfgSet(k, v) {
   const n = def.nodes.find(x => x.id === selectedNode);
@@ -603,8 +695,13 @@ function renderConfig() {
     case 'trigger_followup_due':
       h += `<div style="font-size:12.5px;color:var(--text-muted);">Fires for each contact whose scheduled follow-up time passes (status "Follow-up Required").</div>`; break;
     case 'audience':
-      h += sel('Data source', 'source', [['', 'choose…'], ...Object.entries(META.sources).map(([k, v]) => [k, v.label])]);
+      h += `<div class="cfg-label">Data source</div><select ${dis} onchange="cfgSet('source', this.value); valueCache={};">${[['', 'choose…'], ...Object.entries(META.sources).map(([k, v]) => [k, v.label])].map(o => `<option value="${o[0]}" ${String(c.source ?? '') === String(o[0]) ? 'selected' : ''}>${o[1]}</option>`).join('')}</select>`;
       h += `<div class="cfg-label">Filters — groups are OR'd, rows inside a group are AND'd</div>` + condGroupsHtml(c.groups, 'groups');
+      h += `<div class="cfg-label" style="margin-top:14px;">Matching recipients</div>
+            <button class="btn" style="width:100%;margin-bottom:8px;" onclick="previewAudience()">👁 Preview audience</button>
+            <div id="audPreview" style="border:1px solid var(--border-color);border-radius:9px;padding:9px;background:#f8fafc;">
+              <div style="color:var(--text-muted);font-size:12px;">Click preview to see exactly who this matches before publishing.</div>
+            </div>`;
       break;
     case 'action_send_template':
       h += `<div class="cfg-label">Approved template</div>

@@ -178,12 +178,21 @@ function computeNextRun(cfg, after = new Date()) {
 
 // ─── Condition / filter evaluation ──────────────────────────
 // groups: [{ conditions: [{field, op, value}] }] — OR of groups, AND within.
+// Normalizes a multi-select value (array, or "a|b|c" string) to a lowercase list.
+function valueList(v) {
+  const arr = Array.isArray(v) ? v : String(v ?? '').split('|');
+  return arr.map(s => String(s).trim().toLowerCase()).filter(Boolean);
+}
+
 function condMatches(record, c) {
   const raw = record ? record[c.field] : undefined;
   const val = raw === null || raw === undefined ? '' : String(raw);
-  const want = String(c.value ?? '');
+  const want = Array.isArray(c.value) ? c.value.join('|') : String(c.value ?? '');
   const lv = val.toLowerCase(), lw = want.toLowerCase();
   switch (c.op) {
+    case 'in':           return valueList(c.value).includes(lv);
+    case 'not_in':       return !valueList(c.value).includes(lv);
+    case 'contains_any': return valueList(c.value).some(w => lv.includes(w));
     case 'eq':           return lv === lw;
     case 'neq':          return lv !== lw;
     case 'contains':     return lv.includes(lw);

@@ -2013,6 +2013,8 @@ const WORKFLOW_META = {
     },
   },
   operators: [
+    { id: 'in', label: 'is any of ☑', multi: true }, { id: 'not_in', label: 'is none of ☑', multi: true },
+    { id: 'contains_any', label: 'contains any of ☑', multi: true },
     { id: 'eq', label: 'equals' }, { id: 'neq', label: 'not equals' },
     { id: 'contains', label: 'contains' }, { id: 'not_contains', label: 'does not contain' },
     { id: 'empty', label: 'is empty' }, { id: 'not_empty', label: 'is not empty' },
@@ -2099,6 +2101,42 @@ app.get('/api/workflows/meta', authMiddleware, async (req, res) => {
 
 app.get('/api/workflows/templates', authMiddleware, (req, res) => {
   res.json({ ok: true, templates: WORKFLOW_TEMPLATES });
+});
+
+// Distinct values for a field, so the builder can offer real checkboxes
+// instead of free-typed text (a typo like "Intrested" matches nobody).
+app.get('/api/workflows/field-values', authMiddleware, async (req, res) => {
+  const { source, field } = req.query;
+  const meta = WORKFLOW_META.sources[source];
+  if (!meta) return res.status(400).json({ ok: false, error: 'Unknown source' });
+  if (!meta.fields.includes(field)) return res.status(400).json({ ok: false, error: 'Unknown field' });
+  try {
+    const { data, error } = await wfStore.supabase.from(source).select(field).limit(5000);
+    if (error) return res.status(500).json({ ok: false, error: error.message });
+    const counts = new Map();
+    let blank = 0;
+    for (const row of (data || [])) {
+      const v = row[field];
+      if (v === null || v === undefined || String(v).trim() === '') { blank++; continue; }
+      const key = String(v).trim();
+      counts.set(key, (counts.get(key) || 0) + 1);
+    }
+    const values = [...counts.entries()].map(([value, count]) => ({ value, count }))
+      .sort((a, b) => b.count - a.count);
+    // Dates/free text explode into thousands of uniques — tell the UI to use text input.
+    res.json({ ok: true, values: values.slice(0, 300), blank, total: (data || []).length, tooMany: values.length > 300 });
+  } catch (err) { res.status(500).json({ ok: false, error: err.message }); }
+});
+
+// Live preview: how many people does this audience node actually match?
+app.post('/api/workflows/preview-audience', authMiddleware, async (req, res) => {
+  const node = (req.body && req.body.node) || {};
+  if (!node.config || !node.config.source) return res.status(400).json({ ok: false, error: 'Choose a data source first' });
+  try {
+    const people = await wfEngine.resolveAudience(node);
+    const { count: totalRows } = await wfStore.supabase.from(node.config.source).select('*', { count: 'exact', head: true });
+    res.json({ ok: true, count: people.length, totalRows: totalRows || 0, sample: people.slice(0, 25) });
+  } catch (err) { res.status(500).json({ ok: false, error: err.message }); }
 });
 
 app.get('/api/automation/stats', authMiddleware, async (req, res) => {
