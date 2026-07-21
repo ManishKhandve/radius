@@ -323,8 +323,31 @@ function buildPalette() {
     `<div class="pal-cat">${cat}</div>` + items.map(([type, c]) =>
       `<div class="pal-item" draggable="${isAdmin()}" data-type="${type}">${c.icon} ${c.label}</div>`).join('')).join('');
   document.querySelectorAll('.pal-item').forEach(el => {
-    el.addEventListener('dragstart', e => e.dataTransfer.setData('text/node-type', el.dataset.type));
+    el.addEventListener('dragstart', e => {
+      // Set both a custom and a plain type — some browsers only honour text/plain.
+      e.dataTransfer.setData('text/node-type', el.dataset.type);
+      e.dataTransfer.setData('text/plain', el.dataset.type);
+      e.dataTransfer.effectAllowed = 'copy';
+    });
+    // Click-to-add fallback: works even if HTML5 drag-and-drop misbehaves.
+    el.addEventListener('click', () => addNode(el.dataset.type));
+    el.title = 'Drag onto the canvas — or click to add';
   });
+}
+
+// Add a node at a given canvas point (defaults to a free spot in view).
+function addNode(type, at) {
+  if (!isAdmin()) return;
+  if (!currentWf) return alert('Open or create a workflow first.');
+  if (type.startsWith('trigger_') && def.nodes.some(n => n.type.startsWith('trigger_'))) {
+    return alert('A workflow can only have one trigger. Delete the existing one first.');
+  }
+  const pt = at || { x: wrap.scrollLeft + 120 + (def.nodes.length % 4) * 240,
+                     y: wrap.scrollTop + 80 + Math.floor(def.nodes.length / 4) * 130 };
+  const id = 'n' + Date.now().toString(36) + (nid++);
+  def.nodes.push({ id, type, x: Math.max(0, Math.round(pt.x)), y: Math.max(0, Math.round(pt.y)), config: {} });
+  selectedNode = id;
+  renderCanvas(); renderConfig();
 }
 
 async function openEditor(id) {
@@ -357,6 +380,7 @@ function backToDash() {
 
 // Canvas rendering
 const canvas = document.getElementById('canvas'), wires = document.getElementById('wires');
+const wrap = document.getElementById('canvasWrap');
 function renderCanvas() {
   canvas.querySelectorAll('.node').forEach(n => n.remove());
   for (const n of def.nodes) {
@@ -468,20 +492,13 @@ document.addEventListener('mouseup', e => {
     drag = null; drawWires();
   } else drag = null;
 });
-const wrap = document.getElementById('canvasWrap');
-wrap.addEventListener('dragover', e => e.preventDefault());
+wrap.addEventListener('dragover', e => { e.preventDefault(); e.dataTransfer.dropEffect = 'copy'; });
 wrap.addEventListener('drop', e => {
   e.preventDefault();
-  const type = e.dataTransfer.getData('text/node-type');
-  if (!type || !isAdmin()) return;
+  const type = e.dataTransfer.getData('text/node-type') || e.dataTransfer.getData('text/plain');
+  if (!type || !CATALOG[type]) return;
   const p = canvasXY(e);
-  if (type.startsWith('trigger_') && def.nodes.some(n => n.type.startsWith('trigger_'))) {
-    return alert('A workflow can only have one trigger. Delete the existing one first.');
-  }
-  const id = 'n' + Date.now().toString(36) + (nid++);
-  def.nodes.push({ id, type, x: Math.max(0, p.x - 100), y: Math.max(0, p.y - 20), config: {} });
-  selectedNode = id;
-  renderCanvas(); renderConfig();
+  addNode(type, { x: p.x - 100, y: p.y - 20 });
 });
 
 // ═══ Config panel ═══
