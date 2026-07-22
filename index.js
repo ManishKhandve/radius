@@ -2214,9 +2214,17 @@ app.post('/api/workflows/:id/publish', authMiddleware, async (req, res) => {
       if (!next) return res.status(400).json({ ok: false, errors: ['Schedule never fires (already expired?) — check dates.'] });
       patch.next_run_at = next.toISOString();
     }
+    // Clear recipients still in flight from an earlier run. Without this they
+    // resume against the NEW definition and fire unexpected messages at the
+    // moment of publishing (rather than at the scheduled time).
+    const cleared = await wfStore.cancelTasks(wf.id);
+    if (cleared) {
+      await wfStore.addLog(wf.id, null, null, 'audit', req.user.username, 'cleared-queue',
+        `${cleared} in-flight recipient(s) from a previous run cancelled on publish`).catch(() => {});
+    }
     wf = await wfStore.updateWorkflow(wf.id, patch, req.user.username);
     audit(wf.id, req.user.username, 'published', `v${wf.version}`);
-    res.json({ ok: true, workflow: wf });
+    res.json({ ok: true, workflow: wf, clearedTasks: cleared });
   } catch (err) { res.status(500).json({ ok: false, error: err.message }); }
 });
 

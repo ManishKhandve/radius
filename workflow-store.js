@@ -192,8 +192,15 @@ async function updateTask(id, patch) {
   await supabase.from('workflow_tasks').update(patch).eq('id', id);
 }
 
+// Cancels every still-active task for a workflow. Returns how many were cleared.
 async function cancelTasks(workflowId) {
-  await supabase.from('workflow_tasks').update({ status: 'cancelled' }).eq('workflow_id', workflowId).eq('status', 'active');
+  try {
+    const { data } = await supabase.from('workflow_tasks')
+      .update({ status: 'cancelled' })
+      .eq('workflow_id', workflowId).eq('status', 'active')
+      .select('id');
+    return (data || []).length;
+  } catch { return 0; }
 }
 
 // ─── Logs (executions + audit trail) ────────────────────────
