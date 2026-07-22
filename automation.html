@@ -171,6 +171,8 @@ async function api(url, opts = {}) {
   return res;
 }
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+// All dates shown in 12-hour format, e.g. "22 Jul 2026, 03:00 pm"
+const dt = v => v ? new Date(v).toLocaleString('en-IN', { day:'2-digit', month:'short', year:'numeric', hour:'2-digit', minute:'2-digit', hour12:true }) : '—';
 const tplModal = document.getElementById('tplModal'), verModal = document.getElementById('verModal');
 
 // ═══ Node catalog (mirrors workflow-engine.js) ═══
@@ -222,7 +224,7 @@ async function refreshDash() {
     ['Active', s.active ?? 0, 'var(--primary)'], ['Draft', s.draft ?? 0, 'var(--text-muted)'],
     ['Paused', s.paused ?? 0, 'var(--warning)'], ['Messages Sent', s.sent ?? 0, 'var(--indigo)'],
     ['Failed', s.failed ?? 0, 'var(--error)'],
-    ['Next Run', s.nextRun ? new Date(s.nextRun).toLocaleString() : '—', 'var(--text-main)'],
+    ['Next Run', s.nextRun ? dt(s.nextRun) : '—', 'var(--text-main)'],
   ].map(([l, v, c]) => `<div class="stat-card"><div class="stat-label">${l}</div><div class="stat-value" style="color:${c};font-size:${String(v).length > 8 ? 14 : 24}px;">${esc(v)}</div></div>`).join('');
   renderWfList();
   loadExecutions();
@@ -236,8 +238,8 @@ function renderWfList() {
     <td><b>${esc(w.name)}</b></td>
     <td><span class="chip ${esc(w.status)}">${esc(w.status)}</span></td>
     <td>v${w.version}</td>
-    <td>${w.next_run_at ? new Date(w.next_run_at).toLocaleString() : '—'}</td>
-    <td>${w.last_run_at ? new Date(w.last_run_at).toLocaleString() : '—'}</td>
+    <td>${dt(w.next_run_at)}</td>
+    <td>${dt(w.last_run_at)}</td>
     <td>${esc(w.updated_by || '')}</td>
     <td style="text-align:right;white-space:nowrap;">
       <button class="mini" onclick="openEditor(${w.id})">${isAdmin() ? '✏️ Edit' : '👁 View'}</button>
@@ -256,7 +258,7 @@ async function loadExecutions() {
   const j = await (await api('/api/automation/executions' + (t ? '?type=' + t : ''))).json();
   const names = Object.fromEntries(workflows.map(w => [w.id, w.name]));
   document.getElementById('logBody').innerHTML = (j.logs || []).length ? j.logs.map(l => `<tr>
-    <td style="white-space:nowrap;">${new Date(l.created_at).toLocaleString()}</td>
+    <td style="white-space:nowrap;">${dt(l.created_at)}</td>
     <td>${esc(names[l.workflow_id] || '#' + l.workflow_id)}</td>
     <td>${esc(l.type)}</td><td>${esc(l.recipient || '—')}</td>
     <td style="font-weight:600;color:${l.status === 'sent' || l.status === 'ok' ? 'var(--primary)' : l.status === 'failed' || l.status === 'error' ? 'var(--error)' : 'var(--text-muted)'};">${esc(l.status)}</td>
@@ -284,7 +286,7 @@ async function showVersions(id) {
   const j = await (await api(`/api/workflows/${id}/versions`)).json();
   document.getElementById('verList').innerHTML = (j.versions || []).map(v =>
     `<div style="display:flex;align-items:center;gap:10px;padding:8px 4px;border-bottom:1px solid #f1f5f9;">
-      <b>v${v.version}</b><span style="color:var(--text-muted);font-size:12px;">${new Date(v.saved_at).toLocaleString()} · ${esc(v.saved_by || '')}</span>
+      <b>v${v.version}</b><span style="color:var(--text-muted);font-size:12px;">${dt(v.saved_at)} · ${esc(v.saved_by || '')}</span>
       ${isAdmin() ? `<button class="mini" style="margin-left:auto;" onclick="restoreVer(${id},${v.version})">Restore</button>` : ''}
     </div>`).join('') || '<div style="color:var(--text-muted);">No versions.</div>';
   verModal.style.display = 'flex';
@@ -408,7 +410,7 @@ function renderCanvas() {
 function nodeSummary(n) {
   const c = n.config || {};
   switch (n.type) {
-    case 'trigger_schedule': return esc(c.mode ? `${c.mode}${c.time ? ' @ ' + c.time : ''}${c.daysFilter && c.daysFilter !== 'all' ? ' (' + c.daysFilter + ')' : ''}` : 'not configured');
+    case 'trigger_schedule': return esc(c.mode ? `${c.mode}${c.time ? ' @ ' + fmt12(c.time) : ''}${c.daysFilter && c.daysFilter !== 'all' ? ' (' + c.daysFilter + ')' : ''}` : 'not configured');
     case 'trigger_customer_created': return 'new rows in ' + esc(c.source || '?');
     case 'audience': return esc((META.sources[c.source] || {}).label || c.source || 'choose source') + (c.groups && c.groups.length ? ` · ${c.groups.reduce((a, g) => a + (g.conditions || []).length, 0)} filters` : '');
     case 'action_send_template': return esc(c.templateName || 'choose template');
@@ -631,6 +633,45 @@ function addCond(key, gi) { groupsRef(key)[gi].conditions.push({ field: '', op: 
 function delCond(key, gi, ci) { groupsRef(key)[gi].conditions.splice(ci, 1); renderConfig(); }
 function addGroup(key) { groupsRef(key).push({ conditions: [{ field: '', op: 'in', value: [] }] }); renderConfig(); }
 function delGroup(key, gi) { groupsRef(key).splice(gi, 1); renderConfig(); }
+// ── 12-hour time picker ──
+// Values are stored as 24h "HH:MM" (what the engine expects) but always
+// entered and displayed as h:mm AM/PM.
+function fmt12(hhmm) {
+  const [H, M] = String(hhmm || '').split(':').map(n => parseInt(n, 10));
+  if (isNaN(H)) return '';
+  const ap = H >= 12 ? 'PM' : 'AM';
+  const h = (H % 12) || 12;
+  return `${h}:${String(M || 0).padStart(2, '0')} ${ap}`;
+}
+function timePicker12(key, val) {
+  const d = isAdmin() ? '' : 'disabled';
+  const [H, M] = String(val || '09:00').split(':').map(n => parseInt(n, 10) || 0);
+  const ap = H >= 12 ? 'PM' : 'AM';
+  const h12 = (H % 12) || 12;
+  const mins = [...new Set([0,5,10,15,20,25,30,35,40,45,50,55, M])].sort((a, b) => a - b);
+  return `<div style="display:flex;gap:6px;align-items:center;">
+    <select ${d} style="flex:1;" onchange="setTime12('${key}','h',this.value)">
+      ${Array.from({length:12},(_,i)=>i+1).map(h=>`<option value="${h}" ${h===h12?'selected':''}>${h}</option>`).join('')}</select>
+    <span style="font-weight:700;color:var(--text-muted);">:</span>
+    <select ${d} style="flex:1;" onchange="setTime12('${key}','m',this.value)">
+      ${mins.map(m=>`<option value="${m}" ${m===M?'selected':''}>${String(m).padStart(2,'0')}</option>`).join('')}</select>
+    <select ${d} style="flex:1;" onchange="setTime12('${key}','ap',this.value)">
+      ${['AM','PM'].map(a=>`<option ${a===ap?'selected':''}>${a}</option>`).join('')}</select>
+  </div>`;
+}
+function setTime12(key, part, v) {
+  const n = def.nodes.find(x => x.id === selectedNode);
+  if (!n) return;
+  const [H, M] = String(n.config[key] || '09:00').split(':').map(x => parseInt(x, 10) || 0);
+  let h12 = (H % 12) || 12, mm = M, ap = H >= 12 ? 'PM' : 'AM';
+  if (part === 'h') h12 = parseInt(v, 10);
+  if (part === 'm') mm = parseInt(v, 10);
+  if (part === 'ap') ap = v;
+  const H24 = (h12 % 12) + (ap === 'PM' ? 12 : 0);
+  n.config[key] = String(H24).padStart(2, '0') + ':' + String(mm).padStart(2, '0');
+  touchSummary();
+}
+
 function cfgSet(k, v) {
   const n = def.nodes.find(x => x.id === selectedNode);
   if (!n) return;
@@ -683,7 +724,7 @@ function renderConfig() {
       if (c.mode === 'weekly') h += sel('Weekday', 'weekday', [[1, 'Monday'], [2, 'Tuesday'], [3, 'Wednesday'], [4, 'Thursday'], [5, 'Friday'], [6, 'Saturday'], [0, 'Sunday']]);
       if (c.mode === 'monthly') h += num('Day of month (1–28)', 'monthDay', '1');
       if (c.mode === 'every_x') h += num('Every N', 'everyN', '2') + sel('Unit', 'everyUnit', [['days', 'Days'], ['weeks', 'Weeks'], ['months', 'Months']]);
-      if (c.mode && c.mode !== 'cron') h += inp('Time of day', 'time', 'time');
+      if (c.mode && c.mode !== 'cron') h += `<div class="cfg-label">Time of day</div>` + timePicker12('time', c.time);
       h += sel('Day filter', 'daysFilter', [['all', 'Every day'], ['business', 'Business days only (Mon–Fri)'], ['weekend', 'Weekends only']]);
       h += inp('Start date', 'startDate', 'date');
       h += `<div class="cfg-label">Never expire</div><select ${dis} onchange="cfgSet('neverExpire', this.value==='1'); renderConfig();"><option value="" ${!c.neverExpire ? 'selected' : ''}>No — use end date</option><option value="1" ${c.neverExpire ? 'selected' : ''}>Yes — repeat forever</option></select>`;
@@ -716,7 +757,7 @@ function renderConfig() {
       break;
     case 'action_update_status': h += inp('New status value', 'value', 'text', 'e.g. Contacted'); break;
     case 'action_add_note': h += `<div class="cfg-label">Note text</div><textarea ${dis} rows="3" onchange="cfgSet('text', this.value)">${esc(c.text || '')}</textarea>`; break;
-    case 'action_create_reminder': h += num('Days from now', 'daysFromNow', '1') + inp('At time', 'time', 'time'); break;
+    case 'action_create_reminder': h += num('Days from now', 'daysFromNow', '1') + `<div class="cfg-label">At time</div>` + timePicker12('time', c.time); break;
     case 'action_assign': h += sel('Assign to agent', 'agent', [['', 'choose…'], ...AGENTS.map(a => [a, a])]); break;
     case 'logic_if': h += `<div class="cfg-label">Condition (yes → top port, no → bottom)</div>` + condGroupsHtml(c.groups, 'groups'); break;
     case 'logic_switch':
@@ -756,7 +797,7 @@ async function publishWf() {
   const j = await (await api(`/api/workflows/${currentWf.id}/publish`, { method: 'POST', body: JSON.stringify({ definition: def }) })).json();
   if (!j.ok) return alert('⚠️ Cannot publish:\n\n• ' + (j.errors || [j.error]).join('\n• '));
   currentWf = j.workflow; setStatusChip('active');
-  alert('🚀 Published!' + (currentWf.next_run_at ? '\nNext run: ' + new Date(currentWf.next_run_at).toLocaleString() : '\nIt will fire on its trigger.'));
+  alert('🚀 Published!' + (currentWf.next_run_at ? '\nNext run: ' + dt(currentWf.next_run_at) : '\nIt will fire on its trigger.'));
 }
 </script>
 </body>
