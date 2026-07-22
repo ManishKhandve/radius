@@ -2235,8 +2235,14 @@ app.post('/api/workflows/:id/resume', authMiddleware, async (req, res) => {
   const patch = { status: 'active' };
   if (trig && trig.type === 'trigger_schedule') {
     const next = wfEngine.computeNextRun(trig.config || {}, new Date());
-    patch.next_run_at = next ? next.toISOString() : null;
-    if (!next) patch.status = 'paused';
+    if (!next) {
+      // Don't silently flip back to paused — tell the admin what to change.
+      const c = trig.config || {};
+      return res.status(400).json({ ok: false, error:
+        `This schedule has no future run${c.mode === 'once' && c.startDate ? ` (one-time, set for ${c.startDate} ${c.time || ''}, already passed)` : ''}. ` +
+        `Edit the trigger — pick a future date/time or switch to a recurring mode — then Publish again.` });
+    }
+    patch.next_run_at = next.toISOString();
   }
   wf = await wfStore.updateWorkflow(wf.id, patch, req.user.username);
   audit(wf.id, req.user.username, 'resumed');

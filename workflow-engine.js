@@ -269,6 +269,13 @@ function validate(def) {
       if (c.mode === 'once' && !c.startDate) errors.push('One-time schedule needs a start date.');
       if (c.mode === 'cron' && String(c.cron || '').trim().split(/\s+/).length !== 5) errors.push('Custom cron must have 5 fields (min hour day month weekday).');
       if (c.mode !== 'cron' && c.mode !== 'once' && !c.time) errors.push('Schedule needs a time of day.');
+      if (c.timezone) {
+        try { new Intl.DateTimeFormat('en-GB', { timeZone: c.timezone }); }
+        catch { errors.push(`Timezone "${c.timezone}" is not valid — use a full IANA name like Asia/Kolkata.`); }
+      }
+      if (c.mode === 'once' && c.startDate && !computeNextRun(c, new Date())) {
+        errors.push(`This one-time schedule (${c.startDate} ${c.time || ''}) is in the past. Pick a future date/time, or switch to a recurring mode.`);
+      }
     }
     if (!nextOf(def, trig.id).length) errors.push('Trigger is not connected to anything.');
   }
@@ -276,7 +283,14 @@ function validate(def) {
   if (needsAudience && !nodes.some(n => n.type === 'audience')) errors.push('Add an Audience node to choose who receives the workflow.');
   for (const n of nodes) {
     if (n.type === 'audience' && !(n.config || {}).source) errors.push('Audience node has no data source selected.');
-    if (n.type === 'action_send_template' && !(n.config || {}).templateName) errors.push('Send Template node is missing the template name.');
+    if (n.type === 'action_send_template') {
+      const tpl = String((n.config || {}).templateName || '').trim();
+      if (!tpl) errors.push('Send Template node is missing the template name.');
+      // Meta template names allow only lowercase letters, digits and underscores.
+      else if (!/^[a-z0-9_]+$/.test(tpl)) {
+        errors.push(`Template name "${tpl}" is not a valid Meta name — use only lowercase letters, digits and underscores (e.g. maid_job_opening_hi). Spaces and capitals are rejected by WhatsApp.`);
+      }
+    }
     if (n.type === 'logic_loop' && !((n.config || {}).maxIterations > 0) && !((n.config || {}).stopGroups || []).length) {
       errors.push('Loop needs a stop condition or a max iteration count.');
     }
@@ -441,11 +455,11 @@ async function execNode(wf, def, task, node, state) {
 // Walk one task until it blocks (delay/retry) or finishes.
 async function processTask(task) {
   const wf = await store.getWorkflow(task.workflow_id);
-  if (!wf || wf.status !== 'active') {
-    // Paused/deleted workflows freeze their tasks (resume re-activates them).
-    if (!wf) await store.updateTask(task.id, { status: 'cancelled' });
-    return;
-  }
+  if (!wf) { await store.updateTask(task.id, { status: 'cancelled' }); return; }
+  // Only an explicit user pause freezes in-flight work. A workflow whose
+  // schedule is exhausted is 'completed' — already-queued recipients must
+  // still finish, otherwise a one-time schedule could never deliver anything.
+  if (wf.status === 'paused') return;
   const def = wf.definition || {};
   const state = task.state || {};
   let nodeId = task.node_id;
@@ -567,7 +581,9 @@ async function tick() {
           await store.updateWorkflow(wf.id, {
             last_run_at: new Date().toISOString(),
             next_run_at: next ? next.toISOString() : null,
-            ...(next ? {} : { status: 'paused' }), // schedule expired → auto-pause
+            // No further runs (e.g. one-time schedule) → 'completed', NOT
+            // 'paused', so the recipients just queued still get processed.
+            ...(next ? {} : { status: 'completed' }),
           }, 'engine');
         }
       } else if (['trigger_customer_created', 'trigger_followup_due'].includes(trig.type)) {
