@@ -223,24 +223,32 @@ async function resolveAudience(node) {
   if (!table) return [];
   const { data } = await store.supabase.from(table).select('*').limit(5000);
   const out = [];
+  const seen = new Set(); // the same number can appear on several rows —
+                          // without this they'd each get the same message.
   for (const r of (data || [])) {
     if (!groupsMatch(r, node.config.groups)) continue;
     const phone = deps.toMetaPhone(r.phone);
-    if (!phone) continue;
-    out.push({ phone, name: r[NAME_FIELD[table]] || 'Customer', source: table, record_id: r.id ?? null });
+    if (!phone || seen.has(phone)) continue;
+    seen.add(phone);
+    // contacts has no numeric id (phone is the key) — fetchRecord uses phone.
+    out.push({ phone, name: r[NAME_FIELD[table]] || 'Customer', source: table, record_id: table === 'contacts' ? null : (r.id ?? null) });
   }
   return out;
 }
 
 // Re-fetch a task's record so loop/if conditions see CURRENT data.
 async function fetchRecord(task) {
-  if (!task.source || task.record_id == null) return null;
+  if (!task.source) return null;
+  // contacts is keyed by phone, not a numeric id — look it up by the task's
+  // phone. (Using record_id here silently returned nothing, so If/Else and
+  // loop stop-conditions always saw an empty record.)
   if (task.source === 'contacts') {
-    const { data } = await store.supabase.from('contacts').select('*').eq('phone', String(task.record_id)).single();
-    return data;
+    const { data } = await store.supabase.from('contacts').select('*').eq('phone', task.phone).single();
+    return data || null;
   }
+  if (task.record_id == null) return null;
   const { data } = await store.supabase.from(task.source).select('*').eq('id', task.record_id).single();
-  return data;
+  return data || null;
 }
 
 // ─── Graph helpers ──────────────────────────────────────────
@@ -414,15 +422,29 @@ async function execNode(wf, def, task, node, state) {
     case 'logic_loop': {
       state.loops = state.loops || {};
       const L = state.loops[node.id] = state.loops[node.id] || { iter: 0 };
+      const unitMs = { minutes: 60e3, hours: 3600e3, days: 86400e3, weeks: 604800e3 }[cfg.intervalUnit || 'days'];
+      const intervalMs = Math.max(1, Number(cfg.intervalN) || 1) * unitMs;
+
+      // The wait between iterations is enforced HERE, at the loop node, so it
+      // applies no matter how the body comes back — whether the last body node
+      // is wired back to this loop or simply dead-ends. (Previously the gap
+      // lived on the dead-end path only, so wiring the body back to the loop
+      // fired every iteration instantly.)
+      if (L.nextAt && Date.now() < new Date(L.nextAt).getTime()) {
+        return { wakeAt: new Date(L.nextAt), stay: true };
+      }
+
       const rec = await fetchRecord(task);
       const stop = ((cfg.stopGroups || []).length && groupsMatch(rec, cfg.stopGroups)) ||
-                   (cfg.maxIterations > 0 && L.iter >= cfg.maxIterations);
+                   (Number(cfg.maxIterations) > 0 && L.iter >= Number(cfg.maxIterations));
       if (stop) {
         delete state.loops[node.id];
+        delete state.loopReturn;
         return { next: nextOf(def, node.id, 'exit')[0] || null };
       }
       L.iter++;
-      state.loopReturn = { nodeId: node.id, intervalMs: Math.max(1, cfg.intervalN || 1) * ({ minutes: 60e3, hours: 3600e3, days: 86400e3, weeks: 604800e3 }[cfg.intervalUnit || 'days']) };
+      L.nextAt = new Date(Date.now() + intervalMs).toISOString();
+      state.loopReturn = node.id;   // dead-ends in the body return here
       return { next: nextOf(def, node.id, 'do')[0] || null };
     }
 
@@ -465,51 +487,74 @@ async function processTask(task) {
   let nodeId = task.node_id;
   let steps = 0;
 
+  let stopped = false; // node vanished / threw — end this recipient
   while (nodeId && steps++ < MAX_STEPS_PER_WAKE) {
     const node = nodeById(def, nodeId);
-    if (!node) break;
+    if (!node) {
+      await store.addLog(wf.id, task.run_id, nodeId, 'error', task.phone, 'error', 'node no longer exists in the workflow — stopping this recipient');
+      stopped = true; break;
+    }
     let r;
     try {
       r = await execNode(wf, def, task, node, state);
     } catch (err) {
       await store.addLog(wf.id, task.run_id, nodeId, 'error', task.phone, 'error', err.message);
-      break;
+      stopped = true; break;
     }
     if (r.retry) {
       await store.updateTask(task.id, { state, wake_at: r.wakeAt.toISOString(), retry_count: (task.retry_count || 0) + 1, last_error: 'retrying send' });
       return;
     }
-    if (r.stay) { // delay / wait-until: park on this node
-      await store.updateTask(task.id, { state, node_id: nodeId, wake_at: r.wakeAt.toISOString() });
+    if (r.stay) { // delay / wait-until / loop interval: park on this node
+      await store.updateTask(task.id, { state, node_id: nodeId, wake_at: r.wakeAt.toISOString(), retry_count: task.retry_count || 0 });
       return;
     }
     if (r.done) {
-      await store.updateTask(task.id, { state, status: r.status === 'skipped' ? 'skipped' : 'done' });
+      await store.updateTask(task.id, { state, status: r.status === 'skipped' ? 'skipped' : 'done', retry_count: task.retry_count || 0 });
       return;
     }
-    task.retry_count = 0;
+    task.retry_count = 0; // a step succeeded — reset the send-retry budget
     if (!r.next) {
-      // Dead end: if inside a loop body, return to the loop after its interval.
+      // Dead end inside a loop body → back to the loop node, which enforces
+      // the interval before the next iteration.
       if (state.loopReturn) {
-        const { nodeId: loopId, intervalMs } = state.loopReturn;
+        const loopId = state.loopReturn;
         delete state.loopReturn;
-        await store.updateTask(task.id, { state, node_id: loopId, wake_at: new Date(Date.now() + intervalMs).toISOString(), retry_count: 0 });
+        await store.updateTask(task.id, { state, node_id: loopId, wake_at: new Date().toISOString(), retry_count: 0 });
         return;
       }
-      await store.updateTask(task.id, { state, status: 'done' });
+      await store.updateTask(task.id, { state, status: 'done', retry_count: 0 });
       return;
     }
     nodeId = r.next;
   }
-  await store.updateTask(task.id, { state, status: 'done' });
+
+  // Ran out of steps this wake (e.g. a very long chain) — keep the recipient
+  // and continue next tick instead of silently dropping them.
+  if (!stopped && nodeId) {
+    await store.addLog(wf.id, task.run_id, nodeId, 'run', task.phone, 'requeued', `step limit (${MAX_STEPS_PER_WAKE}) reached — continuing next tick`);
+    await store.updateTask(task.id, { state, node_id: nodeId, wake_at: new Date().toISOString(), retry_count: task.retry_count || 0 });
+    return;
+  }
+  await store.updateTask(task.id, { state, status: 'done', retry_count: task.retry_count || 0 });
 }
 
 // ─── Runs: start a workflow for its audience ────────────────
 async function startRun(wf, triggerLabel, recipients = null) {
   const def = wf.definition || {};
-  let audienceNode = (def.nodes || []).find(n => n.type === 'audience');
+  const audienceNode = (def.nodes || []).find(n => n.type === 'audience');
   let people = recipients;
   if (!people) people = audienceNode ? await resolveAudience(audienceNode) : [];
+
+  // Final safety net: never queue the same number twice in one run, whoever
+  // supplied the list (audience node, event trigger, or a manual call).
+  const seenPhones = new Set();
+  people = people.filter(p => {
+    if (!p.phone || seenPhones.has(p.phone)) return false;
+    seenPhones.add(p.phone);
+    return true;
+  });
+
   const run = await store.createRun(wf.id, triggerLabel, people.length);
   if (!run) return null;
 
@@ -554,7 +599,7 @@ async function pollEventTriggers(wf) {
     const { data } = await store.supabase.from('contacts').select('*')
       .eq('lead_status', 'Follow-up Required').gt('follow_up_time', since).lte('follow_up_time', nowIso);
     if (data && data.length) {
-      const people = data.map(c => ({ phone: deps.toMetaPhone(c.phone), name: c.name || 'Customer', source: 'contacts', record_id: c.phone })).filter(p => p.phone);
+      const people = data.map(c => ({ phone: deps.toMetaPhone(c.phone), name: c.name || 'Customer', source: 'contacts', record_id: null })).filter(p => p.phone);
       if (people.length) await startRun(wf, 'follow-up due', people);
     }
     es.followup_since = nowIso;
