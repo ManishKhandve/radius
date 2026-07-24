@@ -1799,6 +1799,23 @@
     let currentPhone = null;
     let currentTags = [];
 
+    // All message/timestamp displays show date + time in IST explicitly
+    // (Asia/Kolkata), so they read correctly regardless of the agent's own
+    // device timezone.
+    function istDateTime(iso) {
+        if (!iso) return '';
+        return new Date(iso).toLocaleString('en-IN', {
+            timeZone: 'Asia/Kolkata', day: '2-digit', month: 'short', year: 'numeric',
+            hour: '2-digit', minute: '2-digit', hour12: true,
+        });
+    }
+    // Time-only, still pinned to IST — used only in the compact sidebar list
+    // row where a full date would break the layout.
+    function istTimeOnly(iso) {
+        if (!iso) return '';
+        return new Date(iso).toLocaleTimeString('en-IN', { timeZone: 'Asia/Kolkata', hour: '2-digit', minute: '2-digit', hour12: true });
+    }
+
     async function authFetch(url, options = {}) {
         if (!options.headers) options.headers = {};
         options.headers['auth-token'] = token;
@@ -3021,7 +3038,7 @@
             }
             
             const initials = (c.name || 'C').substring(0, 1).toUpperCase();
-            const time = new Date(c.last_message_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+            const time = istTimeOnly(c.last_message_at);
             const intel = leadIntel(c);
             const waitChip = intel.waitingMin !== null
                 ? `<span class="wait-chip ${intel.waitingMin > 10 ? 'wait-late' : 'wait-ok'}" title="Customer waiting ${intel.waitingMin} min for a reply">⏱ ${humanWait(intel.waitingMin)}</span>`
@@ -3270,7 +3287,7 @@
         const list = document.getElementById('notesList');
         list.innerHTML = '';
         noteData.notes.forEach(n => {
-            const time = new Date(n.created_at).toLocaleString();
+            const time = istDateTime(n.created_at);
             list.innerHTML += `
                 <div class="note-item">
                     ${n.note.replace(/\\n/g, '<br>')}
@@ -3311,7 +3328,7 @@
 
         let newHtml = '';
         timeline.forEach(item => {
-            const time = new Date(item.created_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+            const time = istDateTime(item.created_at);
             
             if (item._type === 'message') {
                 const className = 'msg-bubble ' + (item.direction === 'inbound' ? 'msg-in' : 'msg-out');
