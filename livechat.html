@@ -465,6 +465,19 @@
         .dot-booked { background: #10b981; }
         .dot-closed { background: #f43f5e; }
         .dot-none { background: #64748b; }
+        .dot-stage-early { background: #3b82f6; }
+        .dot-stage-warm  { background: #f59e0b; }
+        .dot-stage-won   { background: #10b981; }
+        .dot-stage-repl  { background: #8b5cf6; }
+        .dot-stage-lost  { background: #f43f5e; }
+        /* Lead intelligence badges */
+        .prio-badge { font-size: 11px; margin-right: 3px; }
+        .score-chip { font-size: 10px; font-weight: 700; padding: 1px 6px; border-radius: 99px; margin-left: 4px; }
+        .wait-chip { font-size: 10.5px; font-weight: 700; padding: 1px 7px; border-radius: 99px; }
+        .wait-ok { background: #e2e8f0; color: #475569; }
+        .wait-late { background: rgba(244,63,94,.14); color: #e11d48; }
+        .qfu-btn { padding:6px 11px; border-radius:8px; border:1px solid var(--border-color); background:#fff; color:var(--text-muted); font-size:12px; font-weight:600; cursor:pointer; }
+        .qfu-btn:hover { border-color: var(--primary); color: var(--primary); background: var(--primary-glow); }
 
         /* Column 3: Active Chat View */
         .chat-area {
@@ -1314,14 +1327,24 @@
                 </div>
                 
                 <select id="filterStatus" onchange="renderContacts()">
-                    <option value="all">All Statuses</option>
+                    <option value="all">All Stages</option>
                     <option value="New Lead">New Lead</option>
+                    <option value="Contacted">Contacted</option>
                     <option value="Interested">Interested</option>
-                    <option value="Quote Sent">Quote Sent</option>
-                    <option value="Follow-up Required">Follow-up Required</option>
-                    <option value="Booked">Booked</option>
-                    <option value="Service Completed">Service Completed</option>
-                    <option value="Not Interested">Not Interested</option>
+                    <option value="Interview Scheduled">Interview Scheduled</option>
+                    <option value="Maid Sent">Maid Sent</option>
+                    <option value="Selected">Selected</option>
+                    <option value="Payment Pending">Payment Pending</option>
+                    <option value="Payment Received">Payment Received</option>
+                    <option value="Replacement">Replacement</option>
+                    <option value="Completed">Completed</option>
+                    <option value="Lost">Lost</option>
+                </select>
+                <select id="sortBy" onchange="renderContacts()">
+                    <option value="recent">Sort: Most recent</option>
+                    <option value="score">Sort: Lead score ⭐</option>
+                    <option value="waiting">Sort: Waiting longest ⏱</option>
+                    <option value="priority">Sort: Priority 🔴</option>
                 </select>
                 
                 <div class="filter-grid">
@@ -1372,6 +1395,7 @@
                 <div class="chat-header-details">
                     <span class="contact-name" id="headerName">Customer</span>
                     <span class="contact-time" id="headerPhone">Loading...</span>
+                    <span class="contact-time" id="headerTimer" style="font-size:11.5px;"></span>
                 </div>
             </div>
             <div class="bot-control">
@@ -1408,14 +1432,18 @@
         <div class="crm-section">
             <div class="crm-label">Lead Status</div>
             <select class="crm-input" id="crmStatus" onchange="updateCRM()">
-                <option value="">-- Select Status --</option>
+                <option value="">-- Select Stage --</option>
                 <option value="New Lead">New Lead</option>
+                <option value="Contacted">Contacted</option>
                 <option value="Interested">Interested</option>
-                <option value="Quote Sent">Quote Sent</option>
-                <option value="Follow-up Required">Follow-up Required</option>
-                <option value="Booked">Booked</option>
-                <option value="Service Completed">Service Completed</option>
-                <option value="Not Interested">Not Interested</option>
+                <option value="Interview Scheduled">Interview Scheduled</option>
+                <option value="Maid Sent">Maid Sent</option>
+                <option value="Selected">Selected</option>
+                <option value="Payment Pending">Payment Pending</option>
+                <option value="Payment Received">Payment Received</option>
+                <option value="Replacement">Replacement</option>
+                <option value="Completed">Completed</option>
+                <option value="Lost">Lost</option>
             </select>
 
             <div class="crm-label">Assigned Agent</div>
@@ -1424,9 +1452,15 @@
             </select>
 
             <div class="crm-label">Follow-up Schedule (up to 5)</div>
+            <div style="display:flex; gap:6px; flex-wrap:wrap; margin-bottom:8px;">
+                <button type="button" class="qfu-btn" onclick="quickFollowUp(0)">📅 Today</button>
+                <button type="button" class="qfu-btn" onclick="quickFollowUp(1)">Tomorrow</button>
+                <button type="button" class="qfu-btn" onclick="quickFollowUp(3)">3 Days</button>
+                <button type="button" class="qfu-btn" onclick="quickFollowUp(7)">1 Week</button>
+            </div>
             <div id="crmFollowUpList"></div>
             <button type="button" id="crmAddFollowUp" onclick="addFollowUpRow()"
-                    style="margin-top:4px; padding:7px 12px; border-radius:8px; border:1px dashed var(--border-color); background:#fff; color:var(--primary); font-size:12.5px; font-weight:600; cursor:pointer;">+ Add follow-up date</button>
+                    style="margin-top:4px; padding:7px 12px; border-radius:8px; border:1px dashed var(--border-color); background:#fff; color:var(--primary); font-size:12.5px; font-weight:600; cursor:pointer;">+ Custom date</button>
 
             <div style="margin-top: 10px; display: flex; align-items: center; gap: 8px;">
                 <input type="checkbox" id="crmDripDisable" onchange="updateCRM()" style="width:16px;height:16px;cursor:pointer;">
@@ -2728,20 +2762,68 @@
         });
     }
 
-    function getStatusDot(status) {
-        if (status === 'New Lead') return 'dot-new';
-        if (status === 'Interested' || status === 'Quote Sent' || status === 'Follow-up Required') return 'dot-interested';
-        if (status === 'Booked' || status === 'Service Completed') return 'dot-booked';
-        if (status === 'Not Interested') return 'dot-closed';
-        return 'dot-none';
+    // ── Customer pipeline stages (in order) ──
+    const STAGES = ['New Lead','Contacted','Interested','Interview Scheduled','Maid Sent','Selected','Payment Pending','Payment Received','Replacement','Completed','Lost'];
+    // Which visual group each stage (new + legacy statuses) belongs to.
+    const STAGE_GROUP = {
+        'New Lead':'early','Contacted':'early','Quote Sent':'early',
+        'Interested':'warm','Interview Scheduled':'warm','Maid Sent':'warm','Selected':'warm','Follow-up Required':'warm',
+        'Payment Pending':'won','Payment Received':'won','Completed':'won','Booked':'won','Service Completed':'won',
+        'Replacement':'repl',
+        'Lost':'lost','Not Interested':'lost',
+    };
+    function getStatusDot(status) { return 'dot-stage-' + (STAGE_GROUP[status] || 'none').replace('none','none'); }
+    function getStatusClass(status) {
+        const g = STAGE_GROUP[status];
+        return g === 'early' ? 'new' : (g === 'warm' ? 'interested' : (g === 'won' ? 'booked' : (g === 'lost' ? 'closed' : '')));
     }
 
-    function getStatusClass(status) {
-        if (status === 'New Lead') return 'new';
-        if (status === 'Interested' || status === 'Quote Sent' || status === 'Follow-up Required') return 'interested';
-        if (status === 'Booked' || status === 'Service Completed') return 'booked';
-        if (status === 'Not Interested') return 'closed';
-        return '';
+    // ── Lead intelligence: priority, score, response timer ──
+    // Everything is derived from data we already store (last_message_at, the
+    // unread label = customer is waiting, status, temperature, tags).
+    function leadIntel(c) {
+        const now = Date.now();
+        const lastMs = c.last_message_at ? new Date(c.last_message_at).getTime() : 0;
+        const ageMin = lastMs ? (now - lastMs) / 60000 : Infinity;
+        const unread = c.label === 'unread'; // last inbound not yet read → they're waiting on us
+        const status = c.lead_status || '';
+        const temp = c.lead_temperature || '';
+
+        // Priority
+        let priority;
+        if (unread && ageMin <= 5) priority = { emoji:'🔴', label:'Hot', color:'#e11d48', rank:4 };
+        else if (unread && ageMin <= 60) priority = { emoji:'🟠', label:'Warm', color:'#d97706', rank:3 };
+        else if (ageMin <= 60) priority = { emoji:'🟠', label:'Warm', color:'#d97706', rank:3 };
+        else if (ageMin <= 1440) priority = { emoji:'🟢', label:'Cold', color:'#059669', rank:2 };
+        else priority = { emoji:'⚫', label:'No Response', color:'#64748b', rank:1 };
+
+        // Score /100 (transparent heuristic)
+        let score = 0;
+        const g = STAGE_GROUP[status];
+        if (g === 'won') score += 40; else if (g === 'warm') score += 30; else if (g === 'early') score += 12; // lost/none: 0
+        if (unread) score += 25;                                   // actively waiting for a reply
+        if (ageMin <= 5) score += 25; else if (ageMin <= 60) score += 18; else if (ageMin <= 1440) score += 10;
+        if (temp === 'Hot Lead') score += 15; else if (temp === 'Warm Lead') score += 8;
+        try { const tags = typeof c.tags === 'string' ? JSON.parse(c.tags) : (c.tags || []); if (tags.length) score += 5; } catch {}
+        if (c.attribution_campaign) score += 5;
+        score = Math.max(0, Math.min(100, score));
+
+        // Waiting timer — only meaningful while the customer's last message is unread.
+        const waitingMin = unread && isFinite(ageMin) ? Math.floor(ageMin) : null;
+        return { priority, score, waitingMin, ageMin };
+    }
+    function scoreColor(s) { return s >= 70 ? '#059669' : s >= 40 ? '#d97706' : '#64748b'; }
+    function humanAge(min) {
+        if (!isFinite(min)) return '';
+        if (min < 1) return 'just now';
+        if (min < 60) return Math.floor(min) + ' min ago';
+        if (min < 1440) return Math.floor(min/60) + ' hr ago';
+        return Math.floor(min/1440) + ' d ago';
+    }
+    function humanWait(min) {
+        if (min < 60) return min + ' min';
+        if (min < 1440) return Math.floor(min/60) + 'h ' + (min%60) + 'm';
+        return Math.floor(min/1440) + 'd';
     }
 
     function renderContacts() {
@@ -2755,9 +2837,21 @@
         const filterAgentValue = document.getElementById('filterAgent').value;
         const searchVal = document.getElementById('searchInput').value.toLowerCase();
         
+        const sortBy = (document.getElementById('sortBy') || {}).value || 'recent';
         let filteredCount = 0;
 
-        allContacts.forEach(c => {
+        // Sort a copy per the chosen mode (default: overdue first, then recent).
+        const sorted = [...allContacts].sort((a, b) => {
+            if (sortBy === 'score') return leadIntel(b).score - leadIntel(a).score;
+            if (sortBy === 'priority') return leadIntel(b).priority.rank - leadIntel(a).priority.rank || (leadIntel(b).score - leadIntel(a).score);
+            if (sortBy === 'waiting') return (leadIntel(b).waitingMin || -1) - (leadIntel(a).waitingMin || -1);
+            const ao = a.lead_status === 'Follow-up Required' && a.follow_up_time && new Date(a.follow_up_time) <= new Date();
+            const bo = b.lead_status === 'Follow-up Required' && b.follow_up_time && new Date(b.follow_up_time) <= new Date();
+            if (ao && !bo) return -1; if (!ao && bo) return 1;
+            return new Date(b.last_message_at || 0) - new Date(a.last_message_at || 0);
+        });
+
+        sorted.forEach(c => {
             const name = (c.name || '').toLowerCase();
             const phone = (c.phone || '').toLowerCase();
             const status = c.lead_status || 'New Lead';
@@ -2803,14 +2897,19 @@
             
             const initials = (c.name || 'C').substring(0, 1).toUpperCase();
             const time = new Date(c.last_message_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
-            
+            const intel = leadIntel(c);
+            const waitChip = intel.waitingMin !== null
+                ? `<span class="wait-chip ${intel.waitingMin > 10 ? 'wait-late' : 'wait-ok'}" title="Customer waiting ${intel.waitingMin} min for a reply">⏱ ${humanWait(intel.waitingMin)}</span>`
+                : '';
+
             el.innerHTML = `
                 <div class="avatar" style="background: hsl(${c.phone.slice(-3) * 37 % 360}, 55%, 45%)">${initials}</div>
                 <div class="contact-info">
                     <div class="contact-name-row">
                         <span class="contact-name" style="${isUnread ? 'font-weight:bold; color:var(--text-main);' : ''}">
-                            <span class="status-dot ${getStatusDot(status)}"></span>
+                            <span class="prio-badge" title="${intel.priority.label}">${intel.priority.emoji}</span><span class="status-dot ${getStatusDot(status)}"></span>
                             ${tempBadge}${c.name || c.phone}
+                            <span class="score-chip" style="background:${scoreColor(intel.score)}1a;color:${scoreColor(intel.score)};" title="Lead score">${intel.score}</span>
                         </span>
                         <div style="display:flex; flex-direction:column; align-items:flex-end; gap: 4px;">
                             <span class="contact-time" style="${isUnread ? 'color:var(--primary);font-weight:bold;' : ''}">${time}</span>
@@ -2818,7 +2917,7 @@
                         </div>
                     </div>
                     <div class="contact-sub-row">
-                        <span>${agent}</span>
+                        <span>${agent} ${waitChip}</span>
                         <span class="status-badge ${getStatusClass(status)}" style="${isOverdue ? 'color:#f43f5e; font-weight:700;' : ''}">
                             ${isOverdue ? 'OVERDUE' : (status || 'No Status')}
                         </span>
@@ -2852,6 +2951,14 @@
         // Populate Chat Header
         document.getElementById('headerName').innerText = contact.name || contact.phone;
         document.getElementById('headerPhone').innerText = `+${contact.phone}`;
+        (function(){
+            const intel = leadIntel(contact), t = document.getElementById('headerTimer');
+            let s = `${intel.priority.emoji} ${intel.priority.label} · Score ${intel.score}`;
+            if (contact.last_message_at) s += ` · Last msg ${humanAge(intel.ageMin)}`;
+            if (intel.waitingMin !== null) s += ` · ⏱ Waiting ${humanWait(intel.waitingMin)}`;
+            t.innerText = s;
+            t.style.color = (intel.waitingMin !== null && intel.waitingMin > 10) ? '#e11d48' : 'var(--text-muted)';
+        })();
         document.getElementById('headerAvatar').innerText = initials;
         document.getElementById('headerAvatar').style.background = `hsl(${contact.phone.slice(-3) * 37 % 360}, 55%, 45%)`;
         
@@ -2861,7 +2968,13 @@
         document.getElementById('panelAvatar').innerText = initials;
         document.getElementById('panelAvatar').style.background = `hsl(${contact.phone.slice(-3) * 37 % 360}, 55%, 45%)`;
         
-        document.getElementById('crmStatus').value = contact.lead_status || '';
+        // Preserve any legacy/programmatic status (e.g. "Follow-up Required")
+        // that isn't in the new stage list, so opening a contact never wipes it.
+        (function(){
+            const sel = document.getElementById('crmStatus'), v = contact.lead_status || '';
+            if (v && ![...sel.options].some(o => o.value === v)) sel.add(new Option(v + ' (legacy)', v));
+            sel.value = v;
+        })();
         document.getElementById('crmAgent').value = contact.assigned_agent || 'Unassigned';
         
         // Load up to 5 follow-up dates (falls back to the single legacy field).
@@ -2906,6 +3019,19 @@
         if (currentFollowUps.length >= 5) return;
         currentFollowUps.push('');   // empty row; saved once a date is picked
         renderFollowUpRows();
+    }
+
+    // Quick follow-up: schedule N days from now at 11:00 AM local, and flip the
+    // status to Follow-up Required so it surfaces in the Notifications tab.
+    function quickFollowUp(days) {
+        if (!currentPhone) return;
+        if (currentFollowUps.filter(Boolean).length >= 5) { alert('Max 5 follow-up dates.'); return; }
+        const d = new Date(); d.setDate(d.getDate() + days); d.setHours(11, 0, 0, 0);
+        currentFollowUps.push(d.toISOString());
+        renderFollowUpRows();
+        const sel = document.getElementById('crmStatus');
+        if (!sel.value || sel.value === 'New Lead') sel.value = 'Contacted';
+        updateCRM();
     }
 
     function editFollowUpRow(i, localVal) {
