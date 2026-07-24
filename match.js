@@ -256,10 +256,4 @@ async function matchCustomersForMaid(maidId, { exactMatch = false, role = null }
 module.exports = {
   matchMaidsForCustomer,
   matchCustomersForMaid,
-  // exported for tests
-  haversineKm,
-  getZone,
-  serviceMatches,
-  maskPhone,
-  toCoord,
 };

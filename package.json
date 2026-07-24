@@ -9,19 +9,7 @@
   "scripts": {
     "start": "node index.js",
     "start:prod": "NODE_ENV=production node index.js",
-    "dev": "node index.js",
-    "test": "playwright test",
-    "test:ui": "playwright test --ui",
-    "test:headed": "playwright test --headed",
-    "test:api": "playwright test tests/api.spec.js",
-    "test:flow": "playwright test tests/flow.spec.js",
-    "test:sheets": "playwright test tests/sheets.spec.js",
-    "test:integration": "playwright test tests/integration.spec.js",
-    "test:performance": "playwright test tests/performance.spec.js",
-    "test:quick": "playwright test tests/api.spec.js tests/flow.spec.js",
-    "test:report": "playwright show-report",
-    "test:run": "node run-tests.js",
-    "test:summary": "node test-summary.js"
+    "dev": "node index.js"
   },
   "keywords": [
     "whatsapp",
@@ -36,8 +24,5 @@
     "dotenv": "^17.4.2",
     "express": "^4.18.2",
     "googleapis": "^131.0.0"
-  },
-  "devDependencies": {
-    "@playwright/test": "^1.48.0"
   }
 }
