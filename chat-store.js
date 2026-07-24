@@ -250,6 +250,34 @@ async function getContacts(role = 'admin', username = '') {
   }
 }
 
+/**
+ * Fetches leads that have abandoned the flow and are eligible for the Drip Campaign.
+ */
+async function getAbandonedLeads() {
+  try {
+    const { data, error } = await supabase.from('contacts')
+      .select('*')
+      .or('abandonment_drip_stage.is.null,abandonment_drip_stage.lt.15');
+    if (error) {
+      console.error('[chat-store] error fetching abandoned leads:', error);
+      return [];
+    }
+
+    const EXCLUDED_STATUSES = new Set([
+      'Booked', 'Canceled', 'Not Interested',
+      'Service Completed', 'Follow-up Required',
+    ]);
+    return (data || []).filter(c => {
+      const stage = c.abandonment_drip_stage || 0;
+      if (stage >= 15) return false;
+      if (c.lead_status && EXCLUDED_STATUSES.has(c.lead_status)) return false;
+      return true;
+    });
+  } catch (err) {
+    console.error('[chat-store] exception fetching abandoned leads:', err.message);
+    return [];
+  }
+}
 
 /**
  * Fetches a single contact by phone.
@@ -709,6 +737,7 @@ module.exports = {
   isBotPaused,
   setBotPause,
   getContacts,
+  getAbandonedLeads,
   getContactByPhone,
   getMessages,
   updateContactLabel,

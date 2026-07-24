@@ -1421,7 +1421,7 @@
         <div class="messages" id="messageList"></div>
 
         <div class="chat-input-area">
-            <div class="qr-popup" id="qrPopup"></div>
+            <div class="qr-popup" id="qrPopup" style="display:none;"></div>
             <div class="chat-input-wrapper">
                 <input type="text" id="messageInput" placeholder="Type message or '/' for shortcuts..." autocomplete="off" onkeyup="checkQuickReplies(event)">
             </div>
@@ -3371,7 +3371,8 @@
         const res = await authFetch('/api/quickreplies');
         const data = await res.json();
         quickReplies = data.replies || [];
-        renderQuickReplies();
+        // Do NOT render here — the popup should only appear when the user
+        // types "/" in the message box, never automatically on load/refresh.
     }
 
     function renderQuickReplies(query = '') {
@@ -3413,7 +3414,7 @@
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ shortcut, message })
-        }).then(() => loadQuickReplies());
+        }).then(() => { loadQuickReplies(); document.getElementById('qrPopup').style.display = 'none'; });
     }
 
     function checkQuickReplies(e) {
