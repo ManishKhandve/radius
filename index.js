@@ -1953,6 +1953,98 @@ app.post('/api/notifications/read', authMiddleware, async (req, res) => {
   res.json({ ok: true });
 });
 
+// ─── Insights dashboard: missed opportunities, locality heatmap, tasks ──
+// Pune/PCMC localities matched against the free-text area/location fields.
+const PUNE_LOCALITIES = [
+  'Kharadi','Wagholi','Viman Nagar','Kalyani Nagar','Koregaon Park','Mundhwa','Manjari','Hadapsar','Magarpatta','Amanora',
+  'Baner','Balewadi','Aundh','Pashan','Sus','Bavdhan','Wakad','Hinjewadi','Pimple Saudagar','Pimple Nilakh','Pimple Gurav',
+  'Pimpri','Chinchwad','Nigdi','Akurdi','Ravet','Punawale','Tathawade','Moshi','Bhosari','Chikhali','Dehu Road','Talegaon',
+  'Kothrud','Karve Nagar','Warje','Dhayari','Sinhagad Road','Vadgaon','Kondhwa','NIBM','Undri','Katraj','Bibwewadi','Salisbury Park',
+  'Swargate','Shivajinagar','Deccan','Camp','Yerwada','Vishrantwadi','Dhanori','Lohegaon','Vishrantwad','Kalas','Wadgaon Sheri',
+  'Nanded','Warje Malwadi','Fursungi','Loni','Wanwadi','Ghorpadi',
+];
+const LOCALITY_LC = PUNE_LOCALITIES.map(l => ({ name: l, lc: l.toLowerCase() }));
+function matchLocality(text) {
+  const t = String(text || '').toLowerCase();
+  if (!t) return null;
+  for (const l of LOCALITY_LC) if (t.includes(l.lc)) return l.name;
+  return null;
+}
+
+// Any follow-up date (single field or array) still in the future?
+function hasFutureFollowup(c, now) {
+  const times = Array.isArray(c.follow_up_times) ? c.follow_up_times : [];
+  const all = [...times, c.follow_up_time].filter(Boolean);
+  return all.some(t => new Date(t).getTime() > now);
+}
+const OPEN_STATUSES = new Set(['New Lead', 'Contacted', 'Interested', 'Interview Scheduled', 'Maid Sent', 'Selected', 'Payment Pending', 'Quote Sent', 'Follow-up Required', '']);
+
+app.get('/api/insights', authMiddleware, async (req, res) => {
+  const now = Date.now();
+  const isAdmin = req.user.role === 'admin';
+  try {
+    // ── Contacts → missed opportunities + today's tasks ──
+    const { data: contactsAll } = await wfStore.supabase.from('contacts').select('*');
+    const mine = c => isAdmin || !c.assigned_agent || c.assigned_agent === 'Unassigned' || c.assigned_agent === req.user.username;
+    const contacts = (contactsAll || []).filter(mine);
+
+    const missed = [];
+    const endOfToday = new Date(); endOfToday.setHours(23, 59, 59, 999);
+    const tasks = { waitingReplies: [], callFollowup: [], payments: [], interviews: [] };
+
+    for (const c of contacts) {
+      const status = c.lead_status || '';
+      const ageMin = c.last_message_at ? (now - new Date(c.last_message_at).getTime()) / 60000 : Infinity;
+      const unread = c.label === 'unread';
+      const reasons = [];
+
+      if (unread && ageMin > 15) reasons.push({ type: 'waiting', text: `Waiting ${Math.floor(ageMin)} min for a reply` });
+      if (isFinite(ageMin) && ageMin > 1440 && OPEN_STATUSES.has(status) && !hasFutureFollowup(c, now))
+        reasons.push({ type: 'cold', text: `No contact in ${Math.floor(ageMin / 1440)}d, no follow-up set` });
+      if (status === 'Payment Pending') reasons.push({ type: 'payment', text: 'Payment pending' });
+      if (status === 'Interview Scheduled') reasons.push({ type: 'interview', text: 'Interview pending — follow through' });
+      if (reasons.length) missed.push({ phone: c.phone, name: c.name || c.phone, assigned_agent: c.assigned_agent || 'Unassigned', status, reasons });
+
+      // Today's tasks (a contact can land in several buckets)
+      if (unread) tasks.waitingReplies.push({ phone: c.phone, name: c.name || c.phone });
+      const fu = [...(Array.isArray(c.follow_up_times) ? c.follow_up_times : []), c.follow_up_time].filter(Boolean);
+      if (fu.some(t => new Date(t).getTime() <= endOfToday.getTime())) tasks.callFollowup.push({ phone: c.phone, name: c.name || c.phone });
+      if (status === 'Payment Pending') tasks.payments.push({ phone: c.phone, name: c.name || c.phone });
+      if (status === 'Interested') tasks.interviews.push({ phone: c.phone, name: c.name || c.phone });
+    }
+    // Most-severe reason first for display
+    const sev = { waiting: 4, payment: 3, interview: 2, cold: 1 };
+    missed.sort((a, b) => Math.max(...b.reasons.map(r => sev[r.type])) - Math.max(...a.reasons.map(r => sev[r.type])));
+
+    // ── Locality heatmap (global — for ad targeting) ──
+    const [{ data: custs }, { data: flats }] = await Promise.all([
+      wfStore.supabase.from('customers').select('location'),
+      wfStore.supabase.from('flat_customers').select('area'),
+    ]);
+    const heat = {};
+    let matched = 0, unmatched = 0;
+    for (const r of [...(custs || []).map(x => x.location), ...(flats || []).map(x => x.area)]) {
+      const loc = matchLocality(r);
+      if (loc) { heat[loc] = (heat[loc] || 0) + 1; matched++; } else if (String(r || '').trim()) unmatched++;
+    }
+    const heatmap = Object.entries(heat).map(([area, count]) => ({ area, count })).sort((a, b) => b.count - a.count).slice(0, 15);
+
+    res.json({
+      ok: true, role: req.user.role,
+      missed,
+      tasks: {
+        waitingReplies: tasks.waitingReplies.length, callFollowup: tasks.callFollowup.length,
+        payments: tasks.payments.length, interviews: tasks.interviews.length,
+        lists: tasks,
+      },
+      heatmap, heatmapMatched: matched, heatmapUnmatched: unmatched,
+    });
+  } catch (err) {
+    log('error', 'insights', err.message);
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
 // Send one approved template to a single person from a directory view.
 // bodyParams maps to the template's {{1}}, {{2}}… body variables; headerUrl is
 // the media header. Both must match the approved template exactly (Meta #132000).

@@ -1283,6 +1283,14 @@
                     <span>Analytics</span>
                 </button>
 
+                <button onclick="showInsightsView()" id="insightsNavBtn" class="menu-item">
+                    <svg fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"></path>
+                    </svg>
+                    <span>Insights</span>
+                    <span id="insightsBadge" class="notif-badge" style="display:none;">0</span>
+                </button>
+
                 <a href="/automation" id="automationNavBtn" class="menu-item">
                     <svg fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z"></path>
@@ -1673,6 +1681,25 @@
         </div>
     </div>
 
+    <!-- FULLSCREEN VIEW: Insights (missed ops, tasks, locality heatmap) -->
+    <div class="analytics-pane" id="insightsView" style="display: none;">
+        <div class="broadcast-container" style="max-width:1100px;">
+            <div class="page-header">
+                <h1 class="page-title">Insights</h1>
+                <p class="page-subtitle" id="insightsSub">Missed opportunities, today's tasks, and where your leads are</p>
+            </div>
+
+            <h3 style="font-family:'Outfit',sans-serif; font-size:14px; text-transform:uppercase; letter-spacing:0.5px; color:var(--text-muted); margin:6px 0 12px;">✅ Today's Tasks</h3>
+            <div id="insightsTasks" style="display:grid; grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); gap:14px; margin-bottom:26px;"></div>
+
+            <h3 style="font-family:'Outfit',sans-serif; font-size:14px; text-transform:uppercase; letter-spacing:0.5px; color:var(--error); margin:6px 0 12px;">🚨 Missed Opportunities <span id="missedCount" style="color:var(--text-muted);"></span></h3>
+            <div id="insightsMissed" style="margin-bottom:26px;"></div>
+
+            <h3 style="font-family:'Outfit',sans-serif; font-size:14px; text-transform:uppercase; letter-spacing:0.5px; color:var(--text-muted); margin:6px 0 12px;">📍 Locality Heatmap <span id="heatSub" style="text-transform:none; font-weight:400;"></span></h3>
+            <div class="bc-card"><div id="insightsHeat"></div></div>
+        </div>
+    </div>
+
     <!-- Message-a-person modal -->
     <div id="peopleMsgModal" style="display:none; position:fixed; inset:0; background:rgba(15,23,42,0.45); z-index:1000; align-items:center; justify-content:center;">
         <div style="background:#fff; border-radius:16px; padding:24px; width:440px; max-width:92%; box-shadow:0 20px 50px rgba(0,0,0,0.25);">
@@ -1844,6 +1871,8 @@
         document.getElementById('broadcastView').style.display = 'none';
         document.getElementById('peopleView').style.display = 'none';
         document.getElementById('notifView').style.display = 'none';
+        document.getElementById('insightsView').style.display = 'none';
+        document.getElementById('insightsNavBtn').classList.remove('active');
         document.getElementById('leadsPane').style.display = 'flex';
         document.getElementById('navChatsBtn').classList.add('active');
         document.getElementById('analyticsNavBtn').classList.remove('active');
@@ -1869,6 +1898,8 @@
         document.getElementById('analyticsView').style.display = 'none';
         document.getElementById('peopleView').style.display = 'none';
         document.getElementById('notifView').style.display = 'none';
+        document.getElementById('insightsView').style.display = 'none';
+        document.getElementById('insightsNavBtn').classList.remove('active');
         document.getElementById('broadcastView').style.display = 'block';
         document.getElementById('navChatsBtn').classList.remove('active');
         document.getElementById('analyticsNavBtn').classList.remove('active');
@@ -2034,6 +2065,8 @@
         document.getElementById('analyticsView').style.display = 'none';
         document.getElementById('broadcastView').style.display = 'none';
         document.getElementById('notifView').style.display = 'none';
+        document.getElementById('insightsView').style.display = 'none';
+        document.getElementById('insightsNavBtn').classList.remove('active');
         document.getElementById('peopleView').style.display = 'block';
         document.getElementById('navChatsBtn').classList.remove('active');
         document.getElementById('analyticsNavBtn').classList.remove('active');
@@ -2319,6 +2352,8 @@
         document.getElementById('analyticsView').style.display = 'none';
         document.getElementById('broadcastView').style.display = 'none';
         document.getElementById('peopleView').style.display = 'none';
+        document.getElementById('insightsView').style.display = 'none';
+        document.getElementById('insightsNavBtn').classList.remove('active');
         document.getElementById('notifView').style.display = 'block';
         document.getElementById('navChatsBtn').classList.remove('active');
         document.getElementById('analyticsNavBtn').classList.remove('active');
@@ -2342,9 +2377,97 @@
         openChat(contact, (contact.name || 'C').substring(0, 1).toUpperCase());
     }
 
+    // ── Insights: missed opportunities, today's tasks, locality heatmap ──
+    let insightsData = null;
+    async function loadInsights() {
+        try {
+            const j = await (await authFetch('/api/insights')).json();
+            insightsData = j.ok ? j : null;
+        } catch { insightsData = null; }
+        const badge = document.getElementById('insightsBadge');
+        const n = insightsData ? insightsData.missed.length : 0;
+        if (n > 0) { badge.innerText = n > 99 ? '99+' : n; badge.style.display = 'inline-flex'; }
+        else badge.style.display = 'none';
+        if (document.getElementById('insightsView').style.display === 'block') renderInsights();
+    }
+
+    function showInsightsView() {
+        document.getElementById('activeChat').style.display = 'none';
+        document.getElementById('profilePanel').style.display = 'none';
+        document.getElementById('emptyState').style.display = 'none';
+        document.getElementById('leadsPane').style.display = 'none';
+        document.getElementById('analyticsView').style.display = 'none';
+        document.getElementById('broadcastView').style.display = 'none';
+        document.getElementById('peopleView').style.display = 'none';
+        document.getElementById('notifView').style.display = 'none';
+        document.getElementById('insightsView').style.display = 'block';
+        document.getElementById('navChatsBtn').classList.remove('active');
+        document.getElementById('analyticsNavBtn').classList.remove('active');
+        document.getElementById('navBroadcastBtn').classList.remove('active');
+        document.getElementById('notifNavBtn').classList.remove('active');
+        document.querySelectorAll('.people-nav').forEach(b => b.classList.remove('active'));
+        document.getElementById('insightsNavBtn').classList.add('active');
+        document.getElementById('insightsTasks').innerHTML = '<div style="color:var(--text-muted);">Loading…</div>';
+        renderInsights();
+        loadInsights();
+    }
+
+    function renderInsights() {
+        if (!insightsData) return;
+        const d = insightsData;
+        // Today's tasks
+        const t = d.tasks;
+        const tiles = [
+            ['⏱ Reply to Waiting', t.waitingReplies, 'var(--error)', t.lists.waitingReplies],
+            ['📞 Follow-ups Due', t.callFollowup, 'var(--indigo)', t.lists.callFollowup],
+            ['💰 Collect Payments', t.payments, 'var(--warning)', t.lists.payments],
+            ['📅 Schedule Interviews', t.interviews, 'var(--primary)', t.lists.interviews],
+        ];
+        document.getElementById('insightsTasks').innerHTML = tiles.map(([label, n, color, list]) => `
+            <div class="bc-card" style="margin:0; cursor:${n ? 'pointer' : 'default'};" ${n ? `onclick="openInsightList(${JSON.stringify(JSON.stringify(list)).replace(/"/g,'&quot;')})"` : ''}>
+                <div style="font-size:12px; font-weight:700; text-transform:uppercase; letter-spacing:.4px; color:var(--text-muted);">${label}</div>
+                <div style="font-family:'Outfit',sans-serif; font-size:30px; font-weight:700; color:${color}; margin-top:4px;">${n}</div>
+            </div>`).join('');
+
+        // Missed opportunities
+        document.getElementById('missedCount').innerText = d.missed.length ? `(${d.missed.length})` : '';
+        const rc = { waiting:'#e11d48', payment:'#d97706', interview:'#4f46e5', cold:'#64748b' };
+        document.getElementById('insightsMissed').innerHTML = d.missed.length ? d.missed.slice(0, 100).map(m => `
+            <div class="notif-card overdue" style="cursor:pointer;" onclick="openNotifChat('${esc(m.phone)}')">
+                <div class="notif-info">
+                    <div class="notif-name">${esc(m.name)} <span style="font-weight:500; color:var(--text-muted); font-size:12px;">· ${esc(m.status || 'No stage')} · ${esc(m.assigned_agent)}</span></div>
+                    <div style="display:flex; gap:6px; flex-wrap:wrap; margin-top:5px;">
+                        ${m.reasons.map(r => `<span style="font-size:11.5px; font-weight:600; padding:2px 9px; border-radius:99px; background:${rc[r.type]}1a; color:${rc[r.type]};">${esc(r.text)}</span>`).join('')}
+                    </div>
+                </div>
+                <button class="pmsg-btn" onclick="event.stopPropagation(); openNotifChat('${esc(m.phone)}')">💬 Open</button>
+            </div>`).join('') : '<div class="notif-card" style="justify-content:center; color:var(--text-muted);">🎉 No missed opportunities — everyone is handled.</div>';
+
+        // Locality heatmap
+        document.getElementById('heatSub').innerText = ` — ${d.heatmapMatched} located leads (for ad targeting)`;
+        const max = d.heatmap.length ? d.heatmap[0].count : 1;
+        document.getElementById('insightsHeat').innerHTML = d.heatmap.length ? d.heatmap.map(h => `
+            <div style="display:flex; align-items:center; gap:10px; margin-bottom:7px;">
+                <div style="width:130px; font-size:13px; font-weight:600; text-align:right; flex-shrink:0;">${esc(h.area)}</div>
+                <div style="flex:1; background:#f1f5f9; border-radius:6px; overflow:hidden; height:22px;">
+                    <div style="height:100%; width:${Math.max(4, h.count / max * 100)}%; background:linear-gradient(90deg,var(--primary),var(--indigo)); border-radius:6px;"></div>
+                </div>
+                <div style="width:40px; font-size:13px; font-weight:700; color:var(--text-main);">${h.count}</div>
+            </div>`).join('') : '<div style="color:var(--text-muted);">No locality data matched.</div>';
+    }
+
+    function openInsightList(json) {
+        let list = [];
+        try { list = JSON.parse(json); } catch {}
+        if (!list.length) return;
+        alert(list.map(p => `• ${p.name} (+${p.phone})`).join('\n'));
+    }
+
     // Badge refresh: on load + every 60s
     loadNotifications();
     setInterval(loadNotifications, 60000);
+    loadInsights();
+    setInterval(loadInsights, 120000);
 
     // ── Proximity matching (nearest maids ⇄ nearest customers) ──
     // Read-only lookup against /api/match. Results can be selected and sent an
@@ -2634,6 +2757,8 @@
         document.getElementById('broadcastView').style.display = 'none';
         document.getElementById('peopleView').style.display = 'none';
         document.getElementById('notifView').style.display = 'none';
+        document.getElementById('insightsView').style.display = 'none';
+        document.getElementById('insightsNavBtn').classList.remove('active');
         document.getElementById('navChatsBtn').classList.remove('active');
         document.getElementById('navBroadcastBtn').classList.remove('active');
         document.getElementById('notifNavBtn').classList.remove('active');
