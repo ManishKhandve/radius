@@ -472,7 +472,6 @@
         .dot-stage-lost  { background: #f43f5e; }
         /* Lead intelligence badges */
         .prio-badge { font-size: 11px; margin-right: 3px; }
-        .score-chip { font-size: 10px; font-weight: 700; padding: 1px 6px; border-radius: 99px; margin-left: 4px; }
         .wait-chip { font-size: 10.5px; font-weight: 700; padding: 1px 7px; border-radius: 99px; }
         .wait-ok { background: #e2e8f0; color: #475569; }
         .wait-late { background: rgba(244,63,94,.14); color: #e11d48; }
@@ -2955,7 +2954,6 @@
         const waitingMin = unread && isFinite(ageMin) ? Math.floor(ageMin) : null;
         return { priority, score, waitingMin, ageMin };
     }
-    function scoreColor(s) { return s >= 70 ? '#059669' : s >= 40 ? '#d97706' : '#64748b'; }
     function humanAge(min) {
         if (!isFinite(min)) return '';
         if (min < 1) return 'just now';
@@ -3053,7 +3051,6 @@
                         <span class="contact-name" style="${isUnread ? 'font-weight:bold; color:var(--text-main);' : ''}">
                             <span class="prio-badge" title="${intel.priority.label}">${intel.priority.emoji}</span>
                             ${c.name || c.phone}
-                            <span class="score-chip" style="background:${scoreColor(intel.score)}1a;color:${scoreColor(intel.score)};" title="Lead score">${intel.score}</span>
                         </span>
                         <div style="display:flex; flex-direction:column; align-items:flex-end; gap: 4px;">
                             <span class="contact-time" style="${isUnread ? 'color:var(--primary);font-weight:bold;' : ''}">${time}</span>
