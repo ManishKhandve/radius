@@ -1418,6 +1418,7 @@
             </div>
         </div>
 
+        <div id="assignedBanner" class="msg-bubble msg-timeline-note" style="display:none; margin: 10px auto 0; max-width: 90%;"></div>
         <div class="messages" id="messageList"></div>
 
         <div class="chat-input-area">
@@ -3050,7 +3051,7 @@
                 <div class="contact-info">
                     <div class="contact-name-row">
                         <span class="contact-name" style="${isUnread ? 'font-weight:bold; color:var(--text-main);' : ''}">
-                            <span class="prio-badge" title="${intel.priority.label}">${intel.priority.emoji}</span><span class="status-dot ${getStatusDot(status)}"></span>
+                            <span class="prio-badge" title="${intel.priority.label}">${intel.priority.emoji}</span>
                             ${c.name || c.phone}
                             <span class="score-chip" style="background:${scoreColor(intel.score)}1a;color:${scoreColor(intel.score)};" title="Lead score">${intel.score}</span>
                         </span>
@@ -3060,7 +3061,7 @@
                         </div>
                     </div>
                     <div class="contact-sub-row">
-                        <span>${agent} ${waitChip}</span>
+                        <span>${agent === 'Unassigned' ? 'Unassigned' : ''} ${waitChip}</span>
                         <span class="status-badge ${getStatusClass(status)}" style="${isOverdue ? 'color:#f43f5e; font-weight:700;' : ''}">
                             ${isOverdue ? 'OVERDUE' : (status || 'No Status')}
                         </span>
@@ -3072,6 +3073,18 @@
         });
 
         document.getElementById('leadsCount').innerText = filteredCount;
+    }
+
+    // Shows who a conversation is assigned to as a note-styled banner inside
+    // the chat itself (instead of cluttering the contact-list row).
+    function renderAssignedBanner(assignedAgent) {
+        const el = document.getElementById('assignedBanner');
+        if (assignedAgent && assignedAgent !== 'Unassigned') {
+            el.innerHTML = `👤 <strong>Assigned to ${esc(assignedAgent)}</strong>`;
+            el.style.display = 'block';
+        } else {
+            el.style.display = 'none';
+        }
     }
 
     async function openChat(contact, initials) {
@@ -3104,7 +3117,8 @@
         })();
         document.getElementById('headerAvatar').innerText = initials;
         document.getElementById('headerAvatar').style.background = `hsl(${contact.phone.slice(-3) * 37 % 360}, 55%, 45%)`;
-        
+        renderAssignedBanner(contact.assigned_agent);
+
         // Populate Profile Panel
         document.getElementById('panelName').innerText = contact.name || contact.phone;
         document.getElementById('panelPhone').innerText = `+${contact.phone}`;
@@ -3223,6 +3237,7 @@
                 c.abandonment_drip_stage = payload.abandonment_drip_stage;
             }
         }
+        renderAssignedBanner(agent);
         renderContacts();
     }
 
