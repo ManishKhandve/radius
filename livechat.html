@@ -478,6 +478,17 @@
         .qfu-btn { padding:6px 11px; border-radius:8px; border:1px solid var(--border-color); background:#fff; color:var(--text-muted); font-size:12px; font-weight:600; cursor:pointer; }
         .qfu-btn:hover { border-color: var(--primary); color: var(--primary); background: var(--primary-glow); }
 
+        /* ── Team presence ── */
+        .presence-avatar { position: relative; width: 28px; height: 28px; border-radius: 50%; display:flex; align-items:center; justify-content:center; color:#fff; font-size:12px; font-weight:700; cursor:default; }
+        .presence-dot { position:absolute; bottom:-1px; right:-1px; width:9px; height:9px; border-radius:50%; border:2px solid var(--bg-sidebar); }
+        .presence-dot.online { background:#22c55e; }
+        .presence-dot.offline { background:#94a3b8; }
+        /* ── Typing indicator ── */
+        .typing-dots span { display:inline-block; width:4px; height:4px; border-radius:50%; background: var(--primary); margin-right:2px; animation: typingBounce 1.2s infinite ease-in-out; }
+        .typing-dots span:nth-child(2) { animation-delay: .2s; }
+        .typing-dots span:nth-child(3) { animation-delay: .4s; }
+        @keyframes typingBounce { 0%, 60%, 100% { transform: translateY(0); opacity:.5; } 30% { transform: translateY(-3px); opacity:1; } }
+
         /* Column 3: Active Chat View */
         .chat-area {
             flex: 1;
@@ -1298,8 +1309,13 @@
                 </a>
 
             </div>
+
+            <div style="padding: 12px 20px 4px;">
+                <div style="font-size:10.5px; font-weight:700; text-transform:uppercase; letter-spacing:.5px; color:var(--text-muted); margin-bottom:8px;">Team</div>
+                <div id="teamPresenceList" style="display:flex; flex-wrap:wrap; gap:8px;"></div>
+            </div>
         </div>
-        
+
         <div class="sidebar-footer">
             <div class="user-profile">
                 <div class="user-avatar" id="sidebarAvatar">U</div>
@@ -1419,12 +1435,13 @@
         </div>
 
         <div id="assignedBanner" class="msg-bubble msg-timeline-note" style="display:none; margin: 10px auto 0; max-width: 90%;"></div>
+        <div id="typingBanner" style="display:none; text-align:center; font-size:12.5px; color:var(--text-muted); padding:4px 0 0;"></div>
         <div class="messages" id="messageList"></div>
 
         <div class="chat-input-area">
             <div class="qr-popup" id="qrPopup" style="display:none;"></div>
             <div class="chat-input-wrapper">
-                <input type="text" id="messageInput" placeholder="Type message or '/' for shortcuts..." autocomplete="off" onkeyup="checkQuickReplies(event)">
+                <input type="text" id="messageInput" placeholder="Type message or '/' for shortcuts..." autocomplete="off" onkeyup="checkQuickReplies(event); pingTyping()">
             </div>
             <button id="sendBtn">Send</button>
         </div>
@@ -1866,7 +1883,10 @@
         } else {
             document.getElementById('totalUsersCount').innerText = 'Standard User';
         }
-        
+
+        // Refresh the "teammate is typing" banner for the open conversation.
+        if (currentPhone) renderTypingBanner(allContacts.find(c => c.phone === currentPhone));
+
         renderContacts();
     }
 
@@ -2486,6 +2506,8 @@
     setInterval(loadNotifications, 60000);
     loadInsights();
     setInterval(loadInsights, 120000);
+    loadPresence();
+    setInterval(loadPresence, 20000);
 
     // ── Proximity matching (nearest maids ⇄ nearest customers) ──
     // Read-only lookup against /api/match. Results can be selected and sent an
@@ -3075,6 +3097,48 @@
         document.getElementById('leadsCount').innerText = filteredCount;
     }
 
+    // ── Team presence (which agents are online) ──
+    async function loadPresence() {
+        try {
+            const j = await (await authFetch('/api/team/presence')).json();
+            const list = document.getElementById('teamPresenceList');
+            if (!j.ok) return;
+            const agents = j.agents.sort((a, b) => (b.online - a.online) || a.username.localeCompare(b.username));
+            list.innerHTML = agents.map(a => {
+                const initials = (a.username || '?').substring(0, 2).toUpperCase();
+                const hue = [...a.username].reduce((s, ch) => s + ch.charCodeAt(0), 0) * 37 % 360;
+                return `<div class="presence-avatar" style="background:hsl(${hue},55%,45%); opacity:${a.online ? 1 : 0.45};"
+                             title="${esc(a.username)} — ${a.online ? 'online' : 'offline'}">${initials}
+                          <span class="presence-dot ${a.online ? 'online' : 'offline'}"></span></div>`;
+            }).join('') || '<span style="font-size:11.5px;color:var(--text-muted);">No one online</span>';
+        } catch { /* non-fatal */ }
+    }
+
+    // ── Typing: tell the server I'm composing (nudges the customer's WhatsApp
+    // "typing…" and lets teammates see it too). Throttled to 1 ping / 3s. ──
+    let lastTypingPing = 0;
+    function pingTyping() {
+        if (!currentPhone) return;
+        const now = Date.now();
+        if (now - lastTypingPing < 3000) return;
+        lastTypingPing = now;
+        authFetch('/api/chat/typing', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ phone: currentPhone }),
+        }).catch(() => {});
+    }
+
+    // Show "<agent> is typing…" banner when a teammate is on the open contact.
+    function renderTypingBanner(contact) {
+        const el = document.getElementById('typingBanner');
+        if (contact && contact.typingAgent) {
+            el.innerHTML = `<span class="typing-dots"><span></span><span></span><span></span></span> ${esc(contact.typingAgent)} is typing…`;
+            el.style.display = 'block';
+        } else {
+            el.style.display = 'none';
+        }
+    }
+
     // Shows who a conversation is assigned to as a note-styled banner inside
     // the chat itself (instead of cluttering the contact-list row).
     function renderAssignedBanner(assignedAgent) {
@@ -3118,6 +3182,7 @@
         document.getElementById('headerAvatar').innerText = initials;
         document.getElementById('headerAvatar').style.background = `hsl(${contact.phone.slice(-3) * 37 % 360}, 55%, 45%)`;
         renderAssignedBanner(contact.assigned_agent);
+        renderTypingBanner(contact);
 
         // Populate Profile Panel
         document.getElementById('panelName').innerText = contact.name || contact.phone;

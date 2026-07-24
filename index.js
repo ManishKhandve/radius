@@ -1042,13 +1042,94 @@ const authMiddleware = (req, res, next) => {
     authTokens.delete(token);
     return res.status(401).json({ ok: false, error: 'Session expired, please login again' });
   }
+  entry.lastSeen = Date.now(); // powers /api/team/presence's "online" flag
   req.user = entry;
   next();
 };
 
+// ─── Presence & typing indicators ────────────────────────────
+// Ephemeral UI sugar only — in-memory, never persisted.
+const TYPING_TTL_MS           = 6_000;  // "X is typing" clears this long after the last keystroke ping
+const META_TYPING_THROTTLE_MS = 20_000; // Meta's own indicator lasts ~25s — don't re-poke more often than this
+const ONLINE_WINDOW_MS        = 60_000; // agent counted "online" if seen within the last minute
+const typingByPhone = new Map();            // phone -> { username, at }
+const lastMetaTypingSentByPhone = new Map(); // phone -> timestamp
+
+// Which agent (other than excludeUsername) is currently typing to this phone.
+function whoIsTyping(phone, excludeUsername) {
+  const t = typingByPhone.get(phone);
+  if (!t) return null;
+  if (Date.now() - t.at > TYPING_TTL_MS) { typingByPhone.delete(phone); return null; }
+  return t.username === excludeUsername ? null : t.username;
+}
+
+// Marks the customer's last inbound message read and shows a "typing…"
+// indicator in their WhatsApp app for up to ~25s (or until the real reply
+// sends). Best-effort cosmetic feature — failures are swallowed.
+async function sendTypingIndicator(phone) {
+  const wamid = await chatStore.getLastInboundWamid(phone);
+  if (!wamid) return { ok: false, reason: 'no inbound message to anchor to' };
+  const url = `${META_GRAPH_BASE}/${META_PHONE_NUMBER_ID}/messages`;
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), SEND_TIMEOUT_MS);
+  try {
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${META_ACCESS_TOKEN}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        messaging_product: 'whatsapp',
+        status: 'read',
+        message_id: wamid,
+        typing_indicator: { type: 'text' },
+      }),
+      signal: controller.signal,
+    });
+    return { ok: res.ok, status: res.status };
+  } catch (err) {
+    return { ok: false, reason: err.message };
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+// Agent pings this while composing a reply. Updates internal presence (for
+// other agents watching the same contact) and, throttled, nudges Meta so the
+// customer sees "typing…" in their own WhatsApp app.
+app.post('/api/chat/typing', authMiddleware, async (req, res) => {
+  const { phone } = req.body || {};
+  if (!phone || !isValidPhone(phone)) return res.status(400).json({ ok: false, error: 'Invalid phone' });
+  typingByPhone.set(phone, { username: req.user.username, at: Date.now() });
+
+  const lastSent = lastMetaTypingSentByPhone.get(phone) || 0;
+  if (Date.now() - lastSent > META_TYPING_THROTTLE_MS) {
+    lastMetaTypingSentByPhone.set(phone, Date.now());
+    sendTypingIndicator(phone).catch(() => {});
+  }
+  res.json({ ok: true });
+});
+
+// Which teammates are logged in / recently active — for a simple "online" dot.
+app.get('/api/team/presence', authMiddleware, (req, res) => {
+  const now = Date.now();
+  const byUser = new Map(); // dedupe multiple tabs/tokens per username, keep the freshest
+  for (const entry of authTokens.values()) {
+    const prev = byUser.get(entry.username);
+    if (!prev || (entry.lastSeen || 0) > (prev.lastSeen || 0)) byUser.set(entry.username, entry);
+  }
+  const agents = [...byUser.values()].map(e => ({
+    username: e.username,
+    role: e.role,
+    online: (now - (e.lastSeen || 0)) <= ONLINE_WINDOW_MS,
+    lastSeen: e.lastSeen ? new Date(e.lastSeen).toISOString() : null,
+  }));
+  res.json({ ok: true, agents });
+});
+
 app.get('/api/chat/contacts', authMiddleware, async (req, res) => {
   const contacts = await chatStore.getContacts(req.user.role, req.user.username);
-  res.json({ ok: true, success: true, contacts });
+  // Attach live "someone else is typing here" state (ephemeral, not stored).
+  const withTyping = contacts.map(c => ({ ...c, typingAgent: whoIsTyping(c.phone, req.user.username) }));
+  res.json({ ok: true, success: true, contacts: withTyping });
 });
 
 app.get('/api/users', authMiddleware, async (req, res) => {

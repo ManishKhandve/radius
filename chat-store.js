@@ -492,6 +492,27 @@ async function getMessages(phone) {
 }
 
 /**
+ * Latest inbound message's wamid for a phone — needed to anchor Meta's
+ * "mark read + show typing indicator" call to a real message id.
+ */
+async function getLastInboundWamid(phone) {
+  try {
+    const { data, error } = await supabase
+      .from('messages')
+      .select('wamid')
+      .eq('phone', phone)
+      .eq('direction', 'inbound')
+      .not('wamid', 'is', null)
+      .order('created_at', { ascending: false })
+      .limit(1);
+    if (error || !data || !data.length) return null;
+    return data[0].wamid;
+  } catch {
+    return null;
+  }
+}
+
+/**
  * Fetches "Interested" maid-service customers eligible for the WhatsApp
  * follow-up drip. Reads from the `customers` table (the maid-placement lead
  * list) — NOT `contacts`. Qualifies rows where status = 'Interested' and the
@@ -725,6 +746,7 @@ async function markNotificationsRead() {
 module.exports = {
   saveMessage,
   ensureContact,
+  getLastInboundWamid,
   addNotification,
   getNotifications,
   markNotificationsRead,
