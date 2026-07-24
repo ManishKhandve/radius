@@ -3024,10 +3024,11 @@
 
             filteredCount++;
 
-            let tempBadge = '';
-            if (temperature === 'Hot Lead') tempBadge = '🔥 ';
-            else if (temperature === 'Warm Lead') tempBadge = '☀️ ';
-            else if (temperature === 'Cold Lead') tempBadge = '❄️ ';
+            // Note: lead_temperature (🔥/☀️/❄️, set by the bot flow) is still
+            // filterable via "All Temps" and still feeds the lead score, but is
+            // no longer shown as a row badge — the computed priority dot below
+            // (🔴/🟠/🟢/⚫, based on live reply recency) is the single
+            // hot/warm/cold indicator now, so the two don't show side by side.
 
             const el = document.createElement('div');
             el.className = 'contact-item' + (c.phone === currentPhone ? ' active' : '');
@@ -3050,7 +3051,7 @@
                     <div class="contact-name-row">
                         <span class="contact-name" style="${isUnread ? 'font-weight:bold; color:var(--text-main);' : ''}">
                             <span class="prio-badge" title="${intel.priority.label}">${intel.priority.emoji}</span><span class="status-dot ${getStatusDot(status)}"></span>
-                            ${tempBadge}${c.name || c.phone}
+                            ${c.name || c.phone}
                             <span class="score-chip" style="background:${scoreColor(intel.score)}1a;color:${scoreColor(intel.score)};" title="Lead score">${intel.score}</span>
                         </span>
                         <div style="display:flex; flex-direction:column; align-items:flex-end; gap: 4px;">
