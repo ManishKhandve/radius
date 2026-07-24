@@ -1362,10 +1362,11 @@
                         <option value="worker">Maid (Worker)</option>
                     </select>
                     <select id="filterTemperature" onchange="renderContacts()">
-                        <option value="all">All Temps</option>
-                        <option value="Hot Lead">🔥 Hot Lead</option>
-                        <option value="Warm Lead">☀️ Warm Lead</option>
-                        <option value="Cold Lead">❄️ Cold Lead</option>
+                        <option value="all">All Priorities</option>
+                        <option value="Hot">🔴 Hot</option>
+                        <option value="Warm">🟠 Warm</option>
+                        <option value="Cold">🟢 Cold</option>
+                        <option value="No Response">⚫ No Response</option>
                     </select>
                 </div>
                 
@@ -2997,12 +2998,15 @@
             const phone = (c.phone || '').toLowerCase();
             const status = c.lead_status || 'New Lead';
             const category = c.service_category || '';
-            const temperature = c.lead_temperature || '';
             const agent = c.assigned_agent || 'Unassigned';
+            const intel = leadIntel(c);
 
             const matchesStatus = filterStatus === 'all' || status === filterStatus;
             const matchesCategory = filterCategory === 'all' || category === filterCategory;
-            const matchesTemperature = filterTemperature === 'all' || temperature === filterTemperature;
+            // Filters by the same computed priority shown as the row's dot
+            // (Hot/Warm/Cold/No Response) — not the older lead_temperature
+            // field, which is no longer displayed anywhere in this list.
+            const matchesTemperature = filterTemperature === 'all' || intel.priority.label === filterTemperature;
             const matchesAgent = filterAgentValue === 'all' || agent === filterAgentValue;
             const matchesSearch = !searchVal || name.includes(searchVal) || phone.includes(searchVal);
             
@@ -3039,7 +3043,6 @@
             
             const initials = (c.name || 'C').substring(0, 1).toUpperCase();
             const time = istTimeOnly(c.last_message_at);
-            const intel = leadIntel(c);
             const waitChip = intel.waitingMin !== null
                 ? `<span class="wait-chip ${intel.waitingMin > 10 ? 'wait-late' : 'wait-ok'}" title="Customer waiting ${intel.waitingMin} min for a reply">⏱ ${humanWait(intel.waitingMin)}</span>`
                 : '';
