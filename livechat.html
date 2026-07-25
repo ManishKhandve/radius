@@ -660,6 +660,14 @@
             border: 1px solid var(--border-color);
         }
 
+        /* Still-unanswered message: customer waiting 15+ min for a reply —
+           same red accent as the contact-list row. */
+        .msg-late {
+            border: 1px solid #f43f5e !important;
+            border-left: 4px solid #f43f5e !important;
+            background: #fff1f2 !important;
+        }
+
         .msg-out {
             background: #dcf8c6;
             align-self: flex-end;
@@ -3380,8 +3388,18 @@
         const msgList = document.getElementById('messageList');
         const isFirstLoad = msgList.innerHTML === '';
         const currentScrollTop = msgList.scrollTop;
-        
-        const timelineStr = JSON.stringify(timeline);
+
+        // Which bubble (if any) is the still-unanswered message: the customer's
+        // last inbound message, when it's been waiting 15+ min for a reply —
+        // same rule and threshold as the red accent on the contact-list row.
+        // Computed BEFORE the "unchanged, skip re-render" check below and
+        // folded into its cache key, so the bubble turns red the moment the
+        // 15-min mark passes even if no new message/note has arrived.
+        const openContact = allContacts.find(c => c.phone === currentPhone);
+        const openIntel = openContact ? leadIntel(openContact) : null;
+        const isReplyLate = !!(openIntel && openIntel.waitingMin !== null && openIntel.waitingMin > 15);
+
+        const timelineStr = JSON.stringify(timeline) + '#late:' + isReplyLate;
         if (msgList.dataset.timeline === timelineStr) {
             document.getElementById('pauseBotToggle').checked = msgData.isBotPaused;
             document.getElementById('botStatusLabel').innerText = msgData.isBotPaused ? 'Bot Paused' : 'Bot Active';
@@ -3389,9 +3407,9 @@
             return;
         }
         msgList.dataset.timeline = timelineStr;
-        
+
         msgList.innerHTML = '';
-        
+
         const getMsgStatusIcon = (status) => {
             if (status === 'read') return '<span class="msg-status-tick" style="color: #38bdf8;">✓✓</span>';
             if (status === 'delivered') return '<span class="msg-status-tick" style="color: var(--text-muted);">✓✓</span>';
@@ -3400,12 +3418,16 @@
             return '<span class="msg-status-tick" style="color: var(--text-muted);">🕒</span>';
         };
 
+        let lastInboundIdx = -1;
+        timeline.forEach((it, i) => { if (it._type === 'message' && it.direction === 'inbound') lastInboundIdx = i; });
+
         let newHtml = '';
-        timeline.forEach(item => {
+        timeline.forEach((item, idx) => {
             const time = istDateTime(item.created_at);
-            
+
             if (item._type === 'message') {
-                const className = 'msg-bubble ' + (item.direction === 'inbound' ? 'msg-in' : 'msg-out');
+                const isLateReply = isReplyLate && idx === lastInboundIdx;
+                const className = 'msg-bubble ' + (item.direction === 'inbound' ? 'msg-in' : 'msg-out') + (isLateReply ? ' msg-late' : '');
                 let textHtml = item.content
                     .replace(/^\[(Buttons|List|Image|Template)\]\s*/i, function(match, type) {
                         if (type.toLowerCase() === 'image') return '🖼️ ';
