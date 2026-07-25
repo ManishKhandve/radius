@@ -2043,19 +2043,86 @@ app.post('/api/notifications/followup-seen', authMiddleware, async (req, res) =>
 
 // ─── Insights dashboard: missed opportunities, locality heatmap, tasks ──
 // Pune/PCMC localities matched against the free-text area/location fields.
+// Each entry is { name, aliases }: `name` is the canonical label shown in the
+// heatmap; `aliases` are alternate spellings/typos seen in real data that
+// should count toward the SAME bar rather than fragmenting it (e.g.
+// "hadpsar" and "Hadapsar" both roll up to "Hadapsar"). Built from an audit
+// of the actual unmatched location/area values in the database.
 const PUNE_LOCALITIES = [
-  'Kharadi','Wagholi','Viman Nagar','Kalyani Nagar','Koregaon Park','Mundhwa','Manjari','Hadapsar','Magarpatta','Amanora',
-  'Baner','Balewadi','Aundh','Pashan','Sus','Bavdhan','Wakad','Hinjewadi','Pimple Saudagar','Pimple Nilakh','Pimple Gurav',
-  'Pimpri','Chinchwad','Nigdi','Akurdi','Ravet','Punawale','Tathawade','Moshi','Bhosari','Chikhali','Dehu Road','Talegaon',
-  'Kothrud','Karve Nagar','Warje','Dhayari','Sinhagad Road','Vadgaon','Kondhwa','NIBM','Undri','Katraj','Bibwewadi','Salisbury Park',
-  'Swargate','Shivajinagar','Deccan','Camp','Yerwada','Vishrantwadi','Dhanori','Lohegaon','Vishrantwad','Kalas','Wadgaon Sheri',
-  'Nanded','Warje Malwadi','Fursungi','Loni','Wanwadi','Ghorpadi',
+  { name: 'Kharadi' }, { name: 'Wagholi' },
+  { name: 'Viman Nagar', aliases: ['viaman nagar'] },
+  { name: 'Kalyani Nagar' }, { name: 'Koregaon Park' },
+  { name: 'Mundhwa', aliases: ['mundwa', 'mundhawa'] },
+  { name: 'Manjari' },
+  { name: 'Hadapsar', aliases: ['hadpsar'] },
+  { name: 'Handewadi' },
+  { name: 'Magarpatta' }, { name: 'Amanora' },
+  { name: 'Baner' }, { name: 'Balewadi' }, { name: 'Aundh' }, { name: 'Pashan' }, { name: 'Sus' }, { name: 'Bavdhan' },
+  { name: 'Wakad' }, { name: 'Hinjewadi' },
+  { name: 'Pimple Saudagar', aliases: ['pimpale saudagar', 'pimpale soudagar', 'pimple soudagar'] },
+  { name: 'Pimple Nilakh', aliases: ['pimple nilkh'] },
+  { name: 'Pimple Gurav', aliases: ['pimple gurva'] },
+  { name: 'Pimpri' }, { name: 'Chinchwad' },
+  { name: 'Nigdi', aliases: ['nigadi'] },
+  { name: 'Pradhikaran' },
+  { name: 'Akurdi' }, { name: 'Ravet' },
+  { name: 'Punawale', aliases: ['punwale', 'punavale'] },
+  { name: 'Tathawade' }, { name: 'Moshi' }, { name: 'Bhosari' },
+  { name: 'Chikhali', aliases: ['chikali'] },
+  { name: 'Dehu Road' }, { name: 'Talegaon' },
+  { name: 'Thergaon', aliases: ['tergaon'] },
+  { name: 'Wakdewadi' }, { name: 'Dapodi' },
+  { name: 'Bopodi', aliases: ['bopudi'] },
+  { name: 'Khadki' },
+  { name: 'Kiwale', aliases: ['kivale'] },
+  { name: 'Chakan' },
+  { name: 'Kothrud' },
+  { name: 'Karve Nagar', aliases: ['karvenagar'] },
+  { name: 'Warje', aliases: ['warje malwadi'] },
+  { name: 'Dhayari', aliases: ['dhyri', 'dhyari'] },
+  { name: 'Sinhagad Road', aliases: ['sinhgad road', 'singhgad road', 'sihgad road'] },
+  { name: 'Vadgaon' },
+  { name: 'Kondhwa', aliases: ['kondwa', 'kondhawa'] },
+  { name: 'NIBM' }, { name: 'Undri' },
+  { name: 'Katraj', aliases: ['kataraj'] },
+  { name: 'Bibwewadi', aliases: ['bibvewadi'] },
+  { name: 'Salisbury Park' },
+  { name: 'Erandwane', aliases: ['erandvana', 'enrandane'] },
+  { name: 'Narhe', aliases: ['nahre'] },
+  { name: 'Dhankawadi', aliases: ['dhankavadi', 'dhankwadi', 'dhankavdi'] },
+  { name: 'Swargate' }, { name: 'Shivajinagar' }, { name: 'Deccan' }, { name: 'Camp' },
+  { name: 'Yerwada', aliases: ['yarwada', 'yerewada', 'yrawada'] },
+  { name: 'Vishrantwadi', aliases: ['vishrantwad'] },
+  { name: 'Dhanori' },
+  { name: 'Lohegaon', aliases: ['lohgaon', 'lohgon', 'lohagaon'] },
+  { name: 'Kalas' },
+  { name: 'Wadgaon Sheri', aliases: ['wadgonsheri', 'wadgaosheri', 'wadgaonsheri'] },
+  { name: 'Tingre Nagar', aliases: ['tingare nagar'] },
+  { name: 'Keshav Nagar' },
+  { name: 'Wanowrie', aliases: ['wanowari', 'wanowarie'] },
+  { name: 'Market Yard' },
+  { name: 'Gultekadi' },
+  { name: 'Sangvi', aliases: ['sangavi'] },
+  { name: 'Nanded' },
+  { name: 'Fursungi', aliases: ['phursungi'] },
+  { name: 'Loni' }, { name: 'Wanwadi' }, { name: 'Ghorpadi' },
+  { name: 'Alandi', aliases: ['aalandi'] },
+  { name: 'Shikrapur' }, { name: 'Kalewadi' }, { name: 'Uruli Kanchan' },
+  { name: 'Rasta Peth' }, { name: 'Nana Peth' }, { name: 'Narayan Peth' },
+  { name: 'Shukrawar Peth' }, { name: 'Sadashiv Peth' },
+  { name: 'Raviwar Peth', aliases: ['ravivar peth'] },
+  { name: 'Bhawani Peth', aliases: ['bhwani peth', 'bhavani peth'] },
 ];
-const LOCALITY_LC = PUNE_LOCALITIES.map(l => ({ name: l, lc: l.toLowerCase() }));
+const LOCALITY_LC = PUNE_LOCALITIES.map(l => ({
+  name: l.name,
+  terms: [l.name.toLowerCase(), ...(l.aliases || [])],
+}));
 function matchLocality(text) {
   const t = String(text || '').toLowerCase();
   if (!t) return null;
-  for (const l of LOCALITY_LC) if (t.includes(l.lc)) return l.name;
+  for (const l of LOCALITY_LC) {
+    if (l.terms.some(term => t.includes(term))) return l.name;
+  }
   return null;
 }
 
