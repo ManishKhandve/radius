@@ -2232,7 +2232,6 @@
     // ── Notifications (admin alerts + due follow-up reminders) ──
     let notifData = [];
     let alertData = [];
-    let messageData = [];
     let unreadAlerts = 0;
     let dueCount = 0;
 
@@ -2242,10 +2241,9 @@
             const j = await res.json();
             notifData = (j && j.notifications) || [];
             alertData = (j && j.alerts) || [];
-            messageData = (j && j.messages) || [];
             unreadAlerts = (j && j.unreadAlerts) || 0;
             dueCount = (j && j.dueCount) || 0;
-        } catch (e) { notifData = []; alertData = []; messageData = []; unreadAlerts = 0; dueCount = 0; }
+        } catch (e) { notifData = []; alertData = []; unreadAlerts = 0; dueCount = 0; }
         const badge = document.getElementById('notifBadge');
         const count = dueCount + unreadAlerts;
         if (count > 0) {
@@ -2260,9 +2258,6 @@
     function renderNotifications() {
         const list = document.getElementById('notifList');
         let html = '';
-
-        // Inbound messages and alerts are fetched separately by the API.
-        const messages = messageData;
         const alerts = alertData;
 
         const notifCard = (a) => `<div class="notif-card${a.read ? '' : ' overdue'}">
@@ -2274,19 +2269,13 @@
                 ${a.phone ? `<button class="pmsg-btn" onclick="openNotifChat('${esc(a.phone)}')">💬 Open Chat</button>` : ''}
             </div>`;
 
-        // 1) New inbound messages (separate section)
-        html += '<h3 style="font-family:\'Outfit\',sans-serif; font-size:14px; text-transform:uppercase; letter-spacing:0.5px; color:var(--text-muted); margin:4px 0 12px;">💬 New Messages</h3>';
-        html += messages.length
-            ? messages.map(notifCard).join('')
-            : '<div class="notif-card" style="justify-content:center; color:var(--text-muted); font-size:13.5px;">No new messages.</div>';
-
-        // 2) Booking / payment / callback alerts
+        // Booking / payment / callback alerts
         html += '<h3 style="font-family:\'Outfit\',sans-serif; font-size:14px; text-transform:uppercase; letter-spacing:0.5px; color:var(--text-muted); margin:24px 0 12px;">🔔 Alerts</h3>';
         html += alerts.length
             ? alerts.map(notifCard).join('')
             : '<div class="notif-card" style="justify-content:center; color:var(--text-muted); font-size:13.5px;">No alerts yet — bookings, payment receipts and callback requests will appear here.</div>';
 
-        // 3) Scheduled follow-ups — grouped by service, with select + bulk send
+        // Scheduled follow-ups — grouped by service, with select + bulk send
         html += `<div style="display:flex; align-items:center; gap:12px; margin:24px 0 12px; flex-wrap:wrap;">
             <h3 style="font-family:'Outfit',sans-serif; font-size:14px; text-transform:uppercase; letter-spacing:0.5px; color:var(--text-muted); margin:0;">⏰ Follow-ups</h3>
             <div id="notifBulkBar" style="display:none; align-items:center; gap:10px;">

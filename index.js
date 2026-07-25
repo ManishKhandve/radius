@@ -572,11 +572,12 @@ The bot couldn't deliver this reply. Please contact the customer manually.`;
   _metaSendOnce(OWNER_PHONE, alert).catch(() => {});
 }
 
-// ─── New inbound message notification ────────────────────────
-// Every incoming customer message creates a CRM notification (type='message',
-// shown in the "New Messages" section) and is forwarded to the admin's
-// WhatsApp. The WhatsApp forward is throttled per-phone so an active
-// back-and-forth doesn't spam the admin; the CRM notification is always made.
+// ─── New inbound message → admin WhatsApp alert ───────────────
+// Forwards a preview of every incoming customer message to the admin's
+// WhatsApp (throttled per-phone so an active back-and-forth doesn't spam
+// them). This does NOT create an in-app CRM notification — the "New
+// Messages" section was removed; the Conversations list itself is where
+// agents see and read incoming messages.
 const lastInboundAdminAlert = new Map(); // phone -> timestamp
 const INBOUND_ALERT_THROTTLE_MS = 3 * 60 * 1000; // 3 min per phone
 
@@ -587,10 +588,6 @@ function notifyNewInboundMessage(phone, name, text, msgType) {
   const isMedia = ['image', 'document', 'video', 'audio', 'voice'].includes(msgType);
   const preview = (isMedia ? `[${msgType}]${text ? ' ' + text : ''}` : (text || '')).slice(0, 300);
 
-  // 1) CRM notification — its own "New Messages" section.
-  chatStore.addNotification(`💬 ${who}`, `+${phone}: ${preview}`, phone, 'message').catch(() => {});
-
-  // 2) Forward to admin WhatsApp (throttled per phone).
   const last = lastInboundAdminAlert.get(phone) || 0;
   if (Date.now() - last >= INBOUND_ALERT_THROTTLE_MS) {
     lastInboundAdminAlert.set(phone, Date.now());
@@ -2011,18 +2008,17 @@ app.post('/api/people/start-chat', authMiddleware, async (req, res) => {
 // 'Follow-up Required' and follow_up_time in the past), served to the UI.
 app.get('/api/notifications', authMiddleware, async (req, res) => {
   try {
-    const [scheduled, alerts, messages] = await Promise.all([
+    const [scheduled, alerts] = await Promise.all([
       chatStore.getScheduledFollowups(),
       chatStore.getNotifications(40, 'not-message'),
-      chatStore.getNotifications(40, 'message'),
     ]);
     // Employees only see their own / unassigned follow-ups.
     const list = req.user.role === 'admin'
       ? scheduled
       : scheduled.filter(d => !d.assigned_agent || d.assigned_agent === 'Unassigned' || d.assigned_agent === req.user.username);
     const dueCount = list.filter(d => d.is_due).length;
-    const unreadAlerts = [...alerts, ...messages].filter(a => !a.read).length;
-    res.json({ ok: true, notifications: list, dueCount, alerts, messages, unreadAlerts });
+    const unreadAlerts = alerts.filter(a => !a.read).length;
+    res.json({ ok: true, notifications: list, dueCount, alerts, unreadAlerts });
   } catch (err) {
     res.status(500).json({ ok: false, error: err.message });
   }
