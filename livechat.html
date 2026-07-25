@@ -3043,8 +3043,11 @@
             if (!matchesStatus || !matchesCategory || !matchesTemperature || !matchesTag || !matchesAgent || !matchesSearch) return;
 
             const isOverdue = status === 'Follow-up Required' && c.follow_up_time && new Date(c.follow_up_time) <= new Date();
+            // Customer sent a message and it's sat unanswered for 15+ min —
+            // same red accent treatment as an overdue follow-up.
+            const isWaitingLong = intel.waitingMin !== null && intel.waitingMin > 15;
             const isUnread = c.label === 'unread';
-            
+
             if (showUnreadOnly && !isUnread) return;
 
             filteredCount++;
@@ -3057,12 +3060,13 @@
 
             const el = document.createElement('div');
             el.className = 'contact-item' + (c.phone === currentPhone ? ' active' : '');
-            
-            if (isOverdue) {
+
+            if (isOverdue || isWaitingLong) {
                 el.style.borderLeft = "4px solid #f43f5e";
                 el.style.background = c.phone === currentPhone ? "rgba(244, 63, 94, 0.08)" : "rgba(244, 63, 94, 0.04)";
+                if (isWaitingLong && !isOverdue) el.title = `Customer waiting ${intel.waitingMin} min for a reply`;
             }
-            
+
             const initials = (c.name || 'C').substring(0, 1).toUpperCase();
             const time = istTimeOnly(c.last_message_at);
             const waitChip = intel.waitingMin !== null
