@@ -1536,7 +1536,27 @@
     <div class="analytics-pane" id="analyticsView" style="display: none;">
         <div class="analytics-container">
             <h2 class="analytics-title">Analytics Dashboard</h2>
-            
+
+            <!-- Today's operational stats -->
+            <div class="kpi-grid" style="margin-bottom:16px;">
+                <div class="kpi-card">
+                    <span class="kpi-label">Today Lead</span>
+                    <span class="kpi-value" id="kpiTodayLeads" style="color:#34d399;">0</span>
+                </div>
+                <div class="kpi-card">
+                    <span class="kpi-label">Follow-up</span>
+                    <span class="kpi-value" id="kpiTodayFollowups" style="color:#f59e0b;">0</span>
+                </div>
+                <div class="kpi-card">
+                    <span class="kpi-label">Call</span>
+                    <span class="kpi-value" id="kpiTodayCalls" style="color:#818cf8;">0</span>
+                </div>
+                <div class="kpi-card">
+                    <span class="kpi-label">Service Booking</span>
+                    <span class="kpi-value" id="kpiTodayBookings" style="color:#f43f5e;">0</span>
+                </div>
+            </div>
+
             <!-- KPI Summary stats -->
             <div class="kpi-grid">
                 <div class="kpi-card">
@@ -2886,12 +2906,24 @@
 
         const res = await authFetch('/api/analytics');
         const data = await res.json();
-        
+
+        const today = data.today || {};
+        document.getElementById('kpiTodayLeads').innerText = today.leads || 0;
+        document.getElementById('kpiTodayFollowups').innerText = today.followups || 0;
+        document.getElementById('kpiTodayCalls').innerText = today.calls || 0;
+        document.getElementById('kpiTodayBookings').innerText = today.bookings || 0;
+
         const tbody = document.getElementById('analyticsTableBody');
         tbody.innerHTML = '';
-        
+
         if (!data.metrics || data.metrics.length === 0) {
             tbody.innerHTML = '<tr><td colspan="7" style="padding: 40px; text-align: center; color: var(--text-muted); font-size: 15px;">No broadcast campaigns found.</td></tr>';
+            document.getElementById('kpiCampaigns').innerText = 0;
+            document.getElementById('kpiSent').innerText = 0;
+            document.getElementById('kpiRead').innerText = 0;
+            document.getElementById('kpiReplied').innerText = 0;
+            document.getElementById('kpiBooked').innerText = 0;
+            if (analyticsChartInstance) { analyticsChartInstance.destroy(); analyticsChartInstance = null; }
             return;
         }
 

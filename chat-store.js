@@ -366,6 +366,41 @@ async function getBroadcastMetrics() {
 }
 
 /**
+ * Today's operational counts for the Analytics tab (IST calendar day):
+ *   leads     — new customer / flat_customer / maid rows created today
+ *   followups — contacts whose follow-up falls today (reuses getScheduledFollowups)
+ *   calls     — customer / flat_customer / maid rows called today (last_called_date)
+ *   bookings  — customer / flat_customer / maid rows whose status contains "book"
+ *               and last changed (last_updated_at) today
+ */
+async function getTodayStats() {
+  const today = istDateStr(Date.now());
+  const isToday = (d) => !!d && istDateStr(d) === today;
+  const stats = { leads: 0, followups: 0, calls: 0, bookings: 0 };
+  try {
+    const [custRes, flatRes, maidRes] = await Promise.all([
+      supabase.from('customers').select('created_at, last_called_date, status, last_updated_at'),
+      supabase.from('flat_customers').select('created_at, last_called_date, status, last_updated_at'),
+      supabase.from('maids').select('created_at, last_called_date, status, last_updated_at'),
+    ]);
+    for (const rows of [custRes.data || [], flatRes.data || [], maidRes.data || []]) {
+      for (const r of rows) {
+        if (isToday(r.created_at)) stats.leads++;
+        if (isToday(r.last_called_date)) stats.calls++;
+        if (/book/i.test(String(r.status || '').trim()) && isToday(r.last_updated_at)) stats.bookings++;
+      }
+    }
+  } catch (err) { /* leave zeros on failure */ }
+
+  try {
+    const followups = await getScheduledFollowups();
+    stats.followups = followups.filter(f => f.dayBucket === 'today').length;
+  } catch (err) { /* leave zeros on failure */ }
+
+  return stats;
+}
+
+/**
  * Fetch Overdue Follow-ups
  */
 async function getDueFollowups() {
@@ -866,6 +901,7 @@ module.exports = {
   getUsers,
   updateBroadcastMetric,
   getBroadcastMetrics,
+  getTodayStats,
   getDueFollowups,
   getScheduledFollowups,
   markFollowupSeen,

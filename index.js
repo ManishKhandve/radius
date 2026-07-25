@@ -1135,8 +1135,11 @@ app.get('/api/users', authMiddleware, async (req, res) => {
 });
 
 app.get('/api/analytics', authMiddleware, async (req, res) => {
-  const metrics = await chatStore.getBroadcastMetrics();
-  res.json({ ok: true, success: true, metrics });
+  const [metrics, today] = await Promise.all([
+    chatStore.getBroadcastMetrics(),
+    chatStore.getTodayStats(),
+  ]);
+  res.json({ ok: true, success: true, metrics, today });
 });
 
 app.get('/api/chat/messages/:phone', authMiddleware, async (req, res) => {
