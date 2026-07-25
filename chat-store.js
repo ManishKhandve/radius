@@ -406,20 +406,45 @@ async function getDueFollowups() {
   }
 }
 
+// Calendar-day string (YYYY-MM-DD) in IST, so "today"/"tomorrow" match the
+// business's actual day regardless of the server's own timezone.
+function istDateStr(d) {
+  return new Date(d).toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
+}
+
+// Which day-bucket a follow-up falls into, compared against "now".
+function followupDayBucket(followUpTime, now) {
+  const fu = istDateStr(followUpTime);
+  const today = istDateStr(now);
+  const tomorrow = istDateStr(now + 86400000);
+  const weekOut = istDateStr(now + 7 * 86400000);
+  if (fu < today) return 'overdue';
+  if (fu === today) return 'today';
+  if (fu === tomorrow) return 'tomorrow';
+  if (fu <= weekOut) return 'week';
+  return 'later';
+}
+
 /**
  * Every contact that has a follow-up scheduled (past OR future), for the
  * Notifications tab. follow_up_time is kept synced to the soonest date, so
- * "has a follow-up" == follow_up_time is not null. Each row is flagged is_due.
+ * "has a follow-up" == follow_up_time is not null. Each row is flagged
+ * is_due (time has passed), dayBucket (overdue/today/tomorrow/week/later,
+ * by IST calendar day), and unseen (never opened since this follow-up time
+ * was set — see markFollowupSeen).
+ *
+ * Requires this column (run once in the Supabase SQL editor):
+ *   ALTER TABLE contacts ADD COLUMN IF NOT EXISTS follow_up_seen_at timestamptz;
  */
 async function getScheduledFollowups() {
   try {
     let { data, error } = await supabase
       .from('contacts')
-      .select('phone, name, assigned_agent, follow_up_time, follow_up_times, service_category')
+      .select('phone, name, assigned_agent, follow_up_time, follow_up_times, service_category, follow_up_seen_at')
       .not('follow_up_time', 'is', null)
       .order('follow_up_time', { ascending: true });
     if (error) {
-      // follow_up_times column not added yet — single field still works.
+      // follow_up_times / follow_up_seen_at columns not added yet — degrade gracefully.
       ({ data } = await supabase
         .from('contacts')
         .select('phone, name, assigned_agent, follow_up_time, service_category')
@@ -438,10 +463,26 @@ async function getScheduledFollowups() {
         follow_up_time: c.follow_up_time,
         all_dates: all,
         is_due: new Date(c.follow_up_time).getTime() <= now,
+        dayBucket: followupDayBucket(c.follow_up_time, now),
+        // Unseen if never opened, or a newer/different follow-up time was set
+        // since the last time it was seen.
+        unseen: !c.follow_up_seen_at || new Date(c.follow_up_seen_at).getTime() < new Date(c.follow_up_time).getTime(),
       };
     });
   } catch (err) {
     return [];
+  }
+}
+
+/**
+ * Marks a contact's current follow-up as seen/opened (called when an agent
+ * opens the chat from the Notifications follow-up list).
+ */
+async function markFollowupSeen(phone) {
+  try {
+    await supabase.from('contacts').update({ follow_up_seen_at: new Date().toISOString() }).eq('phone', phone);
+  } catch (err) {
+    console.error('[chat-store] exception marking follow-up seen:', err.message);
   }
 }
 
@@ -772,6 +813,7 @@ module.exports = {
   getBroadcastMetrics,
   getDueFollowups,
   getScheduledFollowups,
+  markFollowupSeen,
   getQuickReplies,
   addQuickReply,
   deleteQuickReply,

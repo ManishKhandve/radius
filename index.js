@@ -2017,8 +2017,10 @@ app.get('/api/notifications', authMiddleware, async (req, res) => {
       ? scheduled
       : scheduled.filter(d => !d.assigned_agent || d.assigned_agent === 'Unassigned' || d.assigned_agent === req.user.username);
     const dueCount = list.filter(d => d.is_due).length;
+    // Badge = things needing attention right now that haven't been opened yet.
+    const unseenTodayCount = list.filter(d => d.unseen && (d.dayBucket === 'today' || d.dayBucket === 'overdue')).length;
     const unreadAlerts = alerts.filter(a => !a.read).length;
-    res.json({ ok: true, notifications: list, dueCount, alerts, unreadAlerts });
+    res.json({ ok: true, notifications: list, dueCount, unseenTodayCount, alerts, unreadAlerts });
   } catch (err) {
     res.status(500).json({ ok: false, error: err.message });
   }
@@ -2027,6 +2029,15 @@ app.get('/api/notifications', authMiddleware, async (req, res) => {
 // Mark all stored alerts as read (called when the Notifications tab is opened).
 app.post('/api/notifications/read', authMiddleware, async (req, res) => {
   await chatStore.markNotificationsRead();
+  res.json({ ok: true });
+});
+
+// Marks a single contact's follow-up as seen (called when its "Open Chat" is
+// clicked from the Notifications follow-up list).
+app.post('/api/notifications/followup-seen', authMiddleware, async (req, res) => {
+  const { phone } = req.body || {};
+  if (!phone || !isValidPhone(phone)) return res.status(400).json({ ok: false, error: 'Invalid phone' });
+  await chatStore.markFollowupSeen(phone);
   res.json({ ok: true });
 });
 
