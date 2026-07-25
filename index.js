@@ -1252,6 +1252,24 @@ app.post('/api/ai/suggestions/:id/apply', authMiddleware, async (req, res) => {
   res.json({ ok: true });
 });
 
+// On-demand "Ask AI" — an agent types a question about this ONE chat and
+// gets a direct answer back. Read-only: never sends anything to the
+// customer and never writes to the database.
+app.post('/api/ai/ask/:phone', authMiddleware, async (req, res) => {
+  const { phone } = req.params;
+  const { question } = req.body || {};
+  if (!isValidPhone(phone)) return res.status(400).json({ ok: false, error: 'Invalid phone number format' });
+  if (!question || !String(question).trim()) return res.status(400).json({ ok: false, error: 'Missing question' });
+  try {
+    const result = await aiAssistant.askQuestion(phone, question);
+    if (result.error && !result.answer) return res.status(200).json({ ok: true, answer: null, error: result.error });
+    res.json({ ok: true, answer: result.answer });
+  } catch (err) {
+    log('error', 'ai', 'ask failed:', err.message);
+    res.status(500).json({ ok: false, error: 'Something went wrong answering that question' });
+  }
+});
+
 app.post('/api/chat/send', authMiddleware, async (req, res) => {
   const { phone, message } = req.body;
   if (!phone || !message) return res.status(400).json({ ok: false, error: 'Missing phone or message' });

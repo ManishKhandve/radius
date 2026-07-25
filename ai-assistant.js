@@ -294,9 +294,53 @@ async function applyAnalysisResult(phone, parsed, ctx) {
   }
 }
 
+// ─── On-demand Q&A ("Ask AI" icon in the chat header) ────────
+// Answers a free-form question about ONE chat only — same isolation as
+// analyzeChat (only this phone's messages/extracted data/lead match are
+// given as context), but synchronous/on-demand rather than debounced, and
+// it never writes anything back to the database — it only answers.
+async function askQuestion(phone, question) {
+  if (!phone || !question || !String(question).trim()) return { answer: null, error: 'Empty question' };
+  const ctx = await chatStore.getAiContext(phone);
+  if (!ctx.messages || !ctx.messages.length) return { answer: null, error: 'No conversation history for this chat yet' };
+
+  const transcript = ctx.messages.slice(-80).map(m =>
+    `[${m.direction === 'inbound' ? 'Customer' : 'Agent'}] ${m.content_en || m.content}`
+  ).join('\n');
+  const extracted = (ctx.contact && ctx.contact.ai_extracted) || {};
+  const leadMatchNote = summarizeLeadMatch(ctx.leadMatch);
+
+  const systemPrompt = [
+    'You are a CRM assistant answering ONE support agent\'s question about ONE isolated WhatsApp conversation for a maid-placement and home-cleaning business in Pune, India.',
+    'Use ONLY the conversation and data given in this message — never reference or assume anything about any other customer or conversation.',
+    'If the answer isn\'t in the given data, say so plainly instead of guessing.',
+    'Respond ONLY with JSON: {"answer": "a concise, direct answer in plain text, 2-4 sentences max"}',
+  ].join('\n');
+
+  const userPrompt = [
+    `Extracted fields known so far: ${JSON.stringify(extracted)}`,
+    leadMatchNote,
+    `Conversation transcript, oldest to newest:\n${transcript}`,
+    `\nAgent's question: ${String(question).trim().slice(0, 500)}`,
+  ].join('\n\n');
+
+  const raw = await callOpenRouter([
+    { role: 'system', content: systemPrompt },
+    { role: 'user', content: userPrompt },
+  ]);
+  if (!raw) return { answer: null, error: 'AI is not available right now' };
+
+  const parsed = safeParseJson(raw);
+  if (!parsed || typeof parsed.answer !== 'string' || !parsed.answer.trim()) {
+    return { answer: null, error: 'Could not parse an answer' };
+  }
+  return { answer: parsed.answer.trim().slice(0, 2000), error: null };
+}
+
 module.exports = {
   translateIfNeeded,
   scheduleAnalysis,
+  askQuestion,
   analyzeChat,
   // exported for tests
   looksHindiOrHinglish,

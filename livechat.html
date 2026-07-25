@@ -1431,6 +1431,7 @@
                 </div>
             </div>
             <div class="bot-control">
+                <button class="btn-header-action" onclick="toggleAskAiPanel()">🤖 Ask AI</button>
                 <button class="btn-header-action" onclick="markAsUnread()">Mark Unread</button>
                 <div class="toggle-container">
                     <span class="bot-status-txt" id="botStatusLabel">Bot Active</span>
@@ -1448,6 +1449,19 @@
 
         <!-- AI suggestion popup: non-blocking, dismissible, anchored above the composer -->
         <div id="aiSuggestPopup" style="display:none; position:fixed; bottom:90px; right:24px; width:320px; max-height:340px; overflow-y:auto; background:var(--bg-card,#fff); border:1px solid var(--border-color,#e5e7eb); border-radius:12px; box-shadow:0 8px 24px rgba(0,0,0,0.18); z-index:200; padding:10px;"></div>
+
+        <!-- "Ask AI" — on-demand Q&A about this one chat, opened via the header button -->
+        <div id="aiAskPanel" style="display:none; position:fixed; top:78px; right:24px; width:340px; max-height:420px; overflow-y:auto; background:var(--bg-card,#fff); border:1px solid var(--border-color,#e5e7eb); border-radius:12px; box-shadow:0 8px 24px rgba(0,0,0,0.18); z-index:210; padding:12px;">
+            <div style="font-weight:700; font-size:12.5px; margin-bottom:8px; display:flex; justify-content:space-between; align-items:center;">
+                🤖 Ask AI about this chat
+                <span style="cursor:pointer; color:var(--text-muted); font-weight:normal;" onclick="toggleAskAiPanel(false)">✕</span>
+            </div>
+            <div id="aiAskAnswer" style="font-size:12.5px; line-height:1.6; color:var(--text-main); margin-bottom:8px;"></div>
+            <div style="display:flex; gap:6px;">
+                <input type="text" id="aiAskInput" placeholder="e.g. What locality did they mention?" autocomplete="off" style="flex:1; font-size:12.5px; padding:8px 10px; border-radius:8px; border:1px solid var(--border-color,#e5e7eb);" onkeypress="if(event.key==='Enter') submitAiAsk();">
+                <button onclick="submitAiAsk()" style="font-size:12.5px; font-weight:600; padding:8px 12px; border-radius:8px; border:none; background:var(--primary); color:#fff; cursor:pointer;">Ask</button>
+            </div>
+        </div>
 
         <div class="chat-input-area">
             <div class="qr-popup" id="qrPopup" style="display:none;"></div>
@@ -3326,6 +3340,8 @@
         document.getElementById('aiExtractedSection').style.display = 'none';
         document.getElementById('aiBadgeRow').innerHTML = '';
         document.getElementById('aiSuggestPopup').style.display = 'none';
+        toggleAskAiPanel(false);
+        document.getElementById('aiAskAnswer').innerHTML = '';
         aiDismissedSeen = new Set();
         try {
             const j = await (await authFetch('/api/ai/insights/' + phone)).json();
@@ -3412,6 +3428,36 @@
             method: 'POST', headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ phone: currentPhone })
         }).catch(() => {});
+    }
+
+    // ── "Ask AI" on-demand Q&A (header button) ──
+    function toggleAskAiPanel(force) {
+        const panel = document.getElementById('aiAskPanel');
+        const show = typeof force === 'boolean' ? force : panel.style.display === 'none';
+        panel.style.display = show ? 'block' : 'none';
+        if (show) document.getElementById('aiAskInput').focus();
+    }
+
+    async function submitAiAsk() {
+        if (!currentPhone) return;
+        const input = document.getElementById('aiAskInput');
+        const answerEl = document.getElementById('aiAskAnswer');
+        const question = input.value.trim();
+        if (!question) return;
+        answerEl.innerHTML = `<div style="color:var(--text-muted);">🙋 ${esc(question)}</div><div style="margin-top:6px; color:var(--text-muted);">⏳ Thinking…</div>`;
+        input.value = '';
+        try {
+            const res = await authFetch('/api/ai/ask/' + currentPhone, {
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ question })
+            });
+            const j = await res.json();
+            if (!j.ok) { answerEl.innerHTML += `<div style="margin-top:6px; color:var(--error);">Something went wrong.</div>`; return; }
+            if (!j.answer) { answerEl.innerHTML = `<div style="color:var(--text-muted);">🙋 ${esc(question)}</div><div style="margin-top:6px; color:var(--text-muted);">${esc(j.error || 'No answer available.')}</div>`; return; }
+            answerEl.innerHTML = `<div style="color:var(--text-muted);">🙋 ${esc(question)}</div><div style="margin-top:6px;">🤖 ${esc(j.answer)}</div>`;
+        } catch (e) {
+            answerEl.innerHTML += `<div style="margin-top:6px; color:var(--error);">Something went wrong.</div>`;
+        }
     }
 
     async function openChat(contact, initials) {
