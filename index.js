@@ -16,6 +16,7 @@ const matching = require('./matching');
 const match = require('./match');
 const wfStore = require('./workflow-store');
 const wfEngine = require('./workflow-engine');
+const aiAssistant = require('./ai-assistant');
 
 // ─── Structured logging ─────────────────────────────────────
 function log(level, tag, ...args) {
@@ -880,10 +881,20 @@ async function handleMetaMessage(m, senderName) {
   // The customer gets a single "an agent will help you" notice the first
   // time they message while paused, then nothing until /release is hit.
   const paused = await isPaused(phone);
-  await chatStore.saveMessage(phone, senderName, 'inbound', msgType === 'image' || msgType === 'document' ? `[${msgType}] ${text}` : text, m.id || null, 'delivered');
+  const savedMsg = await chatStore.saveMessage(phone, senderName, 'inbound', msgType === 'image' || msgType === 'document' ? `[${msgType}] ${text}` : text, m.id || null, 'delivered');
 
   // Alert the CRM + admin about the new incoming message.
   notifyNewInboundMessage(phone, senderName, text, msgType);
+
+  // AI layer: fire-and-forget, never blocks message delivery. Hindi/Hinglish
+  // transcription runs per-message; full chat analysis (extraction,
+  // suggestions, locality check, etc.) is debounced per phone.
+  if (msgType === 'text' && text) {
+    if (savedMsg && savedMsg.id) {
+      aiAssistant.translateIfNeeded(savedMsg.id, text).catch(err => log('error', 'ai', 'translate failed:', err.message));
+    }
+    aiAssistant.scheduleAnalysis(phone, { localityNames: PUNE_LOCALITY_NAMES });
+  }
 
   if (paused) {
     if (flow.restartIntent(text) || flow.isAdMessage(text)) {
@@ -1016,6 +1027,30 @@ setInterval(() => {
   }
   if (cleaned > 0) log('info', 'pause', `Cleaned up ${cleaned} expired pause(s)`);
 }, 15 * 60 * 1000);
+
+// ─── Scheduled follow-up promotion (every 5 min) ─────────────
+// The AI assistant parses "call tomorrow" / "follow up after 2 days"-style
+// language into scheduled_notifications rows (see ai-assistant.js). When
+// one comes due, promote it into a real notification via the existing
+// addNotification() so it shows up in the same Notifications tab/bell as
+// everything else, rather than a second UI surface.
+setInterval(async () => {
+  try {
+    const due = await chatStore.getDueScheduledNotifications();
+    for (const d of due) {
+      await chatStore.addNotification(
+        `AI reminder: ${d.reminder_type}`,
+        d.source_message || `Scheduled follow-up (${d.reminder_type}) is due.`,
+        d.phone,
+        'ai_reminder'
+      );
+      await chatStore.markScheduledNotificationFired(d.id);
+    }
+    if (due.length > 0) log('info', 'ai', `Promoted ${due.length} scheduled reminder(s)`);
+  } catch (err) {
+    log('error', 'ai', 'scheduled-notification promotion failed:', err.message);
+  }
+}, 5 * 60 * 1000);
 
 app.post('/api/login', async (req, res) => {
   const { username, password } = req.body;
@@ -1158,6 +1193,63 @@ app.get('/api/lead-summary/:phone', authMiddleware, async (req, res) => {
   if (!isValidPhone(phone)) return res.status(400).json({ ok: false, error: 'Invalid phone number format' });
   const summary = await chatStore.getLeadSummary(phone);
   res.json({ ok: true, summary });
+});
+
+// ─── AI Assistant (per chat) ──────────────────────────────────
+// Read-only, cached view — never makes a blocking AI call, so opening a
+// chat stays instant. A background analysis is kicked off so the NEXT
+// poll has fresh data (same debounce as the webhook-triggered one).
+app.get('/api/ai/insights/:phone', authMiddleware, async (req, res) => {
+  const { phone } = req.params;
+  if (!isValidPhone(phone)) return res.status(400).json({ ok: false, error: 'Invalid phone number format' });
+  try {
+    const [contactRes, suggestions] = await Promise.all([
+      wfStore.supabase.from('contacts')
+        .select('ai_extracted, lead_category, locality_verification, ai_last_analyzed_at')
+        .eq('phone', phone).limit(1),
+      chatStore.getAiSuggestions(phone),
+    ]);
+    const contact = (contactRes.data && contactRes.data[0]) || null;
+    aiAssistant.scheduleAnalysis(phone, { localityNames: PUNE_LOCALITY_NAMES });
+    res.json({
+      ok: true,
+      extracted: (contact && contact.ai_extracted) || {},
+      leadCategory: (contact && contact.lead_category) || null,
+      localityVerification: (contact && contact.locality_verification) || null,
+      lastAnalyzedAt: (contact && contact.ai_last_analyzed_at) || null,
+      suggestions,
+    });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+// Manual "re-analyze now" — awaits one immediate AI call.
+app.post('/api/ai/insights/:phone/refresh', authMiddleware, async (req, res) => {
+  const { phone } = req.params;
+  if (!isValidPhone(phone)) return res.status(400).json({ ok: false, error: 'Invalid phone number format' });
+  try {
+    await aiAssistant.analyzeChat(phone, { localityNames: PUNE_LOCALITY_NAMES });
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+app.post('/api/ai/suggestions/:id/dismiss', authMiddleware, async (req, res) => {
+  const { id } = req.params;
+  const { phone } = req.body || {};
+  if (!phone || !isValidPhone(phone)) return res.status(400).json({ ok: false, error: 'Invalid phone' });
+  await chatStore.dismissAiSuggestion(id, phone);
+  res.json({ ok: true });
+});
+
+app.post('/api/ai/suggestions/:id/apply', authMiddleware, async (req, res) => {
+  const { id } = req.params;
+  const { phone } = req.body || {};
+  if (!phone || !isValidPhone(phone)) return res.status(400).json({ ok: false, error: 'Invalid phone' });
+  await chatStore.applyAiSuggestion(id, phone);
+  res.json({ ok: true });
 });
 
 app.post('/api/chat/send', authMiddleware, async (req, res) => {
@@ -2130,6 +2222,9 @@ const LOCALITY_LC = PUNE_LOCALITIES.map(l => ({
   name: l.name,
   terms: [l.name.toLowerCase(), ...(l.aliases || [])],
 }));
+// Flattened name list handed to the AI assistant as grounding context for
+// locality verification (see ai-assistant.js analyzeChat()).
+const PUNE_LOCALITY_NAMES = PUNE_LOCALITIES.map(l => l.name);
 function matchLocality(text) {
   const t = String(text || '').toLowerCase();
   if (!t) return null;

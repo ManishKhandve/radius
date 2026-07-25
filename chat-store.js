@@ -66,7 +66,7 @@ async function saveMessage(phone, name, direction, content, wamid = null, status
   try {
     await upsertContact(phone, name, direction);
 
-    const { error } = await supabase
+    const { data, error } = await supabase
       .from('messages')
       .insert({
         phone: phone,
@@ -74,11 +74,15 @@ async function saveMessage(phone, name, direction, content, wamid = null, status
         content: content,
         wamid: wamid,
         status: status
-      });
+      })
+      .select('id')
+      .single();
 
-    if (error) console.error('[chat-store] error saving message:', error);
+    if (error) { console.error('[chat-store] error saving message:', error); return null; }
+    return data || null;
   } catch (err) {
     console.error('[chat-store] exception in saveMessage:', err.message);
+    return null;
   }
 }
 
@@ -873,10 +877,167 @@ async function getLeadSummary(phone) {
   };
 }
 
+// ─── AI Assistant data access (per-chat, OpenRouter-backed) ──
+// Every function here is scoped by phone — the AI layer must never see or
+// touch another chat's data. See ai-assistant.js for the OpenRouter calls
+// that produce the values these functions store.
+
+/**
+ * Everything ai-assistant.js needs to analyze ONE chat: the contact row,
+ * the full message history for that phone only, that phone's own pending
+ * notifications (so the AI can flag stale ones), and any existing match in
+ * the lead tables (reused from getLeadSummary — cheaper than asking the AI
+ * to guess a lead category when we already know it from a real record).
+ */
+async function getAiContext(phone) {
+  const [contactRes, messages, notifRes, leadMatch] = await Promise.all([
+    supabase.from('contacts').select('*').eq('phone', phone).limit(1),
+    getMessages(phone),
+    supabase.from('notifications').select('id, type, title, body, created_at')
+      .eq('lead_type', 'whatsapp').eq('lead_id', phone).eq('is_read', false),
+    getLeadSummary(phone),
+  ]);
+  return {
+    contact: (contactRes.data && contactRes.data[0]) || null,
+    messages,
+    pendingNotifications: notifRes.data || [],
+    leadMatch,
+  };
+}
+
+/**
+ * Merges freshly extracted fields into contacts.ai_extracted (never
+ * clobbers a previously-known value with a blank one from a later turn
+ * that simply didn't mention it) and updates category/locality/timestamp.
+ */
+async function saveAiAnalysis(phone, { extracted, leadCategory, localityVerification } = {}) {
+  try {
+    const { data: existing } = await supabase.from('contacts').select('ai_extracted').eq('phone', phone).limit(1).single();
+    const merged = { ...((existing && existing.ai_extracted) || {}) };
+    if (extracted && typeof extracted === 'object') {
+      for (const [k, v] of Object.entries(extracted)) {
+        if (v === null || v === undefined || v === '') continue;
+        merged[k] = v;
+      }
+    }
+    const updates = { ai_extracted: merged, ai_last_analyzed_at: new Date().toISOString() };
+    if (leadCategory) updates.lead_category = leadCategory;
+    if (localityVerification) updates.locality_verification = localityVerification;
+    await supabase.from('contacts').update(updates).eq('phone', phone);
+  } catch (err) {
+    console.error('[chat-store] exception saving AI analysis:', err.message);
+  }
+}
+
+async function saveMessageTranslation(messageId, contentEn, language) {
+  try {
+    await supabase.from('messages').update({ content_en: contentEn, language }).eq('id', messageId);
+  } catch (err) {
+    console.error('[chat-store] exception saving message translation:', err.message);
+  }
+}
+
+// Skips inserting a suggestion that duplicates an already-pending one for
+// this phone (same type + title), so a re-analysis doesn't spam the popup.
+async function createAiSuggestions(phone, suggestions) {
+  if (!Array.isArray(suggestions) || !suggestions.length) return;
+  try {
+    const { data: existing } = await supabase.from('ai_suggestions')
+      .select('type, title').eq('phone', phone).eq('status', 'pending');
+    const seen = new Set((existing || []).map(s => s.type + '::' + s.title));
+    const rows = suggestions
+      .filter(s => s && s.title && !seen.has((s.type || 'suggestion') + '::' + s.title))
+      .map(s => ({
+        phone,
+        type: s.type || 'suggestion',
+        title: String(s.title).slice(0, 300),
+        body: s.body ? String(s.body).slice(0, 1000) : null,
+        payload: s.payload || null,
+        status: 'pending',
+      }));
+    if (rows.length) await supabase.from('ai_suggestions').insert(rows);
+  } catch (err) {
+    console.error('[chat-store] exception creating AI suggestions:', err.message);
+  }
+}
+
+async function getAiSuggestions(phone) {
+  try {
+    const { data } = await supabase.from('ai_suggestions')
+      .select('*').eq('phone', phone).eq('status', 'pending')
+      .order('created_at', { ascending: false });
+    return data || [];
+  } catch (err) { return []; }
+}
+
+// Scoped by phone as well as id — a stale/spoofed id can never touch
+// another chat's suggestion.
+async function dismissAiSuggestion(id, phone) {
+  try {
+    await supabase.from('ai_suggestions').update({ status: 'dismissed' }).eq('id', id).eq('phone', phone);
+  } catch (err) { console.error('[chat-store] exception dismissing AI suggestion:', err.message); }
+}
+
+async function applyAiSuggestion(id, phone) {
+  try {
+    await supabase.from('ai_suggestions').update({ status: 'applied' }).eq('id', id).eq('phone', phone);
+  } catch (err) { console.error('[chat-store] exception applying AI suggestion:', err.message); }
+}
+
+async function createScheduledNotification(phone, { reminder_time, reminder_type, source_message } = {}) {
+  if (!phone || !reminder_time || !reminder_type) return;
+  try {
+    await supabase.from('scheduled_notifications').insert({
+      phone, reminder_time, reminder_type,
+      source_message: source_message ? String(source_message).slice(0, 500) : null,
+      status: 'pending',
+    });
+  } catch (err) { console.error('[chat-store] exception creating scheduled notification:', err.message); }
+}
+
+async function getDueScheduledNotifications() {
+  try {
+    const { data } = await supabase.from('scheduled_notifications')
+      .select('*').eq('status', 'pending').lte('reminder_time', new Date().toISOString());
+    return data || [];
+  } catch (err) { return []; }
+}
+
+async function markScheduledNotificationFired(id) {
+  try {
+    await supabase.from('scheduled_notifications').update({ status: 'fired' }).eq('id', id);
+  } catch (err) { console.error('[chat-store] exception marking scheduled notification fired:', err.message); }
+}
+
+// Defense-in-depth: scoped to lead_type='whatsapp' + this exact phone, so
+// even a hallucinated id from the AI can never mark another chat's (or the
+// other CRM's) notification read.
+async function dismissNotificationsByIds(ids, phone) {
+  if (!Array.isArray(ids) || !ids.length || !phone) return;
+  try {
+    await supabase.from('notifications')
+      .update({ is_read: true })
+      .in('id', ids)
+      .eq('lead_type', 'whatsapp')
+      .eq('lead_id', phone);
+  } catch (err) { console.error('[chat-store] exception dismissing notifications:', err.message); }
+}
+
 module.exports = {
   saveMessage,
   ensureContact,
   getLeadSummary,
+  getAiContext,
+  saveAiAnalysis,
+  saveMessageTranslation,
+  createAiSuggestions,
+  getAiSuggestions,
+  dismissAiSuggestion,
+  applyAiSuggestion,
+  createScheduledNotification,
+  getDueScheduledNotifications,
+  markScheduledNotificationFired,
+  dismissNotificationsByIds,
   getLastInboundWamid,
   addNotification,
   getNotifications,

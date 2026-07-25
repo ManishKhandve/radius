@@ -1446,6 +1446,9 @@
         <div id="typingBanner" style="display:none; text-align:center; font-size:12.5px; color:var(--text-muted); padding:4px 0 0;"></div>
         <div class="messages" id="messageList"></div>
 
+        <!-- AI suggestion popup: non-blocking, dismissible, anchored above the composer -->
+        <div id="aiSuggestPopup" style="display:none; position:fixed; bottom:90px; right:24px; width:320px; max-height:340px; overflow-y:auto; background:var(--bg-card,#fff); border:1px solid var(--border-color,#e5e7eb); border-radius:12px; box-shadow:0 8px 24px rgba(0,0,0,0.18); z-index:200; padding:10px;"></div>
+
         <div class="chat-input-area">
             <div class="qr-popup" id="qrPopup" style="display:none;"></div>
             <div class="chat-input-wrapper">
@@ -1461,11 +1464,17 @@
             <div class="profile-avatar" id="panelAvatar">?</div>
             <div class="profile-name" id="panelName">Customer Name</div>
             <div class="profile-phone" id="panelPhone">Phone</div>
+            <div id="aiBadgeRow" style="display:flex; gap:6px; flex-wrap:wrap; justify-content:center; margin-top:6px;"></div>
         </div>
 
         <div class="crm-section" id="leadSummarySection" style="display:none;">
             <div class="crm-label">Quick Summary</div>
             <div id="leadSummaryBody" style="font-size:12.5px; line-height:1.7;"></div>
+        </div>
+
+        <div class="crm-section" id="aiExtractedSection" style="display:none;">
+            <div class="crm-label">AI Extracted Info <span id="aiExtractedRefreshBtn" title="Re-analyze this chat now" style="float:right; cursor:pointer; font-weight:normal; color:var(--primary);" onclick="refreshAiInsights()">↻ Refresh</span></div>
+            <div id="aiExtractedBody" style="font-size:12.5px; line-height:1.9;"></div>
         </div>
 
         <div class="crm-section">
@@ -3295,6 +3304,116 @@
         section.style.display = 'block';
     }
 
+    // ── AI Assistant (per chat): extracted fields, category/locality badges,
+    //    suggestion popup. Everything here is scoped to the currently open
+    //    chat (currentPhone) — see /api/ai/insights/:phone in index.js.
+    const AI_FIELD_LABELS = {
+        customer_name: 'Customer Name', phone_number: 'Phone Number', locality: 'Locality',
+        society: 'Society', building: 'Building', flat_number: 'Flat Number',
+        requirement: 'Requirement', maid_type: 'Maid Type', budget: 'Budget',
+        preferred_timing: 'Preferred Timing', move_in_date: 'Move-in Date',
+        lead_status: 'Lead Status', notes: 'Notes',
+    };
+    const AI_FIELD_ORDER = Object.keys(AI_FIELD_LABELS);
+    const AI_SUGGEST_ICONS = {
+        follow_up_reminder: '⏰', lead_status_update: '🔄', missing_info: '❓',
+        important_action: '❗', suggested_reply: '💬',
+    };
+    let aiInsightsCache = { suggestions: [] };
+    let aiDismissedSeen = new Set(); // suggestion ids dismissed/applied this session — hides them instantly without waiting for the next poll
+
+    async function loadAiInsights(phone) {
+        document.getElementById('aiExtractedSection').style.display = 'none';
+        document.getElementById('aiBadgeRow').innerHTML = '';
+        document.getElementById('aiSuggestPopup').style.display = 'none';
+        aiDismissedSeen = new Set();
+        try {
+            const j = await (await authFetch('/api/ai/insights/' + phone)).json();
+            if (!j.ok || phone !== currentPhone) return; // stale — contact changed before this resolved
+            aiInsightsCache = j;
+            renderAiBadges(j.leadCategory, j.localityVerification);
+            renderAiExtracted(j.extracted);
+            renderAiSuggestions(j.suggestions);
+        } catch (e) { /* non-fatal */ }
+    }
+
+    function refreshAiInsights() {
+        if (!currentPhone) return;
+        const btn = document.getElementById('aiExtractedRefreshBtn');
+        if (btn) btn.innerText = '⏳ ...';
+        authFetch('/api/ai/insights/' + currentPhone + '/refresh', { method: 'POST' })
+            .then(() => loadAiInsights(currentPhone))
+            .finally(() => { if (btn) btn.innerText = '↻ Refresh'; });
+    }
+
+    function renderAiBadges(leadCategory, localityVerification) {
+        const row = document.getElementById('aiBadgeRow');
+        const chips = [];
+        if (leadCategory) {
+            chips.push(`<span style="font-size:11px; font-weight:700; padding:3px 8px; border-radius:999px; background:rgba(99,102,241,0.12); color:#6366f1;">${esc(leadCategory)}</span>`);
+        }
+        if (localityVerification && (localityVerification.locality || localityVerification.city)) {
+            const lv = localityVerification;
+            const ok = !lv.flagged;
+            const label = [lv.locality, lv.city].filter(Boolean).join(', ');
+            const title = (lv.flagged && lv.suggestion) ? `Possible correction: ${lv.suggestion}` : '';
+            chips.push(`<span title="${esc(title)}" style="font-size:11px; font-weight:700; padding:3px 8px; border-radius:999px; background:${ok ? 'rgba(16,185,129,0.12)' : 'rgba(245,158,11,0.15)'}; color:${ok ? '#10b981' : '#f59e0b'};">${ok ? '✓' : '⚠'} ${esc(label)}</span>`);
+        }
+        row.innerHTML = chips.join('');
+    }
+
+    function renderAiExtracted(extracted) {
+        const section = document.getElementById('aiExtractedSection');
+        extracted = extracted || {};
+        if (!AI_FIELD_ORDER.some(f => extracted[f])) { section.style.display = 'none'; return; }
+        document.getElementById('aiExtractedBody').innerHTML = AI_FIELD_ORDER.map(f => {
+            const v = extracted[f];
+            if (v) {
+                return `<div><span style="color:#10b981;">✓</span> <span style="color:var(--text-muted); text-decoration:line-through; text-decoration-color:#94a3b8;">${esc(AI_FIELD_LABELS[f])}:</span> <strong>${esc(v)}</strong></div>`;
+            }
+            return `<div style="background:rgba(245,158,11,0.1); border-radius:6px; padding:2px 6px; margin:1px 0;"><span style="color:#f59e0b;">●</span> ${esc(AI_FIELD_LABELS[f])}: <em style="color:var(--text-muted);">missing</em></div>`;
+        }).join('');
+        section.style.display = 'block';
+    }
+
+    function renderAiSuggestions(suggestions) {
+        const popup = document.getElementById('aiSuggestPopup');
+        suggestions = (suggestions || []).filter(s => !aiDismissedSeen.has(s.id));
+        if (!currentPhone || !suggestions.length) { popup.style.display = 'none'; popup.innerHTML = ''; return; }
+        popup.innerHTML = `<div style="font-weight:700; font-size:12.5px; margin-bottom:6px; display:flex; justify-content:space-between; align-items:center;">🤖 AI Suggestions <span style="cursor:pointer; color:var(--text-muted); font-weight:normal;" onclick="document.getElementById('aiSuggestPopup').style.display='none';">✕</span></div>` +
+            suggestions.map(s => `
+                <div style="border:1px solid var(--border-color,#eef0f3); border-radius:8px; padding:8px; margin-bottom:6px; font-size:12px;">
+                    <div style="font-weight:600;">${AI_SUGGEST_ICONS[s.type] || '💡'} ${esc(s.title)}</div>
+                    ${s.body ? `<div style="color:var(--text-muted); margin-top:2px;">${esc(s.body)}</div>` : ''}
+                    <div style="display:flex; gap:6px; margin-top:6px;">
+                        ${s.type === 'suggested_reply' && s.body ? `<button onclick="applyAiSuggestion(${s.id})" style="font-size:11px; padding:4px 8px; border-radius:6px; border:none; background:var(--primary); color:#fff; cursor:pointer;">Insert</button>` : ''}
+                        <button onclick="dismissAiSuggestion(${s.id})" style="font-size:11px; padding:4px 8px; border-radius:6px; border:1px solid var(--border-color,#e5e7eb); background:#fff; cursor:pointer;">Dismiss</button>
+                    </div>
+                </div>`).join('');
+        popup.style.display = 'block';
+    }
+
+    function dismissAiSuggestion(id) {
+        aiDismissedSeen.add(id);
+        renderAiSuggestions(aiInsightsCache.suggestions);
+        authFetch('/api/ai/suggestions/' + id + '/dismiss', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ phone: currentPhone })
+        }).catch(() => {});
+    }
+
+    function applyAiSuggestion(id) {
+        const s = (aiInsightsCache.suggestions || []).find(x => x.id === id);
+        const input = document.getElementById('messageInput');
+        if (input && s && s.body) { input.value = s.body; input.focus(); }
+        aiDismissedSeen.add(id);
+        renderAiSuggestions(aiInsightsCache.suggestions);
+        authFetch('/api/ai/suggestions/' + id + '/apply', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ phone: currentPhone })
+        }).catch(() => {});
+    }
+
     async function openChat(contact, initials) {
         currentPhone = contact.phone;
         
@@ -3328,6 +3447,7 @@
         renderAssignedBanner(contact.assigned_agent);
         renderTypingBanner(contact);
         loadLeadSummary(contact.phone);
+        loadAiInsights(contact.phone);
 
         // Populate Profile Panel
         document.getElementById('panelName').innerText = contact.name || contact.phone;
@@ -3584,7 +3704,12 @@
                     .replace(/\[Btn:\s*(.*?)\]/g, '<br><button class="crm-chat-btn" disabled>$1</button>');
                 
                 const tickHtml = item.direction === 'outbound' ? getMsgStatusIcon(item.status) : '';
-                newHtml += `<div class="${className}">${textHtml} <span class="msg-time">${time}${tickHtml}</span></div>`;
+                // Hindi/Hinglish messages get an AI-transcribed English line underneath;
+                // the original text above is never replaced (both are stored/shown).
+                const translatedHtml = (item.content_en && item.content_en !== item.content)
+                    ? `<div style="margin-top:4px; padding-top:4px; border-top:1px dashed rgba(0,0,0,0.15); font-size:12px; opacity:0.85;"><span style="font-weight:600;">🌐 EN:</span> ${esc(item.content_en)}</div>`
+                    : '';
+                newHtml += `<div class="${className}">${textHtml}${translatedHtml} <span class="msg-time">${time}${tickHtml}</span></div>`;
             } else {
                 newHtml += `<div class="msg-bubble msg-timeline-note"><strong>📝 Internal Note by ${item.created_by}:</strong><br>${item.note.replace(/\\n/g, '<br>')} <span class="msg-time">${time}</span></div>`;
             }
@@ -3719,9 +3844,14 @@
         });
     };
 
+    let aiPollTick = 0;
     setInterval(() => {
         loadContacts();
         if (currentPhone) loadMessages();
+        // AI insights are cheap cached reads, but still only poll every ~20s
+        // (every 4th tick) rather than on the 5s message cadence.
+        aiPollTick++;
+        if (currentPhone && aiPollTick % 4 === 0) loadAiInsights(currentPhone);
     }, 5000);
 
     loadUsers();
