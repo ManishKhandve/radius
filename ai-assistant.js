@@ -15,7 +15,10 @@
 const chatStore = require('./chat-store');
 
 const OPENROUTER_URL = 'https://openrouter.ai/api/v1/chat/completions';
-const DEFAULT_MODEL = 'openai/gpt-oss-120b:free';
+// openai/gpt-oss-120b:free returns a live 404 from OpenRouter (confirmed
+// against a real account) despite its info page claiming a free tier —
+// gpt-oss-20b:free is the model that's actually callable for free.
+const DEFAULT_MODEL = 'openai/gpt-oss-20b:free';
 
 // ─── Low-level OpenRouter call ───────────────────────────────
 // Never throws — callers get null on any failure and degrade gracefully
