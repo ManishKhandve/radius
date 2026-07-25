@@ -3456,12 +3456,18 @@
                 method: 'POST', headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ question })
             });
-            const j = await res.json();
-            if (!j.ok) { answerEl.innerHTML += `<div style="margin-top:6px; color:var(--error);">Something went wrong.</div>`; return; }
+            const rawText = await res.text();
+            let j;
+            try { j = JSON.parse(rawText); }
+            catch (parseErr) {
+                answerEl.innerHTML += `<div style="margin-top:6px; color:var(--error);">Server returned HTTP ${res.status} (not JSON): ${esc(rawText.slice(0, 200))}</div>`;
+                return;
+            }
+            if (!j.ok) { answerEl.innerHTML += `<div style="margin-top:6px; color:var(--error);">HTTP ${res.status}: ${esc(j.error || 'unknown error')}</div>`; return; }
             if (!j.answer) { answerEl.innerHTML = `<div style="color:var(--text-muted);">🙋 ${esc(question)}</div><div style="margin-top:6px; color:var(--text-muted);">${esc(j.error || 'No answer available.')}</div>`; return; }
             answerEl.innerHTML = `<div style="color:var(--text-muted);">🙋 ${esc(question)}</div><div style="margin-top:6px;">🤖 ${esc(j.answer)}</div>`;
         } catch (e) {
-            answerEl.innerHTML += `<div style="margin-top:6px; color:var(--error);">Something went wrong.</div>`;
+            answerEl.innerHTML += `<div style="margin-top:6px; color:var(--error);">Request failed: ${esc(e.message)}</div>`;
         }
     }
 

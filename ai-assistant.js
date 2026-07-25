@@ -25,12 +25,21 @@ const DEFAULT_MODEL = 'openai/gpt-oss-20b:free';
 // (no reply, no popup, just "nothing to show yet"). Errors are logged as
 // status codes / short messages only, never the request body (which can
 // contain customer message content).
+// A hung request would otherwise sit past Render's own proxy timeout, which
+// returns a raw (non-JSON) gateway-timeout page to the browser before this
+// function ever gets a chance to log or respond — a 25s local abort ensures
+// we always return a clean, logged result well before that happens.
+const REQUEST_TIMEOUT_MS = 25000;
+
 async function callOpenRouter(messages, { temperature = 0.2 } = {}) {
   const apiKey = process.env.OPENROUTER_API_KEY;
   if (!apiKey) return null; // not configured — silently skip (e.g. local dev)
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
   try {
     const res = await fetch(OPENROUTER_URL, {
       method: 'POST',
+      signal: controller.signal,
       headers: {
         'Authorization': `Bearer ${apiKey}`,
         'Content-Type': 'application/json',
@@ -45,14 +54,18 @@ async function callOpenRouter(messages, { temperature = 0.2 } = {}) {
       }),
     });
     if (!res.ok) {
-      console.error('[ai-assistant] OpenRouter HTTP error:', res.status);
+      let bodySnippet = '';
+      try { bodySnippet = (await res.text()).slice(0, 300); } catch (e) { /* ignore */ }
+      console.error('[ai-assistant] OpenRouter HTTP error:', res.status, bodySnippet);
       return null;
     }
     const data = await res.json();
     return (data && data.choices && data.choices[0] && data.choices[0].message && data.choices[0].message.content) || null;
   } catch (err) {
-    console.error('[ai-assistant] OpenRouter request failed:', err.message);
+    console.error('[ai-assistant] OpenRouter request failed:', err.name === 'AbortError' ? `timed out after ${REQUEST_TIMEOUT_MS}ms` : err.message);
     return null;
+  } finally {
+    clearTimeout(timer);
   }
 }
 
