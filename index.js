@@ -1270,6 +1270,22 @@ app.post('/api/ai/ask/:phone', authMiddleware, async (req, res) => {
   }
 });
 
+// Rewrites the agent's in-progress draft (Hindi/Hinglish/broken English)
+// into professional English. Stateless (no chat lookup) and never sends
+// anything — the agent still reviews and hits Send themselves.
+app.post('/api/ai/polish-draft', authMiddleware, async (req, res) => {
+  const { text } = req.body || {};
+  if (!text || !String(text).trim()) return res.status(400).json({ ok: false, error: 'Missing text' });
+  try {
+    const result = await aiAssistant.polishDraft(text);
+    if (result.error && !result.text) return res.status(200).json({ ok: true, text: null, error: result.error });
+    res.json({ ok: true, text: result.text });
+  } catch (err) {
+    log('error', 'ai', 'polish-draft failed:', err.message);
+    res.status(500).json({ ok: false, error: 'Something went wrong polishing that message' });
+  }
+});
+
 app.post('/api/chat/send', authMiddleware, async (req, res) => {
   const { phone, message } = req.body;
   if (!phone || !message) return res.status(400).json({ ok: false, error: 'Missing phone or message' });

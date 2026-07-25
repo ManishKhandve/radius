@@ -1466,7 +1466,9 @@
         <div class="chat-input-area">
             <div class="qr-popup" id="qrPopup" style="display:none;"></div>
             <div class="chat-input-wrapper">
-                <input type="text" id="messageInput" placeholder="Type message or '/' for shortcuts..." autocomplete="off" onkeyup="checkQuickReplies(event); pingTyping()">
+                <input type="text" id="messageInput" style="padding-right:40px;" placeholder="Type message or '/' for shortcuts..." autocomplete="off" onkeyup="checkQuickReplies(event); pingTyping()">
+                <button type="button" id="polishDraftBtn" title="Translate/polish into professional English (AI)" onclick="polishDraft()"
+                        style="position:absolute; right:8px; top:50%; transform:translateY(-50%); border:none; background:transparent; cursor:pointer; font-size:17px; padding:4px; line-height:1; color:var(--text-muted);">✨</button>
             </div>
             <button id="sendBtn">Send</button>
         </div>
@@ -3468,6 +3470,39 @@
             answerEl.innerHTML = `<div style="color:var(--text-muted);">🙋 ${esc(question)}</div><div style="margin-top:6px;">🤖 ${esc(j.answer)}</div>`;
         } catch (e) {
             answerEl.innerHTML += `<div style="margin-top:6px; color:var(--error);">Request failed: ${esc(e.message)}</div>`;
+        }
+    }
+
+    // ── Draft polish ("✨" icon on the composer): translates Hindi/Hinglish
+    //    or just cleans up broken English into a professional reply. The
+    //    agent still reviews/edits and hits Send themselves — this only
+    //    rewrites the text sitting in the input box.
+    async function polishDraft() {
+        const input = document.getElementById('messageInput');
+        const btn = document.getElementById('polishDraftBtn');
+        const text = input.value.trim();
+        if (!text) return;
+        const originalIcon = btn.innerText;
+        btn.innerText = '⏳';
+        btn.disabled = true;
+        try {
+            const res = await authFetch('/api/ai/polish-draft', {
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ text })
+            });
+            const rawText = await res.text();
+            let j;
+            try { j = JSON.parse(rawText); }
+            catch (parseErr) { alert('AI polish failed — server returned HTTP ' + res.status + ' (not JSON).'); return; }
+            if (!j.ok) { alert('AI polish failed: ' + (j.error || 'HTTP ' + res.status)); return; }
+            if (!j.text) { alert(j.error || 'Could not polish this message.'); return; }
+            input.value = j.text;
+            input.focus();
+        } catch (e) {
+            alert('AI polish failed: ' + e.message);
+        } finally {
+            btn.innerText = originalIcon;
+            btn.disabled = false;
         }
     }
 

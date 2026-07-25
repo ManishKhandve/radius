@@ -353,10 +353,35 @@ async function askQuestion(phone, question) {
   return { answer: parsed.answer.trim().slice(0, 2000), error: null };
 }
 
+// ─── Outbound draft polish ("✨" icon on the composer) ────────
+// Takes whatever the agent has typed — Hindi, Hinglish, or just broken/
+// casual English — and rewrites it as a clean, professional English reply.
+// Stateless: no chat context is needed or sent, nothing is written to the
+// database, and it never sends anything — it only returns text for the
+// agent to review (and edit further) before they hit Send themselves.
+async function polishDraft(text) {
+  if (!text || !String(text).trim()) return { text: null, error: 'Empty message' };
+  const raw = await callOpenRouter([
+    {
+      role: 'system',
+      content: 'Rewrite a single WhatsApp draft reply from a maid-placement/home-cleaning business agent to a customer. If it is in Hindi (Devanagari) or Hinglish, translate it to English. Fix grammar/spelling and make the tone professional, polite, and clear — but keep it natural and reasonably concise; do not make it stiff or robotic, and do not add information or change its meaning. Respond ONLY with JSON: {"text":"..."}',
+    },
+    { role: 'user', content: String(text).trim().slice(0, 1000) },
+  ]);
+  if (!raw) return { text: null, error: 'AI is not available right now' };
+
+  const parsed = safeParseJson(raw);
+  if (!parsed || typeof parsed.text !== 'string' || !parsed.text.trim()) {
+    return { text: null, error: 'Could not polish this message' };
+  }
+  return { text: parsed.text.trim().slice(0, 2000), error: null };
+}
+
 module.exports = {
   translateIfNeeded,
   scheduleAnalysis,
   askQuestion,
+  polishDraft,
   analyzeChat,
   // exported for tests
   looksHindiOrHinglish,
