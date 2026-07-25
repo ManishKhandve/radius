@@ -2104,18 +2104,31 @@ app.get('/api/insights', authMiddleware, async (req, res) => {
     const sev = { waiting: 4, payment: 3, interview: 2, cold: 1 };
     missed.sort((a, b) => Math.max(...b.reasons.map(r => sev[r.type])) - Math.max(...a.reasons.map(r => sev[r.type])));
 
-    // ── Locality heatmap (global — for ad targeting) ──
-    const [{ data: custs }, { data: flats }] = await Promise.all([
+    // ── Locality heatmap — segregated by lead type (for ad targeting) ──
+    function buildHeatmap(values) {
+      const heat = {};
+      let matched = 0, unmatched = 0;
+      for (const r of values) {
+        const loc = matchLocality(r);
+        if (loc) { heat[loc] = (heat[loc] || 0) + 1; matched++; } else if (String(r || '').trim()) unmatched++;
+      }
+      const top = Object.entries(heat).map(([area, count]) => ({ area, count })).sort((a, b) => b.count - a.count).slice(0, 15);
+      return { heatmap: top, matched, unmatched };
+    }
+
+    const [{ data: custs }, { data: flats }, { data: maidRows }] = await Promise.all([
       wfStore.supabase.from('customers').select('location'),
       wfStore.supabase.from('flat_customers').select('area'),
+      wfStore.supabase.from('maids').select('areas_served'),
     ]);
-    const heat = {};
-    let matched = 0, unmatched = 0;
-    for (const r of [...(custs || []).map(x => x.location), ...(flats || []).map(x => x.area)]) {
-      const loc = matchLocality(r);
-      if (loc) { heat[loc] = (heat[loc] || 0) + 1; matched++; } else if (String(r || '').trim()) unmatched++;
-    }
-    const heatmap = Object.entries(heat).map(([area, count]) => ({ area, count })).sort((a, b) => b.count - a.count).slice(0, 15);
+    const custHeat = buildHeatmap((custs || []).map(x => x.location));
+    const flatHeat = buildHeatmap((flats || []).map(x => x.area));
+    const maidHeat = buildHeatmap((maidRows || []).map(x => x.areas_served));
+    const allHeat = buildHeatmap([
+      ...(custs || []).map(x => x.location),
+      ...(flats || []).map(x => x.area),
+      ...(maidRows || []).map(x => x.areas_served),
+    ]);
 
     res.json({
       ok: true, role: req.user.role,
@@ -2125,7 +2138,15 @@ app.get('/api/insights', authMiddleware, async (req, res) => {
         payments: tasks.payments.length, interviews: tasks.interviews.length,
         lists: tasks,
       },
-      heatmap, heatmapMatched: matched, heatmapUnmatched: unmatched,
+      // Segregated by lead type, plus a combined "all" view.
+      heatmaps: {
+        all:      { heatmap: allHeat.heatmap,  matched: allHeat.matched,  unmatched: allHeat.unmatched,  total: (custs||[]).length + (flats||[]).length + (maidRows||[]).length },
+        customer: { heatmap: custHeat.heatmap, matched: custHeat.matched, unmatched: custHeat.unmatched, total: (custs||[]).length },
+        flat:     { heatmap: flatHeat.heatmap, matched: flatHeat.matched, unmatched: flatHeat.unmatched, total: (flats||[]).length },
+        maid:     { heatmap: maidHeat.heatmap, matched: maidHeat.matched, unmatched: maidHeat.unmatched, total: (maidRows||[]).length },
+      },
+      // Legacy top-level fields kept for backward compatibility (== "all").
+      heatmap: allHeat.heatmap, heatmapMatched: allHeat.matched, heatmapUnmatched: allHeat.unmatched,
     });
   } catch (err) {
     log('error', 'insights', err.message);

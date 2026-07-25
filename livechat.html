@@ -1721,7 +1721,10 @@
             <h3 style="font-family:'Outfit',sans-serif; font-size:14px; text-transform:uppercase; letter-spacing:0.5px; color:var(--error); margin:6px 0 12px;">🚨 Missed Opportunities <span id="missedCount" style="color:var(--text-muted);"></span></h3>
             <div id="insightsMissed" style="margin-bottom:26px;"></div>
 
-            <h3 style="font-family:'Outfit',sans-serif; font-size:14px; text-transform:uppercase; letter-spacing:0.5px; color:var(--text-muted); margin:6px 0 12px;">📍 Locality Heatmap <span id="heatSub" style="text-transform:none; font-weight:400;"></span></h3>
+            <div style="display:flex; align-items:center; gap:12px; flex-wrap:wrap; margin:6px 0 12px;">
+                <h3 style="font-family:'Outfit',sans-serif; font-size:14px; text-transform:uppercase; letter-spacing:0.5px; color:var(--text-muted); margin:0;">📍 Locality Heatmap <span id="heatSub" style="text-transform:none; font-weight:400;"></span></h3>
+                <div id="heatTabs" style="display:flex; gap:6px; flex-wrap:wrap;"></div>
+            </div>
             <div class="bc-card"><div id="insightsHeat"></div></div>
         </div>
     </div>
@@ -2520,17 +2523,48 @@
                 <button class="pmsg-btn" onclick="event.stopPropagation(); openNotifChat('${esc(m.phone)}')">💬 Open</button>
             </div>`).join('') : '<div class="notif-card" style="justify-content:center; color:var(--text-muted);">🎉 No missed opportunities — everyone is handled.</div>';
 
-        // Locality heatmap
-        document.getElementById('heatSub').innerText = ` — ${d.heatmapMatched} located leads (for ad targeting)`;
-        const max = d.heatmap.length ? d.heatmap[0].count : 1;
-        document.getElementById('insightsHeat').innerHTML = d.heatmap.length ? d.heatmap.map(h => `
+        // Locality heatmap — segregated by lead type
+        renderHeatTabs();
+        renderHeatmap();
+    }
+
+    // Fallback keeps this working even against an older /api/insights that
+    // only returns the combined `heatmap` (pre-segregation).
+    const HEAT_TABS = [
+        ['customer', '🧺 Maid Customers'], ['flat', '🏠 Flat Customers'],
+        ['maid', '👩‍🔧 Maids'], ['all', '🌐 All Combined'],
+    ];
+    let heatTypeFilter = 'customer';
+
+    function renderHeatTabs() {
+        const d = insightsData;
+        if (!d || !d.heatmaps) { document.getElementById('heatTabs').innerHTML = ''; return; }
+        document.getElementById('heatTabs').innerHTML = HEAT_TABS.map(([key, label]) => {
+            const active = heatTypeFilter === key;
+            const total = d.heatmaps[key] ? d.heatmaps[key].matched : 0;
+            return `<button class="mini" style="${active ? 'background:var(--primary);color:#fff;border-color:var(--primary);' : ''}" onclick="setHeatType('${key}')">${label} (${total})</button>`;
+        }).join('');
+    }
+
+    function setHeatType(key) {
+        heatTypeFilter = key;
+        renderHeatTabs();
+        renderHeatmap();
+    }
+
+    function renderHeatmap() {
+        const d = insightsData;
+        const src = (d.heatmaps && d.heatmaps[heatTypeFilter]) || { heatmap: d.heatmap || [], matched: d.heatmapMatched || 0, unmatched: d.heatmapUnmatched || 0, total: 0 };
+        document.getElementById('heatSub').innerText = ` — ${src.matched} located leads (for ad targeting)`;
+        const max = src.heatmap.length ? src.heatmap[0].count : 1;
+        document.getElementById('insightsHeat').innerHTML = src.heatmap.length ? src.heatmap.map(h => `
             <div style="display:flex; align-items:center; gap:10px; margin-bottom:7px;">
                 <div style="width:130px; font-size:13px; font-weight:600; text-align:right; flex-shrink:0;">${esc(h.area)}</div>
                 <div style="flex:1; background:#f1f5f9; border-radius:6px; overflow:hidden; height:22px;">
                     <div style="height:100%; width:${Math.max(4, h.count / max * 100)}%; background:linear-gradient(90deg,var(--primary),var(--indigo)); border-radius:6px;"></div>
                 </div>
                 <div style="width:40px; font-size:13px; font-weight:700; color:var(--text-main);">${h.count}</div>
-            </div>`).join('') : '<div style="color:var(--text-muted);">No locality data matched.</div>';
+            </div>`).join('') : '<div style="color:var(--text-muted);">No locality data matched for this group.</div>';
     }
 
     function openInsightList(json) {
