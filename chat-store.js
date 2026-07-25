@@ -784,9 +784,64 @@ async function markNotificationsRead() {
   }
 }
 
+// ─── Quick lead summary (shown when a chat is opened) ────────
+// Lead tables store phone as 10 local digits (no country code); WhatsApp
+// contacts store it with the country code. Match on the last 10 digits.
+function last10(phone) {
+  return String(phone || '').replace(/\D/g, '').slice(-10);
+}
+
+// Drops null/empty/"Unknown"-style fields so the summary only shows what's
+// actually filled in ("if available").
+function pickFilled(obj) {
+  const out = {};
+  for (const [k, v] of Object.entries(obj)) {
+    const s = v === null || v === undefined ? '' : String(v).trim();
+    if (s && s.toLowerCase() !== 'unknown') out[k] = v;
+  }
+  return out;
+}
+
+/**
+ * Looks up a phone across all three lead tables (a person can legitimately
+ * appear in more than one — e.g. a maid who also inquired as a customer).
+ * Returns only the summary fields relevant to each type, with blanks
+ * dropped. Each key is null if no match was found in that table.
+ */
+async function getLeadSummary(phone) {
+  const p = last10(phone);
+  if (!p) return { flat: null, customer: null, maid: null };
+
+  const [flatRes, custRes, maidRes] = await Promise.all([
+    supabase.from('flat_customers').select('full_name, area, street_address, home_type, requirement, status').eq('phone', p).limit(1),
+    supabase.from('customers').select('name, location, service_needed, budget, working_hours, status').eq('phone', p).limit(1),
+    supabase.from('maids').select('name, areas_served, service_type, salary_expectation, preferred_time, availability, status').eq('phone', p).limit(1),
+  ]);
+
+  const flat = flatRes.data && flatRes.data[0];
+  const cust = custRes.data && custRes.data[0];
+  const maid = maidRes.data && maidRes.data[0];
+
+  return {
+    flat: flat ? pickFilled({
+      name: flat.full_name, location: flat.area || flat.street_address,
+      service: flat.requirement, flat_type: flat.home_type, status: flat.status,
+    }) : null,
+    customer: cust ? pickFilled({
+      name: cust.name, location: cust.location, service: cust.service_needed,
+      salary: cust.budget, working_hours: cust.working_hours, status: cust.status,
+    }) : null,
+    maid: maid ? pickFilled({
+      name: maid.name, location: maid.areas_served, service: maid.service_type,
+      salary: maid.salary_expectation, working_hours: maid.preferred_time || maid.availability, status: maid.status,
+    }) : null,
+  };
+}
+
 module.exports = {
   saveMessage,
   ensureContact,
+  getLeadSummary,
   getLastInboundWamid,
   addNotification,
   getNotifications,

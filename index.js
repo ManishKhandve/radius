@@ -1147,6 +1147,16 @@ app.get('/api/chat/messages/:phone', authMiddleware, async (req, res) => {
   res.json({ ok: true, success: true, messages, isBotPaused });
 });
 
+// Quick lead summary — shown in the profile panel when a chat is opened.
+// Looks the phone up across flat_customers/customers/maids (matched by the
+// last 10 digits) and returns whichever records exist, fields-only-if-filled.
+app.get('/api/lead-summary/:phone', authMiddleware, async (req, res) => {
+  const { phone } = req.params;
+  if (!isValidPhone(phone)) return res.status(400).json({ ok: false, error: 'Invalid phone number format' });
+  const summary = await chatStore.getLeadSummary(phone);
+  res.json({ ok: true, summary });
+});
+
 app.post('/api/chat/send', authMiddleware, async (req, res) => {
   const { phone, message } = req.body;
   if (!phone || !message) return res.status(400).json({ ok: false, error: 'Missing phone or message' });

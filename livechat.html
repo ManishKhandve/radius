@@ -1463,6 +1463,11 @@
             <div class="profile-phone" id="panelPhone">Phone</div>
         </div>
 
+        <div class="crm-section" id="leadSummarySection" style="display:none;">
+            <div class="crm-label">Quick Summary</div>
+            <div id="leadSummaryBody" style="font-size:12.5px; line-height:1.7;"></div>
+        </div>
+
         <div class="crm-section">
             <div class="crm-label">Lead Status</div>
             <select class="crm-input" id="crmStatus" onchange="updateCRM()">
@@ -3228,6 +3233,36 @@
         }
     }
 
+    // ── Quick lead summary (flat/maid-customer/maid record, if any) ──
+    const LEAD_SUMMARY_LABELS = { name: 'Name', location: 'Location', service: 'Service', flat_type: 'Flat Type', salary: 'Salary/Budget', working_hours: 'Working Hours', status: 'Status' };
+
+    async function loadLeadSummary(phone) {
+        document.getElementById('leadSummarySection').style.display = 'none'; // hide while loading / switching contacts
+        try {
+            const j = await (await authFetch('/api/lead-summary/' + phone)).json();
+            if (!j.ok || phone !== currentPhone) return; // stale — contact changed before this resolved
+            renderLeadSummary(j.summary);
+        } catch (e) { /* non-fatal */ }
+    }
+
+    function renderLeadSummary(summary) {
+        const section = document.getElementById('leadSummarySection');
+        const blocks = [
+            ['🏠 Flat Customer', summary.flat],
+            ['🧺 Maid Customer', summary.customer],
+            ['👩‍🔧 Maid', summary.maid],
+        ].filter(([, data]) => data && Object.keys(data).length > 0);
+
+        if (!blocks.length) { section.style.display = 'none'; return; }
+
+        document.getElementById('leadSummaryBody').innerHTML = blocks.map(([title, data], i) => `
+            <div style="margin-bottom:10px; padding-bottom:8px; ${i < blocks.length - 1 ? 'border-bottom:1px solid #f1f5f9;' : ''}">
+                <div style="font-weight:700; color:var(--text-main); margin-bottom:4px;">${title}</div>
+                ${Object.entries(data).map(([k, v]) => `<div><span style="color:var(--text-muted);">${esc(LEAD_SUMMARY_LABELS[k] || k)}:</span> ${esc(v)}</div>`).join('')}
+            </div>`).join('');
+        section.style.display = 'block';
+    }
+
     async function openChat(contact, initials) {
         currentPhone = contact.phone;
         
@@ -3260,6 +3295,7 @@
         document.getElementById('headerAvatar').style.background = `hsl(${contact.phone.slice(-3) * 37 % 360}, 55%, 45%)`;
         renderAssignedBanner(contact.assigned_agent);
         renderTypingBanner(contact);
+        loadLeadSummary(contact.phone);
 
         // Populate Profile Panel
         document.getElementById('panelName').innerText = contact.name || contact.phone;
