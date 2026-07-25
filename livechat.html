@@ -3336,13 +3336,18 @@
     let aiInsightsCache = { suggestions: [] };
     let aiDismissedSeen = new Set(); // suggestion ids dismissed/applied this session — hides them instantly without waiting for the next poll
 
-    async function loadAiInsights(phone) {
+    // Called both when a chat is first opened AND on every ~20s background
+    // poll while it stays open — isChatSwitch distinguishes the two so a
+    // routine refresh doesn't yank the Ask AI panel shut on the user mid-use.
+    async function loadAiInsights(phone, isChatSwitch = false) {
         document.getElementById('aiExtractedSection').style.display = 'none';
         document.getElementById('aiBadgeRow').innerHTML = '';
-        document.getElementById('aiSuggestPopup').style.display = 'none';
-        toggleAskAiPanel(false);
-        document.getElementById('aiAskAnswer').innerHTML = '';
-        aiDismissedSeen = new Set();
+        if (isChatSwitch) {
+            document.getElementById('aiSuggestPopup').style.display = 'none';
+            toggleAskAiPanel(false);
+            document.getElementById('aiAskAnswer').innerHTML = '';
+            aiDismissedSeen = new Set();
+        }
         try {
             const j = await (await authFetch('/api/ai/insights/' + phone)).json();
             if (!j.ok || phone !== currentPhone) return; // stale — contact changed before this resolved
@@ -3493,7 +3498,7 @@
         renderAssignedBanner(contact.assigned_agent);
         renderTypingBanner(contact);
         loadLeadSummary(contact.phone);
-        loadAiInsights(contact.phone);
+        loadAiInsights(contact.phone, true);
 
         // Populate Profile Panel
         document.getElementById('panelName').innerText = contact.name || contact.phone;
