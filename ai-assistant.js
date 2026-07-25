@@ -69,6 +69,62 @@ async function callOpenRouter(messages, { temperature = 0.2 } = {}) {
   }
 }
 
+// ─── Connectivity diagnostic (admin-only endpoint) ───────────
+// Runs one minimal OpenRouter call from THIS server's network with the
+// real configured key/model and reports exactly what happened — status,
+// timing, error kind, and (on success) the model that actually served
+// the request. Never returns the API key. Used to bisect "is this a
+// Render-network problem, a key/model problem, or our code?" without
+// guessing from the outside.
+async function diagnose() {
+  const apiKey = process.env.OPENROUTER_API_KEY;
+  const model = process.env.OPENROUTER_MODEL || DEFAULT_MODEL;
+  const out = {
+    keyPresent: !!apiKey,
+    keyLength: apiKey ? apiKey.length : 0,
+    keyPrefix: apiKey ? apiKey.slice(0, 6) + '…' : null, // e.g. "sk-or-…" — enough to spot a wrong/blank key, not the secret
+    model,
+    ok: false,
+    httpStatus: null,
+    elapsedMs: null,
+    servedBy: null,
+    error: null,
+    bodySnippet: null,
+  };
+  if (!apiKey) { out.error = 'OPENROUTER_API_KEY is not set'; return out; }
+
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 20000);
+  const start = Date.now();
+  try {
+    const res = await fetch(OPENROUTER_URL, {
+      method: 'POST',
+      signal: controller.signal,
+      headers: {
+        'Authorization': `Bearer ${apiKey}`,
+        'Content-Type': 'application/json',
+        'HTTP-Referer': process.env.OPENROUTER_SITE_URL || 'https://cleanly-whatsapp.local',
+        'X-Title': process.env.OPENROUTER_APP_NAME || 'Cleanly WhatsApp CRM',
+      },
+      body: JSON.stringify({ model, messages: [{ role: 'user', content: 'Reply with the single word OK.' }], max_tokens: 5 }),
+    });
+    out.elapsedMs = Date.now() - start;
+    out.httpStatus = res.status;
+    const text = await res.text();
+    out.bodySnippet = text.slice(0, 400);
+    if (res.ok) {
+      out.ok = true;
+      try { const j = JSON.parse(text); out.servedBy = j.provider || (j.model || null); } catch (e) { /* ignore */ }
+    }
+  } catch (err) {
+    out.elapsedMs = Date.now() - start;
+    out.error = err.name === 'AbortError' ? 'timed out after 20000ms (request hung — network egress or provider never responded)' : `${err.name}: ${err.message}`;
+  } finally {
+    clearTimeout(timer);
+  }
+  return out;
+}
+
 function safeParseJson(text) {
   try { return JSON.parse(text); } catch (e) { /* fall through */ }
   const m = String(text).match(/\{[\s\S]*\}/);
@@ -383,6 +439,7 @@ module.exports = {
   askQuestion,
   polishDraft,
   analyzeChat,
+  diagnose,
   // exported for tests
   looksHindiOrHinglish,
   FIELD_LIST,

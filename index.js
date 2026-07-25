@@ -1286,6 +1286,20 @@ app.post('/api/ai/polish-draft', authMiddleware, async (req, res) => {
   }
 });
 
+// Admin-only connectivity diagnostic: runs one minimal OpenRouter call
+// from this server and reports status/timing/error (never the key). Lets
+// us see exactly what Render's network + the configured key/model do,
+// instead of guessing from timeout logs.
+app.get('/api/ai/diag', authMiddleware, async (req, res) => {
+  if (req.user.role !== 'admin') return res.status(403).json({ ok: false, error: 'Admin only' });
+  try {
+    const result = await aiAssistant.diagnose();
+    res.json({ ok: true, diag: result });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
 app.post('/api/chat/send', authMiddleware, async (req, res) => {
   const { phone, message } = req.body;
   if (!phone || !message) return res.status(400).json({ ok: false, error: 'Missing phone or message' });
