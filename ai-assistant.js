@@ -31,9 +31,29 @@ const DEFAULT_MODEL = 'openai/gpt-oss-20b:free';
 // we always return a clean, logged result well before that happens.
 const REQUEST_TIMEOUT_MS = 25000;
 
+// ─── Circuit breaker ──────────────────────────────────────────
+// The free OpenRouter model tier is shared, congested capacity — it goes
+// through stretches where every request hangs the full 25s before failing.
+// Every AI feature in this file (translateIfNeeded on every inbound Hindi/
+// Hinglish message, the debounced per-chat analysis, Ask AI, Polish Draft)
+// funnels through this one function, so during a congested stretch each of
+// them independently eats a 25s timeout and logs the same line — a flood of
+// identical "timed out" entries that reflects OpenRouter's outage, not a
+// retry loop of ours, but wastes 25s per attempt and floods the log for no
+// benefit. After a few consecutive failures, trip the breaker: skip the
+// network call entirely (instant null) for a cooldown, then let the very
+// next call test the waters again. Any success resets it immediately.
+const CIRCUIT_FAILURE_THRESHOLD = 3;
+const CIRCUIT_COOLDOWN_MS = 3 * 60 * 1000; // 3 min
+let consecutiveFailures = 0;
+let circuitOpenUntil = 0;
+
 async function callOpenRouter(messages, { temperature = 0.2 } = {}) {
   const apiKey = process.env.OPENROUTER_API_KEY;
   if (!apiKey) return null; // not configured — silently skip (e.g. local dev)
+
+  if (Date.now() < circuitOpenUntil) return null; // breaker open — fail fast, no network call, no log spam
+
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
   try {
@@ -57,15 +77,26 @@ async function callOpenRouter(messages, { temperature = 0.2 } = {}) {
       let bodySnippet = '';
       try { bodySnippet = (await res.text()).slice(0, 300); } catch (e) { /* ignore */ }
       console.error('[ai-assistant] OpenRouter HTTP error:', res.status, bodySnippet);
+      recordFailure();
       return null;
     }
     const data = await res.json();
+    consecutiveFailures = 0; // reset on any success
     return (data && data.choices && data.choices[0] && data.choices[0].message && data.choices[0].message.content) || null;
   } catch (err) {
     console.error('[ai-assistant] OpenRouter request failed:', err.name === 'AbortError' ? `timed out after ${REQUEST_TIMEOUT_MS}ms` : err.message);
+    recordFailure();
     return null;
   } finally {
     clearTimeout(timer);
+  }
+}
+
+function recordFailure() {
+  consecutiveFailures++;
+  if (consecutiveFailures >= CIRCUIT_FAILURE_THRESHOLD && Date.now() >= circuitOpenUntil) {
+    circuitOpenUntil = Date.now() + CIRCUIT_COOLDOWN_MS;
+    console.error(`[ai-assistant] OpenRouter failed ${consecutiveFailures}x in a row — pausing all AI calls for ${CIRCUIT_COOLDOWN_MS / 60000} min to stop hammering a congested/down backend. Will auto-retry after the cooldown.`);
   }
 }
 
