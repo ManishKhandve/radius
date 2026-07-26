@@ -1027,30 +1027,6 @@ setInterval(() => {
   if (cleaned > 0) log('info', 'pause', `Cleaned up ${cleaned} expired pause(s)`);
 }, 15 * 60 * 1000);
 
-// ─── Scheduled follow-up promotion (every 5 min) ─────────────
-// The AI assistant parses "call tomorrow" / "follow up after 2 days"-style
-// language into scheduled_notifications rows (see ai-assistant.js). When
-// one comes due, promote it into a real notification via the existing
-// addNotification() so it shows up in the same Notifications tab/bell as
-// everything else, rather than a second UI surface.
-setInterval(async () => {
-  try {
-    const due = await chatStore.getDueScheduledNotifications();
-    for (const d of due) {
-      await chatStore.addNotification(
-        `AI reminder: ${d.reminder_type}`,
-        d.source_message || `Scheduled follow-up (${d.reminder_type}) is due.`,
-        d.phone,
-        'ai_reminder'
-      );
-      await chatStore.markScheduledNotificationFired(d.id);
-    }
-    if (due.length > 0) log('info', 'ai', `Promoted ${due.length} scheduled reminder(s)`);
-  } catch (err) {
-    log('error', 'ai', 'scheduled-notification promotion failed:', err.message);
-  }
-}, 5 * 60 * 1000);
-
 app.post('/api/login', async (req, res) => {
   const { username, password } = req.body;
   if (!username || !password) return res.status(400).json({ ok: false, error: 'Missing credentials' });

@@ -998,31 +998,6 @@ async function applyAiSuggestion(id, phone) {
   } catch (err) { console.error('[chat-store] exception applying AI suggestion:', err.message); }
 }
 
-async function createScheduledNotification(phone, { reminder_time, reminder_type, source_message } = {}) {
-  if (!phone || !reminder_time || !reminder_type) return;
-  try {
-    await supabase.from('scheduled_notifications').insert({
-      phone, reminder_time, reminder_type,
-      source_message: source_message ? String(source_message).slice(0, 500) : null,
-      status: 'pending',
-    });
-  } catch (err) { console.error('[chat-store] exception creating scheduled notification:', err.message); }
-}
-
-async function getDueScheduledNotifications() {
-  try {
-    const { data } = await supabase.from('scheduled_notifications')
-      .select('*').eq('status', 'pending').lte('reminder_time', new Date().toISOString());
-    return data || [];
-  } catch (err) { return []; }
-}
-
-async function markScheduledNotificationFired(id) {
-  try {
-    await supabase.from('scheduled_notifications').update({ status: 'fired' }).eq('id', id);
-  } catch (err) { console.error('[chat-store] exception marking scheduled notification fired:', err.message); }
-}
-
 // Defense-in-depth: scoped to lead_type='whatsapp' + this exact phone, so
 // even a hallucinated id from the AI can never mark another chat's (or the
 // other CRM's) notification read.
@@ -1049,9 +1024,6 @@ module.exports = {
   getAiSuggestions,
   dismissAiSuggestion,
   applyAiSuggestion,
-  createScheduledNotification,
-  getDueScheduledNotifications,
-  markScheduledNotificationFired,
   dismissNotificationsByIds,
   getLastInboundWamid,
   addNotification,

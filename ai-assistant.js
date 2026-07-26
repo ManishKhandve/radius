@@ -292,7 +292,6 @@ async function analyzeChat(phone, { localityNames = [] } = {}) {
       state: 'string or null', confidence: '0.0-1.0 number', flagged: 'boolean', suggestion: 'string or null',
     },
     suggestions: [{ type: 'follow_up_reminder|lead_status_update|missing_info|important_action|suggested_reply', title: 'string', body: 'string' }],
-    scheduled_followups: [{ reminder_type: 'string', reminder_time_iso: 'ISO 8601 datetime, IST' }],
     notification_ids_to_dismiss: ['id of a pending notification listed below, only if it is clearly no longer relevant'],
   };
 
@@ -302,7 +301,6 @@ async function analyzeChat(phone, { localityNames = [] } = {}) {
     'Respond ONLY with a single JSON object matching exactly this shape (no prose, no markdown fences):',
     JSON.stringify(responseShape),
     localityNames.length ? `Known valid localities near Pune, for verifying/correcting the customer's stated locality: ${localityNames.join(', ')}.` : '',
-    'Only include a scheduled_followups entry when the chat explicitly asked for a delayed follow-up (e.g. "call tomorrow", "follow up after 2 days", "ping next week"); compute reminder_time_iso relative to the current time below, in IST.',
     `Current time (IST): ${istNowString()}`,
   ].filter(Boolean).join('\n');
 
@@ -380,21 +378,6 @@ async function applyAnalysisResult(phone, parsed, ctx) {
         body: typeof s.body === 'string' ? s.body.trim() : null,
       }));
     await chatStore.createAiSuggestions(phone, suggestions);
-  }
-
-  if (Array.isArray(parsed.scheduled_followups)) {
-    for (const f of parsed.scheduled_followups) {
-      if (!f || !f.reminder_time_iso) continue;
-      const t = new Date(f.reminder_time_iso);
-      // Ignore unparsable dates and anything more than 5 minutes in the past
-      // (a "reminder" that already elapsed isn't useful to schedule).
-      if (isNaN(t.getTime()) || t.getTime() < Date.now() - 5 * 60000) continue;
-      await chatStore.createScheduledNotification(phone, {
-        reminder_time: t.toISOString(),
-        reminder_type: String(f.reminder_type || 'follow_up').slice(0, 100),
-        source_message: f.source_message || null,
-      });
-    }
   }
 
   if (Array.isArray(parsed.notification_ids_to_dismiss) && parsed.notification_ids_to_dismiss.length) {
