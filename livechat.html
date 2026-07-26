@@ -3506,6 +3506,25 @@
         }
     }
 
+    // ── On-demand message translation ("🌐 Translate" under an inbound
+    //    bubble). Automatic per-message translation was removed to cut AI
+    //    call volume — this fires only when an agent explicitly clicks it.
+    async function translateMessage(messageId, btn) {
+        const original = btn.innerText;
+        btn.innerText = '⏳ Translating…';
+        btn.disabled = true;
+        try {
+            const res = await authFetch('/api/ai/translate/' + messageId, { method: 'POST' });
+            const j = await res.json();
+            if (!j.ok) { alert('Translation failed: ' + (j.error || 'unknown error')); btn.innerText = original; btn.disabled = false; return; }
+            await loadMessages(); // re-fetches; the new content_en swaps this button for the translated line
+        } catch (e) {
+            alert('Translation failed: ' + e.message);
+            btn.innerText = original;
+            btn.disabled = false;
+        }
+    }
+
     async function openChat(contact, initials) {
         currentPhone = contact.phone;
         
@@ -3796,11 +3815,16 @@
                     .replace(/\[Btn:\s*(.*?)\]/g, '<br><button class="crm-chat-btn" disabled>$1</button>');
                 
                 const tickHtml = item.direction === 'outbound' ? getMsgStatusIcon(item.status) : '';
-                // Hindi/Hinglish messages get an AI-transcribed English line underneath;
+                // An AI-transcribed English line goes underneath once requested;
                 // the original text above is never replaced (both are stored/shown).
-                const translatedHtml = (item.content_en && item.content_en !== item.content)
-                    ? `<div style="margin-top:4px; padding-top:4px; border-top:1px dashed rgba(0,0,0,0.15); font-size:12px; opacity:0.85;"><span style="font-weight:600;">🌐 EN:</span> ${esc(item.content_en)}</div>`
-                    : '';
+                // Translation is on-demand (🌐 button) rather than automatic, to
+                // keep AI call volume down — click it on any inbound message.
+                let translatedHtml = '';
+                if (item.content_en && item.content_en !== item.content) {
+                    translatedHtml = `<div style="margin-top:4px; padding-top:4px; border-top:1px dashed rgba(0,0,0,0.15); font-size:12px; opacity:0.85;"><span style="font-weight:600;">🌐 EN:</span> ${esc(item.content_en)}</div>`;
+                } else if (item.direction === 'inbound') {
+                    translatedHtml = `<div style="margin-top:4px;"><button onclick="translateMessage(${item.id}, this)" style="font-size:11px; padding:2px 8px; border-radius:6px; border:1px solid var(--border-color,#e5e7eb); background:#fff; color:var(--text-muted); cursor:pointer;">🌐 Translate</button></div>`;
+                }
                 newHtml += `<div class="${className}">${textHtml}${translatedHtml} <span class="msg-time">${time}${tickHtml}</span></div>`;
             } else {
                 newHtml += `<div class="msg-bubble msg-timeline-note"><strong>📝 Internal Note by ${item.created_by}:</strong><br>${item.note.replace(/\\n/g, '<br>')} <span class="msg-time">${time}</span></div>`;

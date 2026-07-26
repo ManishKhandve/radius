@@ -572,6 +572,20 @@ async function getMessages(phone) {
 }
 
 /**
+ * Fetches a single message by id — used by the on-demand "🌐 Translate"
+ * button, which needs the original text before asking the AI to translate it.
+ */
+async function getMessageById(id) {
+  try {
+    const { data, error } = await supabase.from('messages').select('*').eq('id', id).single();
+    if (error) return null;
+    return data;
+  } catch (err) {
+    return null;
+  }
+}
+
+/**
  * Latest inbound message's wamid for a phone — needed to anchor Meta's
  * "mark read + show typing indicator" call to a real message id.
  */
@@ -1026,6 +1040,7 @@ async function dismissNotificationsByIds(ids, phone) {
 module.exports = {
   saveMessage,
   ensureContact,
+  getMessageById,
   getLeadSummary,
   getAiContext,
   saveAiAnalysis,

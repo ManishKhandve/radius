@@ -881,18 +881,17 @@ async function handleMetaMessage(m, senderName) {
   // The customer gets a single "an agent will help you" notice the first
   // time they message while paused, then nothing until /release is hit.
   const paused = await isPaused(phone);
-  const savedMsg = await chatStore.saveMessage(phone, senderName, 'inbound', msgType === 'image' || msgType === 'document' ? `[${msgType}] ${text}` : text, m.id || null, 'delivered');
+  await chatStore.saveMessage(phone, senderName, 'inbound', msgType === 'image' || msgType === 'document' ? `[${msgType}] ${text}` : text, m.id || null, 'delivered');
 
   // Alert the CRM + admin about the new incoming message.
   notifyNewInboundMessage(phone, senderName, text, msgType);
 
-  // AI layer: fire-and-forget, never blocks message delivery. Hindi/Hinglish
-  // transcription runs per-message; full chat analysis (extraction,
-  // suggestions, locality check, etc.) is debounced per phone.
+  // AI layer: fire-and-forget, never blocks message delivery. Full chat
+  // analysis (extraction, suggestions, locality check, etc.) is debounced
+  // per phone. Hindi/Hinglish transcription used to run automatically on
+  // every matching message here — now on-demand only (🌐 button in the
+  // chat, see /api/ai/translate/:messageId) to cut unbounded AI call volume.
   if (msgType === 'text' && text) {
-    if (savedMsg && savedMsg.id) {
-      aiAssistant.translateIfNeeded(savedMsg.id, text).catch(err => log('error', 'ai', 'translate failed:', err.message));
-    }
     aiAssistant.scheduleAnalysis(phone, { localityNames: PUNE_LOCALITY_NAMES });
   }
 
@@ -1197,20 +1196,27 @@ app.get('/api/lead-summary/:phone', authMiddleware, async (req, res) => {
 
 // ─── AI Assistant (per chat) ──────────────────────────────────
 // Read-only, cached view — never makes a blocking AI call, so opening a
-// chat stays instant. A background analysis is kicked off so the NEXT
-// poll has fresh data (same debounce as the webhook-triggered one).
+// chat stays instant. A background analysis is kicked off ONLY if this
+// chat actually has a message newer than its last analysis — the open-chat
+// poll hits this every ~20s, so without this check a long-idle open chat
+// would re-trigger a full AI analysis every ~20s for no new data (this was
+// the single biggest source of avoidable AI call volume).
 app.get('/api/ai/insights/:phone', authMiddleware, async (req, res) => {
   const { phone } = req.params;
   if (!isValidPhone(phone)) return res.status(400).json({ ok: false, error: 'Invalid phone number format' });
   try {
     const [contactRes, suggestions] = await Promise.all([
       wfStore.supabase.from('contacts')
-        .select('ai_extracted, lead_category, locality_verification, ai_last_analyzed_at')
+        .select('ai_extracted, lead_category, locality_verification, ai_last_analyzed_at, last_message_at')
         .eq('phone', phone).limit(1),
       chatStore.getAiSuggestions(phone),
     ]);
     const contact = (contactRes.data && contactRes.data[0]) || null;
-    aiAssistant.scheduleAnalysis(phone, { localityNames: PUNE_LOCALITY_NAMES });
+    const hasNewActivity = contact && contact.last_message_at &&
+      (!contact.ai_last_analyzed_at || new Date(contact.last_message_at) > new Date(contact.ai_last_analyzed_at));
+    if (hasNewActivity) {
+      aiAssistant.scheduleAnalysis(phone, { localityNames: PUNE_LOCALITY_NAMES });
+    }
     res.json({
       ok: true,
       extracted: (contact && contact.ai_extracted) || {},
@@ -1219,6 +1225,23 @@ app.get('/api/ai/insights/:phone', authMiddleware, async (req, res) => {
       lastAnalyzedAt: (contact && contact.ai_last_analyzed_at) || null,
       suggestions,
     });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+// On-demand translation for a single inbound message (🌐 button in the
+// chat). Automatic per-message translation was removed to cut AI call
+// volume — this now fires only when an agent explicitly asks for it.
+app.post('/api/ai/translate/:messageId', authMiddleware, async (req, res) => {
+  const { messageId } = req.params;
+  if (!messageId) return res.status(400).json({ ok: false, error: 'Missing messageId' });
+  try {
+    const msg = await chatStore.getMessageById(messageId);
+    if (!msg) return res.status(404).json({ ok: false, error: 'Message not found' });
+    const translated = await aiAssistant.translateIfNeeded(messageId, msg.content, /* force */ true);
+    if (!translated) return res.json({ ok: false, error: 'AI translation is not available right now' });
+    res.json({ ok: true });
   } catch (err) {
     res.status(500).json({ ok: false, error: err.message });
   }

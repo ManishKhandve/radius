@@ -191,13 +191,19 @@ function looksHindiOrHinglish(text) {
 }
 
 /**
- * Detects Hindi/Hinglish in a single inbound message and, if found, stores
- * an English transcription alongside the original (never replacing it).
- * Fire-and-forget from the webhook handler — never blocks message delivery.
+ * Detects Hindi/Hinglish in a single message and, if found, stores an
+ * English transcription alongside the original (never replacing it).
+ * `force` skips the heuristic gate — used by the on-demand 🌐 button, where
+ * an agent explicitly asked for a translation and a silent no-op on a
+ * heuristic miss would look like the button did nothing.
+ * Returns true only if a translation was actually written, so callers (the
+ * on-demand endpoint) can tell the agent when it silently couldn't run
+ * (e.g. the circuit breaker is open) instead of leaving a button hanging.
  */
-async function translateIfNeeded(messageId, text) {
+async function translateIfNeeded(messageId, text, force = false) {
   try {
-    if (!messageId || !looksHindiOrHinglish(text)) return;
+    if (!messageId || !text) return false;
+    if (!force && !looksHindiOrHinglish(text)) return false;
     const raw = await callOpenRouter([
       {
         role: 'system',
@@ -205,12 +211,14 @@ async function translateIfNeeded(messageId, text) {
       },
       { role: 'user', content: String(text).slice(0, 2000) },
     ]);
-    if (!raw) return;
+    if (!raw) return false;
     const parsed = safeParseJson(raw);
-    if (!parsed || !parsed.english) return;
+    if (!parsed || !parsed.english) return false;
     await chatStore.saveMessageTranslation(messageId, String(parsed.english).slice(0, 4000), String(parsed.language || 'hi').slice(0, 20));
+    return true;
   } catch (err) {
     console.error('[ai-assistant] translateIfNeeded error:', err.message);
+    return false;
   }
 }
 
@@ -240,8 +248,11 @@ function summarizeLeadMatch(leadMatch) {
 
 // Per-phone debounce so a burst of messages triggers one analysis call,
 // not one per message. Mirrors the shape of index.js's runQueued map.
+// 25s (not the original 8s) so a customer typing several short messages in
+// a row — common mid-conversation — collapses into one analysis call
+// instead of several.
 const analysisTimers = new Map();
-const ANALYSIS_DEBOUNCE_MS = 8000;
+const ANALYSIS_DEBOUNCE_MS = 25000;
 
 function scheduleAnalysis(phone, opts = {}) {
   if (!phone) return;
