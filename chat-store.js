@@ -42,6 +42,7 @@ async function upsertContact(phone, name, direction) {
 
     if (direction === 'inbound') {
       payload.label = 'unread';
+      payload.unread_count = (existing?.unread_count || 0) + 1;
       if (existing && existing.abandonment_drip_stage === 99) {
         payload.abandonment_drip_stage = 99;
       } else {
@@ -162,9 +163,12 @@ async function setBotPause(phone, durationHours) {
  */
 async function updateContactLabel(phone, label) {
   try {
+    const payload = { label: label };
+    if (label === 'read') payload.unread_count = 0;
+
     const { error } = await supabase
       .from('contacts')
-      .update({ label: label })
+      .update(payload)
       .eq('phone', phone);
 
     if (error) console.error('[chat-store] error updating label:', error);
