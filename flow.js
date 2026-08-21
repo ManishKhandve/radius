@@ -682,9 +682,14 @@ async function handleMessage(msg) {
   const isConnectTeam = cleanBody === 'connect_team' || cleanBody === 'connect with team' || title === 'connect with team';
   
   // --- Abandonment Drip Campaign Interceptions ---
-  const isDripBook = cleanBody === 'drip_book' || cleanBody === 'book' || title === 'book';
-  const isDripCancel = cleanBody === 'drip_cancel' || cleanBody === 'cancel' || title === 'cancel';
-  const isDripCallback = cleanBody === 'drip_callback' || cleanBody === 'request call back' || title === 'request call back';
+  // The drip_* prefixed IDs always fire (they come from template button taps).
+  // The generic keywords ('cancel', 'book', etc.) only fire when NO active
+  // session exists — otherwise they'd hijack mid-flow inputs (e.g. a customer
+  // typing "cancel" in a name field would nuke their session).
+  const hasActiveSession = sessions.has(senderId);
+  const isDripBook = cleanBody === 'drip_book' || (!hasActiveSession && (cleanBody === 'book' || title === 'book'));
+  const isDripCancel = cleanBody === 'drip_cancel' || (!hasActiveSession && (cleanBody === 'cancel' || title === 'cancel'));
+  const isDripCallback = cleanBody === 'drip_callback' || (!hasActiveSession && (cleanBody === 'request call back' || title === 'request call back'));
 
   if (isDripCancel) {
       clearSession(senderId);
@@ -953,7 +958,7 @@ async function processState(session, body, senderId, msg) {
 
       // Save lead immediately (fire-and-forget) so abandoned cleaning flows
       // still leave a record for follow-up.
-      const bid = `CB${Date.now().toString().slice(-5)}`;
+      const bid = `CB${Date.now().toString().slice(-8)}`;
       session.data.cleaningBookingId = bid;
       (async () => {
         try {
@@ -1854,47 +1859,6 @@ async function processState(session, body, senderId, msg) {
       return [config.errorMessage];
     }
   }
-}
-
-function finishCleaning(session, senderId) {
-  const d = session.data;
-
-  // Upgrade the existing 'New Lead' row to 'Confirmed' with full details.
-  // If for some reason the lead row wasn't created (rare), fall back to a
-  // fresh append so we don't lose the booking.
-  (async () => {
-    try {
-      if (d.cleaningBookingId) {
-        await sheets.updateCleaningBooking(d.cleaningBookingId, {
-          details: d.cleaningDetails || "N/A",
-          location: d.cleaningLocation,
-          preferredDate: d.cleaningDate,
-          estimatedPrice: d.cleaningPrice,
-          status: "Confirmed",
-        });
-      } else {
-        const bid = `CB${Date.now().toString().slice(-5)}`;
-        await sheets.appendCleaningBooking({
-          bookingId: bid,
-          customerName: d.contactName,
-          whatsappNumber: d.whatsappNumber,
-          serviceType: d.cleaningServiceType,
-          details: d.cleaningDetails || "N/A",
-          location: d.cleaningLocation,
-          preferredDate: d.cleaningDate,
-          estimatedPrice: d.cleaningPrice,
-          status: "Confirmed",
-          source: d.isBroadcast ? "Broadcast" : "WhatsApp Bot",
-          language: d.lang,
-        });
-      }
-    } catch (e) { console.error("[flow] cleaning booking finalize err:", e.message); }
-  })();
-
-  const msg = config.cleaningThanksMessage[session.data.lang];
-  const adminAlert = config.adminCleaningAlert(session.data);
-  clearSession(senderId);
-  return [msg, { _adminAlert: adminAlert }];
 }
 
 module.exports = { handleMessage, activeSessionCount, clearSession, sessions, migrateIdentity, restartIntent, isAdMessage };

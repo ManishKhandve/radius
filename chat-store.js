@@ -1,5 +1,6 @@
 require('dotenv').config();
 const { createClient } = require('@supabase/supabase-js');
+const crypto = require('crypto');
 
 // Initialize Supabase Client
 const supabaseUrl = process.env.SUPABASE_URL;
@@ -299,23 +300,45 @@ async function getContactByPhone(phone) {
 }
 
 /**
+ * Hash a password with SHA-256 (deterministic, no external dependency).
+ */
+function hashPassword(pw) {
+  return crypto.createHash('sha256').update(String(pw)).digest('hex');
+}
+
+/**
  * Log in a user.
+ * Compares against the SHA-256 hash of the supplied password. For backward
+ * compatibility with legacy plaintext passwords already stored in the DB,
+ * if the hash doesn't match but the raw value does, the row is silently
+ * upgraded to the hashed form so subsequent logins use the hash.
  */
 async function loginUser(username, password) {
   try {
     const { data, error } = await supabase
       .from('users')
-      .select('id, username, role')
+      .select('id, username, role, password_hash')
       .eq('username', username)
-      .eq('password_hash', password)
       .single();
 
     if (error || !data) return null;
 
+    const hashed = hashPassword(password);
+
+    if (data.password_hash === hashed) {
+      // Already using hashed password — good
+    } else if (data.password_hash === password) {
+      // Legacy plaintext match — auto-upgrade to hash
+      await supabase.from('users').update({ password_hash: hashed }).eq('id', data.id);
+      console.log(`[chat-store] auto-upgraded password hash for ${username}`);
+    } else {
+      return null; // neither hash nor plaintext matched
+    }
+
     // Update last login
     await supabase.from('users').update({ last_login_at: new Date().toISOString() }).eq('id', data.id);
 
-    return data;
+    return { id: data.id, username: data.username, role: data.role };
   } catch (err) {
     console.error('[chat-store] login exception:', err.message);
     return null;

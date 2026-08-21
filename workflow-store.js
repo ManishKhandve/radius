@@ -142,8 +142,21 @@ async function createRun(workflowId, trigger, total) {
 
 async function bumpRun(runId, field) {
   try {
-    const { data } = await supabase.from('workflow_runs').select(field).eq('id', runId).single();
-    if (data) await supabase.from('workflow_runs').update({ [field]: (data[field] || 0) + 1 }).eq('id', runId);
+    // Atomic increment: single UPDATE that reads and writes in one statement.
+    // The old read-then-write could undercount when two tasks for the same run
+    // are processed concurrently (e.g. across server instances or future
+    // parallelism changes).  PostgREST doesn't support `SET x = x + 1`
+    // directly, but we can achieve the same via a Postgres function call.
+    // Fallback: the sequential `for...await` in tick() makes the read-then-
+    // write safe in a single-process deployment, so degrade gracefully.
+    const { error } = await supabase.rpc('increment_field', {
+      table_name: 'workflow_runs', row_id: runId, field_name: field,
+    });
+    if (error) {
+      // RPC not available — fall back to read-then-write (safe in single process)
+      const { data } = await supabase.from('workflow_runs').select(field).eq('id', runId).single();
+      if (data) await supabase.from('workflow_runs').update({ [field]: (data[field] || 0) + 1 }).eq('id', runId);
+    }
   } catch { /* stats are best-effort */ }
 }
 
@@ -173,8 +186,18 @@ async function listRuns(workflowId, limit = 25) {
 // ─── Tasks (per-recipient walker state) ─────────────────────
 async function createTasks(rows) {
   if (!rows.length) return;
-  const { error } = await supabase.from('workflow_tasks').insert(rows);
-  if (error) warnMissing(error);
+  // Supabase/PostgREST rejects oversized payloads — large audiences (100+
+  // recipients) silently fail as a single insert, leaving zero tasks and
+  // causing the run to finish immediately. Chunk into small batches.
+  const BATCH = 50;
+  for (let i = 0; i < rows.length; i += BATCH) {
+    const chunk = rows.slice(i, i + BATCH);
+    const { error } = await supabase.from('workflow_tasks').insert(chunk);
+    if (error) {
+      warnMissing(error);
+      console.error(`[workflow-store] createTasks batch ${Math.floor(i / BATCH) + 1}/${Math.ceil(rows.length / BATCH)} failed (${chunk.length} rows):`, error.message);
+    }
+  }
 }
 
 async function dueTasks(limit = 40) {
