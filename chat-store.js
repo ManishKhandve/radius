@@ -47,6 +47,13 @@ async function upsertContact(phone, name, direction) {
       } else {
         payload.abandonment_drip_stage = 0;
       }
+    } else if (direction === 'outbound') {
+      // Overwrite the DB defaults so automated broadcasts don't spawn
+      // hundreds of "unread" "New Leads" in the UI.
+      if (!existing) {
+        payload.label = 'read';
+        payload.lead_status = 'Contacted';
+      }
     }
 
     const { error } = await supabase
