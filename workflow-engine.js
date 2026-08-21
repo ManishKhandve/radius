@@ -231,7 +231,12 @@ async function resolveAudience(node) {
     if (!phone || seen.has(phone)) continue;
     seen.add(phone);
     // contacts has no numeric id (phone is the key) — fetchRecord uses phone.
-    out.push({ phone, name: r[NAME_FIELD[table]] || 'Customer', source: table, record_id: table === 'contacts' ? null : (r.id ?? null) });
+    let recId = null;
+    if (table !== 'contacts' && r.id) {
+      if (typeof r.id === 'number') recId = r.id;
+      else if (typeof r.id === 'string' && /^\\d+$/.test(r.id)) recId = parseInt(r.id, 10);
+    }
+    out.push({ phone, name: r[NAME_FIELD[table]] || 'Customer', source: table, record_id: recId });
   }
   return out;
 }
