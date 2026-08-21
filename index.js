@@ -904,8 +904,9 @@ async function handleMetaMessage(m, senderName) {
       console.log(`[pause] ${phone} → skipping bot reply (agent takeover)`);
       if (entry && !entry.notified) {
         entry.notified = true;
-        watiSend(phone, "👤 An agent from our team will reply to you shortly. Thanks for your patience!")
-          .catch(() => {});
+        // The user specifically requested this automated message be disabled.
+        // watiSend(phone, "👤 An agent from our team will reply to you shortly. Thanks for your patience!")
+        //  .catch(() => {});
       }
       return;
     }
