@@ -3810,18 +3810,60 @@
                 const isLateReply = isReplyLate && idx === lastInboundIdx;
                 const className = 'msg-bubble ' + (item.direction === 'inbound' ? 'msg-in' : 'msg-out') + (isLateReply ? ' msg-late' : '');
                 let textHtml = '';
-                // Special render for WhatsApp templates — card with name, header hint and actual customer view
+                // Special render for WhatsApp templates — card with live Meta body (if fetched) + variable render
                 if (/^\[Template\]/i.test(item.content)) {
                     const tplName = item.content.replace(/^\[Template\]\s*/i,'').trim().split(' ')[0] || 'template';
                     const extra = item.content.replace(/^\[Template\]\s*\S+/,'').trim();
-                    // Try to show header/media hint if present in extra (e.g. " | header: https://...")
-                    const headerHint = extra ? extra.replace(/</g,'&lt;').replace(/>/g,'&gt;') : '';
-                    textHtml = `<div style="border:1.5px solid #10b981; border-radius:10px; overflow:hidden; background:#f0fdf4; min-width:220px;">`
+                    // Extract {{1}} var value from saved extra like " — {{1}}=Roohani | header: https://..."
+                    let varVal = '';
+                    const varMatch = extra.match(/\{\{1\}\}\s*=\s*([^|]+)/);
+                    if (varMatch) varVal = varMatch[1].trim();
+                    let headerUrl = '';
+                    const hdrMatch = extra.match(/header:\s*(\S+)/);
+                    if (hdrMatch) headerUrl = hdrMatch[1].trim();
+                    // Look up live template body from Meta (GET /api/templates cache)
+                    let bodyHtml = '';
+                    let hdrHtml = '';
+                    const tpl = templateMap.get(tplName);
+                    if (tpl && Array.isArray(tpl.components)) {
+                      const bodyComp = tpl.components.find(function(c){ return c.type === 'BODY'; });
+                      const headComp = tpl.components.find(function(c){ return c.type === 'HEADER'; });
+                      if (bodyComp && bodyComp.text) {
+                        let bodyText = String(bodyComp.text);
+                        if (varVal) bodyText = bodyText.replace(/\{\{1\}\}/g, varVal);
+                        bodyText = bodyText.replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/\n/g,'<br>');
+                        bodyHtml = `<div style="margin-top:8px; padding:8px 10px; background:#fff; border:1px solid #bbf7d0; border-radius:8px; font-size:12.5px; line-height:1.5; color:#0f172a; white-space:pre-wrap; word-break:break-word;">${bodyText}</div>`;
+                      }
+                      // Header media preview
+                      const hdrUrl = headerUrl || (headComp && headComp.example && headComp.example.header_handle && headComp.example.header_handle[0]) || '';
+                      // Use the saved headerUrl as preview if image/video
+                      const previewUrl = headerUrl || (headComp && headComp.format === 'IMAGE' ? (tpl._headerUrl || '') : '');
+                      if (previewUrl) {
+                        const isVid = /\.mp4(\?|$)/i.test(previewUrl) || /\.mov(\?|$)/i.test(previewUrl);
+                        if (isVid) hdrHtml = `<div style="margin-top:8px; border-radius:8px; overflow:hidden; border:1px solid #bbf7d0;"><video src="${previewUrl.replace(/"/g,'&quot;')}" controls style="width:100%; max-height:180px; display:block; background:#000;"></video></div>`;
+                        else if (/^https?:\/\//i.test(previewUrl)) hdrHtml = `<div style="margin-top:8px; border-radius:8px; overflow:hidden; border:1px solid #bbf7d0;"><img src="${previewUrl.replace(/"/g,'&quot;')}" style="width:100%; max-height:180px; object-fit:cover; display:block;" loading="lazy" onerror="this.style.display='none'"></div>`;
+                        else hdrHtml = `<div style="font-size:11px; color:#475569; margin-top:4px; word-break:break-all;">header: ${previewUrl.replace(/</g,'&lt;').replace(/>/g,'&gt;')}</div>`;
+                      }
+                      if (headComp && !previewUrl) {
+                        const fmt = headComp.format || 'TEXT';
+                        if (headComp.text) {
+                          let ht = String(headComp.text); if(varVal) ht = ht.replace(/\{\{1\}\}/g, varVal);
+                          hdrHtml = `<div style="font-size:12px; font-weight:600; color:#0f172a; margin-top:6px; padding:6px 8px; background:#fff; border-radius:6px; border:1px dashed #bbf7d0;">${ht.replace(/</g,'&lt;').replace(/>/g,'&gt;')}</div>`;
+                        } else if (fmt !== 'TEXT') {
+                          hdrHtml = `<div style="font-size:11px; color:#475569; margin-top:4px;">[${fmt} header]</div>`;
+                        }
+                      }
+                    }
+                    const fallbackHint = !bodyHtml ? `<div style="font-size:11px; color:#64748b; margin-top:6px; border-top:1px dashed #bbf7d0; padding-top:6px;">Exact approved body will appear here once Render env credentials are active (GET /api/templates) — currently showing name + variable only.</div>` : '';
+                    const headerHint = !hdrHtml && extra ? `<div style="font-size:11px; color:#475569; margin-top:4px; word-break:break-all;">${extra.replace(/</g,'&lt;').replace(/>/g,'&gt;')}</div>` : '';
+                    textHtml = `<div style="border:1.5px solid #10b981; border-radius:10px; overflow:hidden; background:#f0fdf4; min-width:240px; max-width:360px;">`
                         + `<div style="background:#10b981; color:#fff; padding:6px 10px; font-size:11px; font-weight:700; letter-spacing:0.4px;">📄 WHATSAPP TEMPLATE</div>`
                         + `<div style="padding:10px 12px;">`
                         + `<div style="font-weight:700; font-size:13px; color:#0f172a; word-break:break-all;">${tplName.replace(/</g,'&lt;').replace(/>/g,'&gt;')}</div>`
-                        + (headerHint ? `<div style="font-size:11px; color:#475569; margin-top:4px; word-break:break-all;">${headerHint}</div>` : '')
-                        + `<div style="font-size:11px; color:#64748b; margin-top:6px; border-top:1px dashed #bbf7d0; padding-top:6px;">This is what the customer received — approved Meta template. Variables rendered on WhatsApp (e.g. {{1}} = name).</div>`
+                        + hdrHtml
+                        + bodyHtml
+                        + headerHint
+                        + fallbackHint
                         + `</div></div>`;
                 } else {
                     textHtml = item.content
@@ -4019,9 +4061,25 @@
     function closeCampaignContactsLive(){ document.getElementById('campaignContactsModalLive').style.display='none'; }
     document.addEventListener('keydown', function(e){ if(e.key==='Escape') closeCampaignContactsLive(); });
 
+    // Live Meta templates — fetched from GET /api/templates (Render env) for exact body preview
+    let templateMap = new Map();
+    async function loadTemplateMap(){
+      try{
+        const res = await authFetch('/api/templates');
+        const j = await res.json();
+        if(j.ok && Array.isArray(j.templates)){
+          j.templates.forEach(function(t){
+            if(t.status === 'APPROVED' || !templateMap.has(t.name)) templateMap.set(t.name, t);
+          });
+          if(currentPhone) loadMessages();
+        }
+      }catch(e){}
+    }
+
     loadUsers();
     loadQuickReplies();
     loadContacts();
+    loadTemplateMap();
     
     if (window.location.hash === '#analytics') {
         showAnalyticsView();

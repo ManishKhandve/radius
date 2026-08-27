@@ -1170,6 +1170,29 @@ app.get('/api/analytics', authMiddleware, async (req, res) => {
   res.json({ ok: true, success: true, metrics: readStats.campaigns, today, totals: readStats.totals });
 });
 
+// Live approved templates from Meta (Render env) — cached 5 min
+let _tmplCache = { at: 0, data: null, err: null };
+app.get('/api/templates', authMiddleware, async (req, res) => {
+  const now = Date.now();
+  if (_tmplCache.data && (now - _tmplCache.at) < 5*60*1000) return res.json({ ok:true, templates: _tmplCache.data, cached:true });
+  if (!META_ACCESS_TOKEN || !META_PHONE_NUMBER_ID) return res.json({ ok:true, templates: [], warning:'Meta not configured (MOCK mode)' });
+  try {
+    let wabaId = process.env.META_WABA_ID || process.env.WABA_ID || '';
+    if (!wabaId) {
+      const r = await fetch(`${META_GRAPH_BASE}/${META_PHONE_NUMBER_ID}?fields=whatsapp_business_account`, { headers:{ 'Authorization': `Bearer ${META_ACCESS_TOKEN}` }});
+      const j = await r.json();
+      wabaId = j?.whatsapp_business_account?.id || j?.id || '';
+    }
+    if (!wabaId) return res.json({ ok:false, error:'WABA_ID not found — set META_WABA_ID in Render env or check phone number ID' });
+    const url = `${META_GRAPH_BASE}/${wabaId}/message_templates?fields=name,status,language,category,components&limit=100`;
+    const resp = await fetch(url, { headers:{ 'Authorization': `Bearer ${META_ACCESS_TOKEN}` }});
+    const j = await resp.json();
+    if (j.error) { _tmplCache = { at: now, data: null, err: j.error }; return res.status(500).json({ ok:false, error: j.error }); }
+    _tmplCache = { at: now, data: j.data || [], err: null };
+    res.json({ ok:true, templates: _tmplCache.data, cached:false });
+  } catch(e){ _tmplCache = { at: now, data: null, err: e.message }; res.status(500).json({ ok:false, error:e.message }); }
+});
+
 app.get('/api/chat/messages/:phone', authMiddleware, async (req, res) => {
   const { phone } = req.params;
   if (!isValidPhone(phone)) return res.status(400).json({ ok: false, error: 'Invalid phone number format' });
