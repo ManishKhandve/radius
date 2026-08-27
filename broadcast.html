@@ -711,7 +711,73 @@
                     <div class="progress-bar-fill" id="progressBar"></div>
                 </div>
 
+                <!-- Read receipts (live WhatsApp delivered/read via webhook) -->
+                <div id="readReceiptRow" style="margin-top:16px; border:1px solid var(--border,#e5e7eb); border-radius:12px; padding:14px; background:#f8fafc;">
+                    <div style="font-weight:700; font-size:13px; margin-bottom:10px; display:flex; align-items:center; gap:6px;">
+                        <span style="font-size:14px;">✓✓</span> Read Receipts <span style="font-weight:400; opacity:0.6; font-size:11px;">(live via WhatsApp — updates as recipients read)</span>
+                    </div>
+                    <div class="analytics-grid" style="margin-bottom:0;">
+                        <div class="analytic-box">
+                            <div class="analytic-label">WhatsApp Delivered</div>
+                            <div class="analytic-value" id="statDelivered" style="color:#0284c7;">0</div>
+                        </div>
+                        <div class="analytic-box">
+                            <div class="analytic-label">Read ✓✓</div>
+                            <div class="analytic-value" id="statRead" style="color:var(--primary);">0</div>
+                        </div>
+                        <div class="analytic-box">
+                            <div class="analytic-label">Read Rate</div>
+                            <div class="analytic-value" id="statReadRate" style="color:var(--indigo);">-</div>
+                        </div>
+                        <div class="analytic-box">
+                            <div class="analytic-label">Replied</div>
+                            <div class="analytic-value" id="statReplied" style="color:#4f46e5;">0</div>
+                        </div>
+                    </div>
+                </div>
+
                 <div class="console-log" id="consoleLog"></div>
+            </div>
+
+            <!-- All-time read stats (always visible, not just during campaign) -->
+            <div class="card" id="allTimeReadCard">
+                <h3>
+                    <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path><path stroke-linecap="round" stroke-linejoin="round" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"></path></svg>
+                    Total Read — All Campaigns & Templates
+                </h3>
+                <div class="analytics-grid">
+                    <div class="analytic-box">
+                        <div class="analytic-label">Total Sent</div>
+                        <div class="analytic-value" id="allSent" style="color:var(--text-main);">-</div>
+                    </div>
+                    <div class="analytic-box">
+                        <div class="analytic-label">Total Delivered</div>
+                        <div class="analytic-value" id="allDelivered" style="color:#0284c7;">-</div>
+                    </div>
+                    <div class="analytic-box">
+                        <div class="analytic-label">Total Read</div>
+                        <div class="analytic-value" id="allRead" style="color:var(--primary);">-</div>
+                    </div>
+                    <div class="analytic-box">
+                        <div class="analytic-label">Overall Read Rate</div>
+                        <div class="analytic-value" id="allReadRate" style="color:var(--indigo);">-</div>
+                    </div>
+                </div>
+                <div style="margin-top:14px; max-height:220px; overflow-y:auto; border:1px solid var(--border,#e5e7eb); border-radius:10px;">
+                    <table style="width:100%; border-collapse:collapse; font-size:12.5px;">
+                        <thead style="position:sticky; top:0; background:#f1f5f9; z-index:1;">
+                            <tr>
+                                <th style="text-align:left; padding:8px 10px; border-bottom:1px solid #e5e7eb;">Template / Campaign</th>
+                                <th style="text-align:center; padding:8px 10px; border-bottom:1px solid #e5e7eb;">Sent</th>
+                                <th style="text-align:center; padding:8px 10px; border-bottom:1px solid #e5e7eb;">Delivered</th>
+                                <th style="text-align:center; padding:8px 10px; border-bottom:1px solid #e5e7eb;">Read</th>
+                                <th style="text-align:center; padding:8px 10px; border-bottom:1px solid #e5e7eb;">Read %</th>
+                                <th style="text-align:center; padding:8px 10px; border-bottom:1px solid #e5e7eb;">Replied</th>
+                            </tr>
+                        </thead>
+                        <tbody id="campaignBreakdown"><tr><td colspan="6" style="text-align:center; padding:18px; opacity:0.6;">Loading…</td></tr></tbody>
+                    </table>
+                </div>
             </div>
         </div>
     </div>
@@ -990,28 +1056,97 @@
           statSuccess.textContent = data.success;
           statFailed.textContent = data.failed;
 
+          // Live read receipts from webhook (delivered/read/replied)
+          const rs = data.readStats || {};
+          const deliveredEl = document.getElementById('statDelivered');
+          const readEl = document.getElementById('statRead');
+          const readRateEl = document.getElementById('statReadRate');
+          const repliedEl = document.getElementById('statReplied');
+          if (deliveredEl) deliveredEl.textContent = rs.delivered != null ? rs.delivered : 0;
+          if (readEl) readEl.textContent = rs.read != null ? rs.read : 0;
+          if (repliedEl) repliedEl.textContent = rs.replied != null ? rs.replied : 0;
+          if (readRateEl) {
+            const d = rs.delivered || 0, r = rs.read || 0;
+            readRateEl.textContent = d > 0 ? Math.round((r / d) * 100) + '%' : '-';
+          }
+
           const progressPct = data.total > 0 ? Math.round((data.sent / data.total) * 100) : 0;
           progressBar.style.width = `${progressPct}%`;
 
           consoleLog.innerHTML = '';
-          (data.log || []).forEach(line => {
+          const logLines = (data.log || []).slice(-100);
+          logLines.forEach(line => {
             const div = document.createElement('div');
             div.className = 'log-line' + (line.includes('fail') || line.includes('error') || line.includes('rejected') ? ' error' : '');
             div.textContent = line;
             consoleLog.appendChild(div);
           });
+          if ((data.log || []).length > 100) {
+            const more = document.createElement('div');
+            more.className = 'log-line';
+            more.style.opacity = '0.5';
+            more.textContent = '… showing last 100 of ' + data.log.length + ' lines';
+            consoleLog.insertBefore(more, consoleLog.firstChild);
+          }
           consoleLog.scrollTop = consoleLog.scrollHeight;
 
           if (!data.running) {
             clearInterval(pollInterval);
+            pollInterval = null;
             addLogLine("[System] Campaign execution completed.");
+            // Refresh all-time read breakdown once campaign settles
+            loadAllTimeReadStats();
             resetUI();
           }
+
         } catch (e) {
           console.error("Polling status error:", e);
+          // On auth failure stop polling to avoid hammering server
+          if (e.message && e.message.includes('401')) {
+            clearInterval(pollInterval);
+            pollInterval = null;
+          }
         }
       }, 1000);
     }
+
+    async function loadAllTimeReadStats() {
+      try {
+        const res = await authFetch('/api/broadcast/read-stats');
+        const data = await res.json();
+        if (!data.ok) return;
+        const t = data.totals || {};
+        document.getElementById('allSent').textContent = t.sent ?? 0;
+        document.getElementById('allDelivered').textContent = t.delivered ?? 0;
+        document.getElementById('allRead').textContent = t.read ?? 0;
+        document.getElementById('allReadRate').textContent = (t.delivered > 0) ? t.readRate + '%' : '-';
+        const tbody = document.getElementById('campaignBreakdown');
+        const campaigns = data.campaigns || [];
+        if (campaigns.length === 0) {
+          tbody.innerHTML = '<tr><td colspan="6" style="text-align:center; padding:18px; opacity:0.6;">No campaigns yet — send a template to see read counts here.</td></tr>';
+        } else {
+          tbody.innerHTML = campaigns.map(function(c) {
+            return '<tr>' +
+              '<td style="padding:8px 10px; border-bottom:1px solid #f1f5f9; font-weight:600;">' + escapeHtml(c.campaign_name) + '</td>' +
+              '<td style="text-align:center; padding:8px 10px; border-bottom:1px solid #f1f5f9;">' + c.sent + '</td>' +
+              '<td style="text-align:center; padding:8px 10px; border-bottom:1px solid #f1f5f9;">' + c.delivered + '</td>' +
+              '<td style="text-align:center; padding:8px 10px; border-bottom:1px solid #f1f5f9; color:#059669; font-weight:700;">' + c.read + '</td>' +
+              '<td style="text-align:center; padding:8px 10px; border-bottom:1px solid #f1f5f9;">' + (c.delivered > 0 ? c.readRate + '%' : '-') + '</td>' +
+              '<td style="text-align:center; padding:8px 10px; border-bottom:1px solid #f1f5f9;">' + c.replied + '</td>' +
+              '</tr>';
+          }).join('');
+        }
+      } catch (e) {
+        console.error('loadAllTimeReadStats error:', e);
+      }
+    }
+    function escapeHtml(s) {
+      var d = document.createElement('div');
+      d.textContent = s;
+      return d.innerHTML;
+    }
+    // Load on page open so totals are visible without starting a campaign
+    loadAllTimeReadStats();
 
     function addLogLine(text, isError = false) {
       const time = new Date().toLocaleTimeString();

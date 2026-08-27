@@ -377,30 +377,119 @@ async function getUsers() {
   }
 }
 
+// Per-campaign promise chain to serialize increments and prevent lost updates
+// (Meta webhooks can fire concurrently for the same campaign).
+const _metricQueue = new Map();
+const _ALLOWED_METRICS = new Set(['sent', 'delivered', 'read', 'replied', 'booked']);
+
 async function updateBroadcastMetric(campaign_name, metric_type) {
-  // Chained metrics queue in production
-  return new Promise((resolve, reject) => {
-    supabase.from('broadcast_metrics').select(metric_type).eq('campaign_name', campaign_name).single()
-      .then(({ data }) => {
-        let currentVal = data ? data[metric_type] || 0 : 0;
-        if (!data) {
-          const insertData = { campaign_name, sent: 0, delivered: 0, read: 0, replied: 0, booked: 0 };
-          insertData[metric_type] = 1;
-          return supabase.from('broadcast_metrics').insert([insertData]);
-        } else {
-          return supabase.from('broadcast_metrics').update({ [metric_type]: currentVal + 1 }).eq('campaign_name', campaign_name);
-        }
-      })
-      .then(() => resolve())
-      .catch(reject);
+  if (!_ALLOWED_METRICS.has(metric_type)) {
+    console.error('[chat-store] updateBroadcastMetric rejected invalid metric:', metric_type);
+    return;
+  }
+  const prev = _metricQueue.get(campaign_name) || Promise.resolve();
+  const task = prev.then(async () => {
+    // Use maybeSingle() so "no row" is not an error — avoids noisy 406 logs
+    const { data, error: selErr } = await supabase
+      .from('broadcast_metrics')
+      .select(metric_type)
+      .eq('campaign_name', campaign_name)
+      .maybeSingle();
+    if (selErr) throw selErr;
+    if (!data) {
+      const insertData = { campaign_name, sent: 0, delivered: 0, read: 0, replied: 0, booked: 0 };
+      insertData[metric_type] = 1;
+      const { error: insErr } = await supabase.from('broadcast_metrics').insert([insertData]);
+      if (insErr) {
+        // Race: another serialized task may have inserted first — fallback to increment
+        if (insErr.code === '23505') {
+          const { data: retryData, error: retryErr } = await supabase
+            .from('broadcast_metrics').select(metric_type).eq('campaign_name', campaign_name).single();
+          if (retryErr) throw retryErr;
+          const cur = (retryData && retryData[metric_type]) || 0;
+          const { error: updErr } = await supabase.from('broadcast_metrics').update({ [metric_type]: cur + 1 }).eq('campaign_name', campaign_name);
+          if (updErr) throw updErr;
+        } else throw insErr;
+      }
+    } else {
+      const cur = data[metric_type] || 0;
+      const { error: updErr } = await supabase.from('broadcast_metrics').update({ [metric_type]: cur + 1 }).eq('campaign_name', campaign_name);
+      if (updErr) throw updErr;
+    }
+  }).catch((err) => {
+    console.error('[chat-store] updateBroadcastMetric failed:', campaign_name, metric_type, err.message);
+    throw err;
   });
+  // Chain next call after this one (swallow rejection so queue doesn't stall)
+  _metricQueue.set(campaign_name, task.catch(() => {}));
+  return task;
 }
 
 async function getBroadcastMetrics() {
   try {
-    const { data } = await supabase.from('broadcast_metrics').select('*').order('campaign_name', { ascending: false });
+    const { data } = await supabase.from('broadcast_metrics').select('*').order('campaign_name', { ascending: false }).limit(1000);
     return data || [];
   } catch(err) { return []; }
+}
+
+// ─── Read-receipt stats (additive — no existing logic touched) ──
+
+/**
+ * Counts outbound messages by WhatsApp status (sent/delivered/read/failed).
+ * Uses head-count queries so it never fetches row data — O(1) per status.
+ */
+async function getMessageStatusCounts() {
+  const statuses = ['sent', 'delivered', 'read', 'failed'];
+  const counts = { sent: 0, delivered: 0, read: 0, failed: 0, total: 0 };
+  try {
+    const results = await Promise.all(
+      statuses.map((s) =>
+        supabase.from('messages').select('id', { count: 'exact', head: true })
+          .eq('direction', 'outbound').eq('status', s)
+      )
+    );
+    statuses.forEach((s, i) => {
+      if (results[i].error) console.error('[chat-store] getMessageStatusCounts', s, 'error:', results[i].error.message);
+      counts[s] = results[i].count || 0;
+    });
+    const { count: total, error: totalErr } = await supabase.from('messages').select('id', { count: 'exact', head: true }).eq('direction', 'outbound');
+    if (totalErr) console.error('[chat-store] getMessageStatusCounts total error:', totalErr.message);
+    else counts.total = total || 0;
+  } catch (err) {
+    console.error('[chat-store] getMessageStatusCounts error:', err.message);
+  }
+  return counts;
+}
+
+/**
+ * Aggregated broadcast read stats: per-campaign + grand totals.
+ * Source of truth is broadcast_metrics (webhook delivered/read).
+ */
+async function getBroadcastReadStats() {
+  const metrics = await getBroadcastMetrics();
+  let totalSent = 0, totalDelivered = 0, totalRead = 0, totalReplied = 0, totalBooked = 0;
+  for (const m of metrics) {
+    totalSent += m.sent || 0;
+    totalDelivered += m.delivered || 0;
+    totalRead += m.read || 0;
+    totalReplied += m.replied || 0;
+    totalBooked += m.booked || 0;
+  }
+  const grandReadRate = totalDelivered > 0 ? Math.round((totalRead / totalDelivered) * 100) : 0;
+  const grandDeliveryRate = totalSent > 0 ? Math.round((totalDelivered / totalSent) * 100) : 0;
+  return {
+    totals: { sent: totalSent, delivered: totalDelivered, read: totalRead, replied: totalReplied, booked: totalBooked, readRate: grandReadRate, deliveryRate: grandDeliveryRate },
+    campaigns: metrics.map((m) => ({
+      campaign_name: m.campaign_name,
+      sent: m.sent || 0,
+      delivered: m.delivered || 0,
+      read: m.read || 0,
+      replied: m.replied || 0,
+      booked: m.booked || 0,
+      readRate: (m.delivered || 0) > 0 ? Math.round(((m.read || 0) / m.delivered) * 100) : 0,
+      deliveryRate: (m.sent || 0) > 0 ? Math.round(((m.delivered || 0) / m.sent) * 100) : 0,
+    })),
+  };
 }
 
 /**
@@ -1090,5 +1179,7 @@ module.exports = {
   getQuickReplies,
   addQuickReply,
   deleteQuickReply,
-  updateMessageStatus
+  updateMessageStatus,
+  getMessageStatusCounts,
+  getBroadcastReadStats
 };

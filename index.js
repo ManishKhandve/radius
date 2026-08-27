@@ -472,7 +472,8 @@ let activeCampaign = {
   sent: 0,
   success: 0,
   failed: 0,
-  log: []
+  log: [],
+  campaignName: null
 };
 
 // Meta Cloud API template sender
@@ -802,10 +803,11 @@ app.post('/wati-webhook', async (req, res) => {
         for (const st of value.statuses) {
           const wamid = st.id;
           const statusVal = st.status; // sent, delivered, read, failed
-          chatStore.updateMessageStatus(wamid, statusVal).catch(() => {});
+          if (isDuplicateStatus(wamid, statusVal)) continue;
+          chatStore.updateMessageStatus(wamid, statusVal).catch((e) => console.error('[webhook] updateMessageStatus fail:', e.message));
           const campaignName = wamidToCampaign.get(wamid);
           if (campaignName && ['sent', 'delivered', 'read'].includes(statusVal)) {
-            chatStore.updateBroadcastMetric(campaignName, statusVal).catch(() => {});
+            chatStore.updateBroadcastMetric(campaignName, statusVal).catch((e) => console.error('[webhook] updateBroadcastMetric fail:', e.message));
           }
         }
         if (!Array.isArray(value.messages)) continue;
@@ -1000,6 +1002,18 @@ function setWamidCampaign(wamid, campaignName) {
     const oldestKey = wamidToCampaign.keys().next().value;
     wamidToCampaign.delete(oldestKey);
   }
+}
+// Dedup for webhook status retries — Meta may redeliver same (wamid, status)
+const processedStatusIds = new Set();
+function isDuplicateStatus(wamid, status) {
+  const key = wamid + ':' + status;
+  if (processedStatusIds.has(key)) return true;
+  processedStatusIds.add(key);
+  if (processedStatusIds.size > 20000) {
+    const oldest = processedStatusIds.values().next().value;
+    processedStatusIds.delete(oldest);
+  }
+  return false;
 }
 
 // ─── Auth token cleanup (every 30 min) ─────────────────────
@@ -1769,6 +1783,7 @@ app.post('/api/broadcast', authMiddleware, (req, res) => {
     activeCampaign.sent = 0;
     activeCampaign.success = 0;
     activeCampaign.failed = 0;
+    activeCampaign.campaignName = templateName;
     
     const startTime = new Date().toLocaleTimeString();
     activeCampaign.log = [`[${startTime}] Broadcast started with ${recipients.length} recipients.`];
@@ -1851,8 +1866,39 @@ app.post('/api/broadcast', authMiddleware, (req, res) => {
   res.json({ success: true, message: 'Broadcast campaign started.' });
 });
 
-app.get('/api/broadcast/status', authMiddleware, (req, res) => {
-  res.json(activeCampaign);
+app.get('/api/broadcast/status', authMiddleware, async (req, res) => {
+  // Snapshot before any await to avoid torn read while broadcast loop mutates activeCampaign
+  const snap = { ...activeCampaign };
+  let readStats = null;
+  if (snap.campaignName) {
+    try {
+      const all = await chatStore.getBroadcastMetrics();
+      const row = all.find((r) => r.campaign_name === snap.campaignName);
+      if (row) readStats = { delivered: row.delivered || 0, read: row.read || 0, replied: row.replied || 0, booked: row.booked || 0 };
+    } catch (_) { /* best-effort */ }
+  }
+  res.json({ ...snap, readStats });
+});
+
+// ─── Read-receipt stats (additive — no existing route touched) ──
+app.get('/api/broadcast/read-stats', authMiddleware, async (req, res) => {
+  try {
+    const stats = await chatStore.getBroadcastReadStats();
+    res.json({ ok: true, success: true, ...stats });
+  } catch (e) {
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
+app.get('/api/messages/stats', authMiddleware, async (req, res) => {
+  try {
+    const counts = await chatStore.getMessageStatusCounts();
+    const readRate = counts.delivered > 0 ? Math.round((counts.read / counts.delivered) * 100) : 0;
+    const deliveryRate = counts.total > 0 ? Math.round((counts.delivered / counts.total) * 100) : 0;
+    res.json({ ok: true, success: true, counts: { ...counts, readRate, deliveryRate } });
+  } catch (e) {
+    res.status(500).json({ ok: false, error: e.message });
+  }
 });
 
 app.get('/api/quickreplies', authMiddleware, async (req, res) => {
