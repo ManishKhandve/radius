@@ -806,7 +806,7 @@ app.post('/wati-webhook', async (req, res) => {
           if (isDuplicateStatus(wamid, statusVal)) continue;
           chatStore.updateMessageStatus(wamid, statusVal).catch((e) => console.error('[webhook] updateMessageStatus fail:', e.message));
           const campaignName = wamidToCampaign.get(wamid);
-          if (campaignName && ['sent', 'delivered', 'read'].includes(statusVal)) {
+          if (campaignName && ['sent', 'delivered', 'read', 'failed'].includes(statusVal)) {
             chatStore.updateBroadcastMetric(campaignName, statusVal).catch((e) => console.error('[webhook] updateBroadcastMetric fail:', e.message));
           }
         }
@@ -1160,11 +1160,12 @@ app.get('/api/users', authMiddleware, async (req, res) => {
 });
 
 app.get('/api/analytics', authMiddleware, async (req, res) => {
-  const [metrics, today] = await Promise.all([
-    chatStore.getBroadcastMetrics(),
+  const [readStats, today] = await Promise.all([
+    chatStore.getBroadcastReadStats(),
     chatStore.getTodayStats(),
   ]);
-  res.json({ ok: true, success: true, metrics, today });
+  // readStats.campaigns includes failed; keep same shape as before but enriched
+  res.json({ ok: true, success: true, metrics: readStats.campaigns, today, totals: readStats.totals });
 });
 
 app.get('/api/chat/messages/:phone', authMiddleware, async (req, res) => {
@@ -1910,6 +1911,64 @@ app.get('/api/broadcast/campaign/:campaignName/contacts', authMiddleware, async 
     const contacts = await chatStore.getCampaignContacts(campaignName, status);
     res.json({ ok:true, success:true, campaignName, status, count: contacts.length, contacts });
   } catch(e) { res.status(500).json({ ok:false, error:e.message }); }
+});
+
+app.post('/api/broadcast/campaign/:campaignName/retry-failed', authMiddleware, async (req, res) => {
+  if (req.user.role !== 'admin') return res.status(403).json({ ok:false, error:'Admin only' });
+  if (activeCampaign.running) return res.status(400).json({ ok:false, error:'A broadcast is already running' });
+  const { campaignName } = req.params;
+  const { languageCode = 'en_US', headerUrl = null } = req.body || {};
+  try {
+    const failed = await chatStore.getCampaignContacts(campaignName, 'failed');
+    if (!failed || failed.length === 0) return res.status(400).json({ ok:false, error:'No failed numbers for this campaign' });
+    const recipients = failed.map(r => ({ phone: r.phone, name: r.name || 'Customer' }));
+    // Reuse the same broadcast machinery by delegating to the existing /api/broadcast handler logic
+    // Build a synthetic request to the broadcast loop (duplicate the async loop here to avoid recursion)
+    (async () => {
+      activeCampaign.running = true;
+      activeCampaign.total = recipients.length;
+      activeCampaign.sent = 0;
+      activeCampaign.success = 0;
+      activeCampaign.failed = 0;
+      activeCampaign.campaignName = campaignName;
+      const startTime = new Date().toLocaleTimeString();
+      activeCampaign.log = [`[${startTime}] Retry started for "${campaignName}" — ${recipients.length} failed numbers.`];
+      for (const r of recipients) {
+        if (!activeCampaign.running) { activeCampaign.log.push(`[${new Date().toLocaleTimeString()}] Retry cancelled.`); break; }
+        let cleanPhone = String(r.phone).replace(/\D/g, '');
+        if (cleanPhone.length === 10) cleanPhone = '91' + cleanPhone;
+        else if (cleanPhone.length === 11 && cleanPhone.startsWith('0')) cleanPhone = '91' + cleanPhone.slice(1);
+        const displayName = String(r.name || 'Customer').trim();
+        activeCampaign.sent++;
+        try {
+          const result = await watiSendTemplate(cleanPhone, campaignName, languageCode, [displayName], headerUrl);
+          if (result.ok) {
+            activeCampaign.success++;
+            activeCampaign.log.push(`[${new Date().toLocaleTimeString()}] Resent to ${displayName} (${cleanPhone}) — Success`);
+            if (result.body && result.body.messages && result.body.messages[0]) setWamidCampaign(result.body.messages[0].id, campaignName);
+            await chatStore.updateBroadcastMetric(campaignName, 'sent').catch(()=>{});
+            await chatStore.updateContactCRM(cleanPhone, { attribution_campaign: campaignName, campaign_replied: false, campaign_booked: false }).catch(()=>{});
+          } else {
+            activeCampaign.failed++;
+            let errMsg = result.error?.message || 'Rejected';
+            if (result.error?.error_data?.details) errMsg += ` Details: ${result.error.error_data.details}`;
+            activeCampaign.log.push(`[${new Date().toLocaleTimeString()}] Retry failed for ${displayName} (${cleanPhone}): ${errMsg}`);
+          }
+        } catch (err) {
+          activeCampaign.failed++;
+          activeCampaign.log.push(`[${new Date().toLocaleTimeString()}] Retry exception for ${displayName} (${cleanPhone}): ${err.message}`);
+        }
+        if (displayName && displayName !== 'Customer') {
+          try { await chatStore.ensureContact(cleanPhone, displayName, null); } catch(_){}
+        }
+        try { await addInvite(cleanPhone); } catch(_){}
+        await new Promise(rr=> setTimeout(rr, 200));
+      }
+      activeCampaign.running = false;
+      activeCampaign.log.push(`[${new Date().toLocaleTimeString()}] Retry completed. Success: ${activeCampaign.success}, Failed: ${activeCampaign.failed}`);
+    })();
+    res.json({ ok:true, success:true, count: recipients.length, message: `Retry started for ${recipients.length} numbers` });
+  } catch(e){ res.status(500).json({ ok:false, error:e.message }); }
 });
 
 app.get('/api/quickreplies', authMiddleware, async (req, res) => {

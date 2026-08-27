@@ -1620,13 +1620,14 @@
                             <th>Sent</th>
                             <th>Delivered</th>
                             <th>Read</th>
+                            <th>Failed</th>
                             <th>Replied</th>
                             <th>Booked</th>
                             <th>Read Conversion</th>
                         </tr>
                     </thead>
                     <tbody id="analyticsTableBody">
-                        <tr><td colspan="7" style="padding:32px; text-align:center; color:var(--text-muted);">Loading Analytics database...</td></tr>
+                        <tr><td colspan="8" style="padding:32px; text-align:center; color:var(--text-muted);">Loading Analytics database...</td></tr>
                     </tbody>
                 </table>
             </div>
@@ -2942,7 +2943,7 @@
         tbody.innerHTML = '';
 
         if (!data.metrics || data.metrics.length === 0) {
-            tbody.innerHTML = '<tr><td colspan="7" style="padding: 40px; text-align: center; color: var(--text-muted); font-size: 15px;">No broadcast campaigns found.</td></tr>';
+            tbody.innerHTML = '<tr><td colspan="8" style="padding: 40px; text-align: center; color: var(--text-muted); font-size: 15px;">No broadcast campaigns found.</td></tr>';
             document.getElementById('kpiCampaigns').innerText = 0;
             document.getElementById('kpiSent').innerText = 0;
             document.getElementById('kpiRead').innerText = 0;
@@ -2986,6 +2987,7 @@
                     <td style="padding: 16px 24px;">
                         <a href="#" onclick="openCampaignContactsLive('${cn}','read');return false" style="text-decoration:underline; cursor:pointer;"><span class="analytics-badge read">${m.read || 0}</span></a>
                     </td>
+                    <td style="padding: 16px 24px;"><a href="#" onclick="openCampaignContactsLive('${cn}','failed');return false" style="color:#f43f5e; font-weight:700; text-decoration:underline; cursor:pointer;">${m.failed || 0}</a></td>
                     <td style="padding: 16px 24px;">
                         <a href="#" onclick="openCampaignContactsLive('${cn}','replied');return false" style="text-decoration:underline; cursor:pointer;"><span class="analytics-badge replied">${m.replied || 0}</span></a>
                     </td>

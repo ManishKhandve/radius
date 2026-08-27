@@ -759,11 +759,11 @@
                         <div class="analytic-value" id="allRead" style="color:var(--primary);">-</div>
                     </div>
                     <div class="analytic-box">
-                        <div class="analytic-label">Overall Read Rate</div>
-                        <div class="analytic-value" id="allReadRate" style="color:var(--indigo);">-</div>
+                        <div class="analytic-label">Failed</div>
+                        <div class="analytic-value" id="allFailed" style="color:var(--error);">-</div>
                     </div>
                 </div>
-                <div style="margin-top:14px; max-height:220px; overflow-y:auto; border:1px solid var(--border,#e5e7eb); border-radius:10px;">
+                <div style="margin-top:14px; max-height:320px; overflow-y:auto; border:1px solid var(--border,#e5e7eb); border-radius:10px;">
                     <table style="width:100%; border-collapse:collapse; font-size:12.5px;">
                         <thead style="position:sticky; top:0; background:#f1f5f9; z-index:1;">
                             <tr>
@@ -771,11 +771,13 @@
                                 <th style="text-align:center; padding:8px 10px; border-bottom:1px solid #e5e7eb;">Sent</th>
                                 <th style="text-align:center; padding:8px 10px; border-bottom:1px solid #e5e7eb;">Delivered</th>
                                 <th style="text-align:center; padding:8px 10px; border-bottom:1px solid #e5e7eb;">Read</th>
+                                <th style="text-align:center; padding:8px 10px; border-bottom:1px solid #e5e7eb;">Failed</th>
                                 <th style="text-align:center; padding:8px 10px; border-bottom:1px solid #e5e7eb;">Read %</th>
                                 <th style="text-align:center; padding:8px 10px; border-bottom:1px solid #e5e7eb;">Replied</th>
+                                <th style="text-align:center; padding:8px 10px; border-bottom:1px solid #e5e7eb;">Retry</th>
                             </tr>
                         </thead>
-                        <tbody id="campaignBreakdown"><tr><td colspan="6" style="text-align:center; padding:18px; opacity:0.6;">Loading…</td></tr></tbody>
+                        <tbody id="campaignBreakdown"><tr><td colspan="8" style="text-align:center; padding:18px; opacity:0.6;">Loading…</td></tr></tbody>
                     </table>
                 </div>
             </div>
@@ -1119,21 +1121,29 @@
         document.getElementById('allSent').textContent = t.sent ?? 0;
         document.getElementById('allDelivered').textContent = t.delivered ?? 0;
         document.getElementById('allRead').textContent = t.read ?? 0;
-        document.getElementById('allReadRate').textContent = (t.delivered > 0) ? t.readRate + '%' : '-';
+        var failedEl = document.getElementById('allFailed');
+        if (failedEl) failedEl.textContent = t.failed ?? 0;
+        // Overall Read Rate no longer displayed as separate box — keep for old element if exists
+        var rateEl = document.getElementById('allReadRate');
+        if (rateEl) rateEl.textContent = (t.delivered > 0) ? t.readRate + '%' : '-';
         const tbody = document.getElementById('campaignBreakdown');
         const campaigns = data.campaigns || [];
         if (campaigns.length === 0) {
-          tbody.innerHTML = '<tr><td colspan="6" style="text-align:center; padding:18px; opacity:0.6;">No campaigns yet — send a template to see read counts here.</td></tr>';
+          tbody.innerHTML = '<tr><td colspan="8" style="text-align:center; padding:18px; opacity:0.6;">No campaigns yet — send a template to see read counts here.</td></tr>';
         } else {
           tbody.innerHTML = campaigns.map(function(c) {
             var safe = escapeHtml(c.campaign_name);
+            var failed = c.failed || 0;
+            var retryBtn = failed > 0 ? '<button onclick="retryFailed(\''+safe+'\')" style="padding:4px 10px; border-radius:6px; border:1px solid var(--error); color:var(--error); background:#fff; font-size:11px; font-weight:700; cursor:pointer;">↻ Retry</button>' : '<span style="opacity:0.35;">-</span>';
             return '<tr>' +
               '<td style="padding:8px 10px; border-bottom:1px solid #f1f5f9; font-weight:600;">' + safe + '</td>' +
               '<td style="text-align:center; padding:8px 10px; border-bottom:1px solid #f1f5f9;"><a href="#" onclick="openCampaignContacts(\''+safe+'\',\'sent\');return false" style="color:var(--text-main); font-weight:700; text-decoration:underline; text-underline-offset:2px; cursor:pointer;">' + c.sent + '</a></td>' +
               '<td style="text-align:center; padding:8px 10px; border-bottom:1px solid #f1f5f9;"><a href="#" onclick="openCampaignContacts(\''+safe+'\',\'delivered\');return false" style="color:#0284c7; font-weight:700; text-decoration:underline; text-underline-offset:2px; cursor:pointer;">' + c.delivered + '</a></td>' +
               '<td style="text-align:center; padding:8px 10px; border-bottom:1px solid #f1f5f9;"><a href="#" onclick="openCampaignContacts(\''+safe+'\',\'read\');return false" style="color:#059669; font-weight:700; text-decoration:underline; text-underline-offset:2px; cursor:pointer;">' + c.read + '</a></td>' +
+              '<td style="text-align:center; padding:8px 10px; border-bottom:1px solid #f1f5f9;"><a href="#" onclick="openCampaignContacts(\''+safe+'\',\'failed\');return false" style="color:var(--error); font-weight:700; text-decoration:underline; text-underline-offset:2px; cursor:pointer;">' + failed + '</a></td>' +
               '<td style="text-align:center; padding:8px 10px; border-bottom:1px solid #f1f5f9;">' + (c.delivered > 0 ? c.readRate + '%' : '-') + '</td>' +
               '<td style="text-align:center; padding:8px 10px; border-bottom:1px solid #f1f5f9;"><a href="#" onclick="openCampaignContacts(\''+safe+'\',\'replied\');return false" style="color:#4f46e5; font-weight:700; text-decoration:underline; text-underline-offset:2px; cursor:pointer;">' + c.replied + '</a></td>' +
+              '<td style="text-align:center; padding:8px 10px; border-bottom:1px solid #f1f5f9;">' + retryBtn + '</td>' +
               '</tr>';
           }).join('');
         }
@@ -1177,6 +1187,20 @@
     }
     function closeCampaignContacts(){ document.getElementById('campaignContactsModal').style.display='none'; }
     document.addEventListener('keydown', function(e){ if(e.key==='Escape') closeCampaignContacts(); });
+    async function retryFailed(campaignName){
+      var lang = (document.getElementById('languageCode') && document.getElementById('languageCode').value) || 'en_US';
+      var headerUrl = (document.getElementById('headerUrl') && document.getElementById('headerUrl').value.trim()) || null;
+      if(!confirm('Retry template \"'+campaignName+'\" to all FAILED numbers for this campaign? ('+lang+')')) return;
+      try{
+        var res = await authFetch('/api/broadcast/campaign/'+encodeURIComponent(campaignName)+'/retry-failed', {
+          method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({languageCode: lang, headerUrl: headerUrl})
+        });
+        var data = await res.json();
+        if(!data.ok) { alert('Retry failed: '+(data.error||'unknown')); return; }
+        alert('Retry started for '+data.count+' failed numbers. Monitor the log above.');
+        startStatusPolling();
+      }catch(e){ alert('Retry error: '+e.message); }
+    }
     // Load on page open so totals are visible without starting a campaign
     loadAllTimeReadStats();
 

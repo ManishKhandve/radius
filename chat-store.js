@@ -380,7 +380,7 @@ async function getUsers() {
 // Per-campaign promise chain to serialize increments and prevent lost updates
 // (Meta webhooks can fire concurrently for the same campaign).
 const _metricQueue = new Map();
-const _ALLOWED_METRICS = new Set(['sent', 'delivered', 'read', 'replied', 'booked']);
+const _ALLOWED_METRICS = new Set(['sent', 'delivered', 'read', 'replied', 'booked', 'failed']);
 
 async function updateBroadcastMetric(campaign_name, metric_type) {
   if (!_ALLOWED_METRICS.has(metric_type)) {
@@ -390,12 +390,16 @@ async function updateBroadcastMetric(campaign_name, metric_type) {
   const prev = _metricQueue.get(campaign_name) || Promise.resolve();
   const task = prev.then(async () => {
     // Use maybeSingle() so "no row" is not an error — avoids noisy 406 logs
-    const { data, error: selErr } = await supabase
-      .from('broadcast_metrics')
-      .select(metric_type)
-      .eq('campaign_name', campaign_name)
-      .maybeSingle();
-    if (selErr) throw selErr;
+    // If column doesn't exist yet (e.g. 'failed' before ALTER), skip gracefully
+    let selErr, data;
+    try {
+      const res = await supabase.from('broadcast_metrics').select(metric_type).eq('campaign_name', campaign_name).maybeSingle();
+      data = res.data; selErr = res.error;
+    } catch(e) { selErr = e; }
+    if (selErr) {
+      if (metric_type === 'failed' && String(selErr.message||'').includes('failed')) return; // column missing — counted dynamically instead
+      throw selErr;
+    }
     if (!data) {
       const insertData = { campaign_name, sent: 0, delivered: 0, read: 0, replied: 0, booked: 0 };
       insertData[metric_type] = 1;
@@ -467,23 +471,46 @@ async function getMessageStatusCounts() {
  */
 async function getBroadcastReadStats() {
   const metrics = await getBroadcastMetrics();
-  let totalSent = 0, totalDelivered = 0, totalRead = 0, totalReplied = 0, totalBooked = 0;
+  // Also compute failed per campaign from messages (source of truth for failures)
+  let failedByCampaign = {};
+  try {
+    const { data: msgs } = await supabase.from('messages').select('content,status').eq('direction','outbound').like('content','[Template]%').limit(2000);
+    (msgs || []).forEach(r => {
+      if (r.status !== 'failed') return;
+      const cn = String(r.content || '').replace('[Template]','').trim().split(' ')[0];
+      if (!cn) return;
+      failedByCampaign[cn] = (failedByCampaign[cn] || 0) + 1;
+    });
+    // Fallback: if >2000 messages truncated, do count query per campaign
+    if ((msgs || []).length === 2000) {
+      for (const m of metrics) {
+        if (failedByCampaign[m.campaign_name] == null) {
+          const { count } = await supabase.from('messages').select('id', {count:'exact', head:true})
+            .eq('direction','outbound').eq('status','failed').like('content', `[Template] ${m.campaign_name}%`);
+          failedByCampaign[m.campaign_name] = count || 0;
+        }
+      }
+    }
+  } catch(_) { /* best-effort */ }
+  let totalSent = 0, totalDelivered = 0, totalRead = 0, totalReplied = 0, totalBooked = 0, totalFailed = 0;
   for (const m of metrics) {
     totalSent += m.sent || 0;
     totalDelivered += m.delivered || 0;
     totalRead += m.read || 0;
     totalReplied += m.replied || 0;
     totalBooked += m.booked || 0;
+    totalFailed += failedByCampaign[m.campaign_name] || 0;
   }
   const grandReadRate = totalDelivered > 0 ? Math.round((totalRead / totalDelivered) * 100) : 0;
   const grandDeliveryRate = totalSent > 0 ? Math.round((totalDelivered / totalSent) * 100) : 0;
   return {
-    totals: { sent: totalSent, delivered: totalDelivered, read: totalRead, replied: totalReplied, booked: totalBooked, readRate: grandReadRate, deliveryRate: grandDeliveryRate },
+    totals: { sent: totalSent, delivered: totalDelivered, read: totalRead, replied: totalReplied, booked: totalBooked, failed: totalFailed, readRate: grandReadRate, deliveryRate: grandDeliveryRate },
     campaigns: metrics.map((m) => ({
       campaign_name: m.campaign_name,
       sent: m.sent || 0,
       delivered: m.delivered || 0,
       read: m.read || 0,
+      failed: failedByCampaign[m.campaign_name] || 0,
       replied: m.replied || 0,
       booked: m.booked || 0,
       readRate: (m.delivered || 0) > 0 ? Math.round(((m.read || 0) / m.delivered) * 100) : 0,
