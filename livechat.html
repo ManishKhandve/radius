@@ -4071,7 +4071,7 @@
     async function retryFailedLive(campaignName){
       if(currentRole !== 'admin'){ alert('Admin only'); return; }
       var tpl = templateMap.get(campaignName);
-      var lang = (tpl && tpl.language) ? tpl.language : 'en_US';
+      var lang = (tpl && tpl.language) ? tpl.language : 'en';
       var hdr = '';
       var needsMedia = false;
       if(tpl && Array.isArray(tpl.components)){

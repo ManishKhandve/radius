@@ -1941,7 +1941,7 @@ app.post('/api/broadcast/campaign/:campaignName/retry-failed', authMiddleware, a
   if (req.user.role !== 'admin') return res.status(403).json({ ok:false, error:'Admin only' });
   if (activeCampaign.running) return res.status(400).json({ ok:false, error:'A broadcast is already running' });
   const { campaignName } = req.params;
-  const { languageCode = 'en_US', headerUrl = null } = req.body || {};
+  const { languageCode = 'en', headerUrl = null } = req.body || {};
   try {
     const failed = await chatStore.getCampaignContacts(campaignName, 'failed');
     if (!failed || failed.length === 0) return res.status(400).json({ ok:false, error:'No failed numbers for this campaign' });
