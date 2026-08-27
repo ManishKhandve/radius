@@ -4038,7 +4038,9 @@
       var title=document.getElementById('campaignContactsTitleLive');
       var countEl=document.getElementById('campaignContactsCountLive');
       var body=document.getElementById('campaignContactsBodyLive');
+      var retryBtn=document.getElementById('campaignContactsRetryBtnLive');
       title.textContent=campaignName+' — '+status.charAt(0).toUpperCase()+status.slice(1);
+      if(retryBtn){ if(status==='failed'){ retryBtn.style.display='inline-block'; retryBtn.onclick=function(){ retryFailedLive(campaignName); }; } else retryBtn.style.display='none'; }
       countEl.textContent='Loading…';
       body.innerHTML='<tr><td colspan="4" style="text-align:center; padding:18px; opacity:0.6;">Loading contacts…</td></tr>';
       modal.style.display='flex';
@@ -4060,6 +4062,17 @@
     }
     function closeCampaignContactsLive(){ document.getElementById('campaignContactsModalLive').style.display='none'; }
     document.addEventListener('keydown', function(e){ if(e.key==='Escape') closeCampaignContactsLive(); });
+    async function retryFailedLive(campaignName){
+      if(currentRole !== 'admin'){ alert('Admin only'); return; }
+      if(!confirm('Retry template "'+campaignName+'" to all FAILED numbers?')) return;
+      try{
+        var res=await authFetch('/api/broadcast/campaign/'+encodeURIComponent(campaignName)+'/retry-failed', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({})});
+        var data=await res.json();
+        if(!data.ok){ alert('Retry failed: '+(data.error||'unknown')); return; }
+        alert('Retry started for '+data.count+' numbers. Check /admin/broadcast log.');
+        closeCampaignContactsLive();
+      }catch(e){ alert('Retry error: '+e.message); }
+    }
 
     // Live Meta templates — fetched from GET /api/templates (Render env) for exact body preview
     let templateMap = new Map();
@@ -4093,7 +4106,10 @@
         <div id="campaignContactsTitleLive" style="font-weight:700; font-size:14px; color:#0f172a;">Campaign — Status</div>
         <div id="campaignContactsCountLive" style="font-size:12px; color:#64748b; margin-top:2px;"></div>
       </div>
-      <button onclick="closeCampaignContactsLive()" style="padding:6px 12px; border-radius:8px; border:1px solid #e5e7eb; background:#fff; color:#0f172a; cursor:pointer; font-weight:600;">✕ Close</button>
+      <div style="display:flex; gap:8px;">
+        <button id="campaignContactsRetryBtnLive" style="display:none; padding:6px 14px; border-radius:8px; border:none; background:#e11d48; color:#fff; cursor:pointer; font-weight:700; font-size:12px;">↻ Retry Failed</button>
+        <button onclick="closeCampaignContactsLive()" style="padding:6px 12px; border-radius:8px; border:1px solid #e5e7eb; background:#fff; color:#0f172a; cursor:pointer; font-weight:600;">✕ Close</button>
+      </div>
     </div>
     <div style="overflow-y:auto; flex:1; background:#fff;">
       <table style="width:100%; border-collapse:collapse; font-size:13px;">
