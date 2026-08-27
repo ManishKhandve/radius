@@ -548,7 +548,9 @@ async function watiSendTemplate(phone, templateName, langCode = 'en', variables 
     
     if (res.ok && !j.error) {
       const wamid = j?.messages?.[0]?.id || null;
-      chatStore.saveMessage(phone, null, 'outbound', `[Template] ${templateName}`, wamid, 'sent');
+      const varStr = (variables && variables.length) ? ` — {{1}}=${String(variables[0]).slice(0,40)}` : '';
+      const hdrStr = headerUrl ? ` | header: ${headerUrl.slice(0,80)}` : '';
+      chatStore.saveMessage(phone, null, 'outbound', `[Template] ${templateName}${varStr}${hdrStr}`, wamid, 'sent');
       return { ok: true, body: j, waMessageId: wamid };
     }
     return { ok: false, error: j.error || { message: `HTTP ${res.status}: ${textBody}` } };

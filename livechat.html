@@ -3809,16 +3809,31 @@
             if (item._type === 'message') {
                 const isLateReply = isReplyLate && idx === lastInboundIdx;
                 const className = 'msg-bubble ' + (item.direction === 'inbound' ? 'msg-in' : 'msg-out') + (isLateReply ? ' msg-late' : '');
-                let textHtml = item.content
-                    .replace(/^\[(Buttons|List|Image|Template)\]\s*/i, function(match, type) {
+                let textHtml = '';
+                // Special render for WhatsApp templates — card with name, header hint and actual customer view
+                if (/^\[Template\]/i.test(item.content)) {
+                    const tplName = item.content.replace(/^\[Template\]\s*/i,'').trim().split(' ')[0] || 'template';
+                    const extra = item.content.replace(/^\[Template\]\s*\S+/,'').trim();
+                    // Try to show header/media hint if present in extra (e.g. " | header: https://...")
+                    const headerHint = extra ? extra.replace(/</g,'&lt;').replace(/>/g,'&gt;') : '';
+                    textHtml = `<div style="border:1.5px solid #10b981; border-radius:10px; overflow:hidden; background:#f0fdf4; min-width:220px;">`
+                        + `<div style="background:#10b981; color:#fff; padding:6px 10px; font-size:11px; font-weight:700; letter-spacing:0.4px;">📄 WHATSAPP TEMPLATE</div>`
+                        + `<div style="padding:10px 12px;">`
+                        + `<div style="font-weight:700; font-size:13px; color:#0f172a; word-break:break-all;">${tplName.replace(/</g,'&lt;').replace(/>/g,'&gt;')}</div>`
+                        + (headerHint ? `<div style="font-size:11px; color:#475569; margin-top:4px; word-break:break-all;">${headerHint}</div>` : '')
+                        + `<div style="font-size:11px; color:#64748b; margin-top:6px; border-top:1px dashed #bbf7d0; padding-top:6px;">This is what the customer received — approved Meta template. Variables rendered on WhatsApp (e.g. {{1}} = name).</div>`
+                        + `</div></div>`;
+                } else {
+                    textHtml = item.content
+                    .replace(/^\[(Buttons|List|Image)\]\s*/i, function(match, type) {
                         if (type.toLowerCase() === 'image') return '🖼️ ';
-                        if (type.toLowerCase() === 'template') return '📄 ';
                         return `<span style="font-size: 9px; background: rgba(99, 102, 241, 0.15); color: #818cf8; border: 1px solid rgba(99, 102, 241, 0.2); padding: 2px 6px; border-radius: 4px; margin-bottom: 6px; display: inline-block; font-weight: bold; text-transform: uppercase;">${type}</span><br>`;
                     })
                     .replace(/</g, '&lt;').replace(/>/g, '&gt;')
                     .replace(/\\n/g, '<br>')
                     .replace(/\n/g, '<br>')
                     .replace(/\[Btn:\s*(.*?)\]/g, '<br><button class="crm-chat-btn" disabled>$1</button>');
+                }
                 
                 const tickHtml = item.direction === 'outbound' ? getMsgStatusIcon(item.status) : '';
                 // An AI-transcribed English line goes underneath once requested;
