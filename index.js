@@ -1783,11 +1783,10 @@ app.post('/verify-payment', async (req, res) => {
 });
 
 // ─── Broadcast Admin Dashboard & API ───────────────────────
-const path = require('path');
-
+// Deprecated: old standalone broadcast was at /admin/broadcast (broadcast.html).
+// New broadcast lives inside /chat (livechat.html broadcastView). Keep redirect for bookmarks.
 app.get('/admin/broadcast', (req, res) => {
-  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, private');
-  res.sendFile(path.join(__dirname, 'broadcast.html'));
+  res.redirect(301, '/chat');
 });
 
 app.post('/api/broadcast', authMiddleware, (req, res) => {

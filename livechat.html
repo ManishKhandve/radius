@@ -4069,7 +4069,7 @@
         var res=await authFetch('/api/broadcast/campaign/'+encodeURIComponent(campaignName)+'/retry-failed', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({})});
         var data=await res.json();
         if(!data.ok){ alert('Retry failed: '+(data.error||'unknown')); return; }
-        alert('Retry started for '+data.count+' numbers. Check /admin/broadcast log.');
+        alert('Retry started for '+data.count+' numbers. Check Broadcast view log.');
         closeCampaignContactsLive();
       }catch(e){ alert('Retry error: '+e.message); }
     }
