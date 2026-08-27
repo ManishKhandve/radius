@@ -3834,10 +3834,16 @@
                         bodyText = bodyText.replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/\n/g,'<br>');
                         bodyHtml = `<div style="margin-top:8px; padding:8px 10px; background:#fff; border:1px solid #bbf7d0; border-radius:8px; font-size:12.5px; line-height:1.5; color:#0f172a; white-space:pre-wrap; word-break:break-word;">${bodyText}</div>`;
                       }
-                      // Header media preview
-                      const hdrUrl = headerUrl || (headComp && headComp.example && headComp.example.header_handle && headComp.example.header_handle[0]) || '';
-                      // Use the saved headerUrl as preview if image/video
-                      const previewUrl = headerUrl || (headComp && headComp.format === 'IMAGE' ? (tpl._headerUrl || '') : '');
+                      // Header media preview — check Meta header_handle array or example.header_text, fallback to saved headerUrl
+                      let tplHeaderUrl = '';
+                      if (headComp) {
+                        if (headComp.example) {
+                          if (Array.isArray(headComp.example.header_handle) && headComp.example.header_handle[0]) tplHeaderUrl = headComp.example.header_handle[0];
+                          else if (Array.isArray(headComp.example.header_text) && headComp.example.header_text[0]) tplHeaderUrl = headComp.example.header_text[0];
+                        }
+                        if (!tplHeaderUrl && headComp.example && typeof headComp.example === 'string') tplHeaderUrl = headComp.example;
+                      }
+                      const previewUrl = headerUrl || tplHeaderUrl;
                       if (previewUrl) {
                         const isVid = /\.mp4(\?|$)/i.test(previewUrl) || /\.mov(\?|$)/i.test(previewUrl);
                         if (isVid) hdrHtml = `<div style="margin-top:8px; border-radius:8px; overflow:hidden; border:1px solid #bbf7d0;"><video src="${previewUrl.replace(/"/g,'&quot;')}" controls style="width:100%; max-height:180px; display:block; background:#000;"></video></div>`;
@@ -4066,7 +4072,14 @@
       if(currentRole !== 'admin'){ alert('Admin only'); return; }
       if(!confirm('Retry template "'+campaignName+'" to all FAILED numbers?')) return;
       try{
-        var res=await authFetch('/api/broadcast/campaign/'+encodeURIComponent(campaignName)+'/retry-failed', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({})});
+        var tpl = templateMap.get(campaignName);
+        var lang = (tpl && tpl.language) ? tpl.language : 'en_US';
+        var hdr = '';
+        if(tpl && Array.isArray(tpl.components)){
+          var hc = tpl.components.find(function(c){ return c.type==='HEADER'; });
+          if(hc && hc.example && Array.isArray(hc.example.header_handle) && hc.example.header_handle[0]) hdr = hc.example.header_handle[0];
+        }
+        var res=await authFetch('/api/broadcast/campaign/'+encodeURIComponent(campaignName)+'/retry-failed', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({languageCode: lang, headerUrl: hdr || undefined})});
         var data=await res.json();
         if(!data.ok){ alert('Retry failed: '+(data.error||'unknown')); return; }
         alert('Retry started for '+data.count+' numbers. Check Broadcast view log.');
@@ -4082,7 +4095,8 @@
         const j = await res.json();
         if(j.ok && Array.isArray(j.templates)){
           j.templates.forEach(function(t){
-            if(t.status === 'APPROVED' || !templateMap.has(t.name)) templateMap.set(t.name, t);
+            if(t.status === 'APPROVED') templateMap.set(t.name, t);
+            else if(!templateMap.has(t.name)) templateMap.set(t.name, t);
           });
           if(currentPhone) loadMessages();
         }

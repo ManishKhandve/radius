@@ -397,7 +397,9 @@ async function updateBroadcastMetric(campaign_name, metric_type) {
       data = res.data; selErr = res.error;
     } catch(e) { selErr = e; }
     if (selErr) {
-      if (metric_type === 'failed' && String(selErr.message||'').includes('failed')) return; // column missing — counted dynamically instead
+      const msg = String(selErr.message||'');
+      const missingFailedCol = metric_type === 'failed' && (selErr.code === '42703' || selErr.code === 'PGRST204' || msg.includes('column "failed" does not exist'));
+      if (missingFailedCol) return; // counted dynamically from messages instead
       throw selErr;
     }
     if (!data) {
@@ -481,14 +483,12 @@ async function getBroadcastReadStats() {
       if (!cn) return;
       failedByCampaign[cn] = (failedByCampaign[cn] || 0) + 1;
     });
-    // Fallback: if >2000 messages truncated, do count query per campaign
+    // Fallback: if 2000 truncated, always count per campaign (otherwise undercounts)
     if ((msgs || []).length === 2000) {
       for (const m of metrics) {
-        if (failedByCampaign[m.campaign_name] == null) {
-          const { count } = await supabase.from('messages').select('id', {count:'exact', head:true})
-            .eq('direction','outbound').eq('status','failed').like('content', `[Template] ${m.campaign_name}%`);
-          failedByCampaign[m.campaign_name] = count || 0;
-        }
+        const { count } = await supabase.from('messages').select('id', {count:'exact', head:true})
+          .eq('direction','outbound').eq('status','failed').like('content', `[Template] ${m.campaign_name}%`);
+        failedByCampaign[m.campaign_name] = count || 0;
       }
     }
   } catch(_) { /* best-effort */ }
