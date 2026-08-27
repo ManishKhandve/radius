@@ -1901,6 +1901,17 @@ app.get('/api/messages/stats', authMiddleware, async (req, res) => {
   }
 });
 
+app.get('/api/broadcast/campaign/:campaignName/contacts', authMiddleware, async (req, res) => {
+  try {
+    const { campaignName } = req.params;
+    const status = String(req.query.status || 'all').toLowerCase();
+    const allowed = new Set(['sent','delivered','read','failed','replied','all']);
+    if (!allowed.has(status)) return res.status(400).json({ ok:false, error:'Invalid status. Use sent|delivered|read|failed|replied|all' });
+    const contacts = await chatStore.getCampaignContacts(campaignName, status);
+    res.json({ ok:true, success:true, campaignName, status, count: contacts.length, contacts });
+  } catch(e) { res.status(500).json({ ok:false, error:e.message }); }
+});
+
 app.get('/api/quickreplies', authMiddleware, async (req, res) => {
   const replies = await chatStore.getQuickReplies();
   res.json({ ok: true, success: true, replies });

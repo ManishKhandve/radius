@@ -493,6 +493,65 @@ async function getBroadcastReadStats() {
 }
 
 /**
+ * Contacts for a campaign filtered by status.
+ * status: 'sent'|'delivered'|'read'|'failed'|'replied' (replied uses contacts table).
+ * For increment-semantics: delivered includes read, sent includes delivered+read+sent.
+ */
+async function getCampaignContacts(campaignName, status) {
+  const safeName = String(campaignName || '').trim();
+  if (!safeName) return [];
+  const targetStatuses = (() => {
+    if (status === 'delivered') return ['delivered', 'read'];
+    if (status === 'sent') return ['sent', 'delivered', 'read'];
+    if (['read', 'failed'].includes(status)) return [status];
+    if (status === 'replied') return null; // handled via contacts table
+    return null;
+  })();
+
+  try {
+    if (status === 'replied') {
+      // contacts who replied within this campaign
+      const { data, error } = await supabase.from('contacts')
+        .select('phone, name, last_message, last_message_time')
+        .eq('attribution_campaign', safeName).eq('campaign_replied', true).limit(500);
+      if (error) { console.error('[chat-store] getCampaignContacts replied err:', error.message); return []; }
+      return (data || []).map(r => ({ phone: r.phone, name: r.name || '', status: 'replied', last_message: r.last_message, last_message_time: r.last_message_time }));
+    }
+    if (targetStatuses) {
+      // Fetch wamid + phone + status for this template, then enrich with contacts.name
+      let query = supabase.from('messages')
+        .select('phone, status, created_at, wamid')
+        .eq('direction', 'outbound')
+        .like('content', `[Template] ${safeName}%`)
+        .in('status', targetStatuses)
+        .order('created_at', { ascending: false })
+        .limit(500);
+      const { data, error } = await query;
+      if (error) { console.error('[chat-store] getCampaignContacts err:', error.message); return []; }
+      if (!data || data.length === 0) return [];
+      const phones = [...new Set(data.map(r => r.phone))];
+      const { data: contacts } = await supabase.from('contacts').select('phone, name').in('phone', phones);
+      const nameMap = new Map((contacts || []).map(c => [c.phone, c.name]));
+      return data.map(r => ({ phone: r.phone, name: nameMap.get(r.phone) || '', status: r.status, created_at: r.created_at, wamid: r.wamid }));
+    }
+    // fallback: all for campaign
+    const { data, error } = await supabase.from('messages')
+      .select('phone, status, created_at, wamid')
+      .eq('direction', 'outbound')
+      .like('content', `[Template] ${safeName}%`)
+      .order('created_at', { ascending: false }).limit(500);
+    if (error) return [];
+    const phones2 = [...new Set((data || []).map(r => r.phone))];
+    const { data: contacts2 } = await supabase.from('contacts').select('phone, name').in('phone', phones2);
+    const nameMap2 = new Map((contacts2 || []).map(c => [c.phone, c.name]));
+    return (data || []).map(r => ({ phone: r.phone, name: nameMap2.get(r.phone) || '', status: r.status, created_at: r.created_at, wamid: r.wamid }));
+  } catch (err) {
+    console.error('[chat-store] getCampaignContacts exception:', err.message);
+    return [];
+  }
+}
+
+/**
  * Today's operational counts for the Analytics tab (IST calendar day):
  *   leads     — new customer / flat_customer / maid rows created today
  *   followups — contacts whose follow-up falls today (reuses getScheduledFollowups)
@@ -1181,5 +1240,6 @@ module.exports = {
   deleteQuickReply,
   updateMessageStatus,
   getMessageStatusCounts,
-  getBroadcastReadStats
+  getBroadcastReadStats,
+  getCampaignContacts
 };

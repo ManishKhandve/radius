@@ -2976,16 +2976,18 @@
             else if (rateVal >= 20) rateColor = '#fbbf24'; // Yellow
             else if (m.delivered > 0) rateColor = '#f43f5e'; // Red
             
+            const esc = (s)=>{var d=document.createElement('div');d.textContent=s;return d.innerHTML;};
+            const cn = esc(m.campaign_name);
             tbody.innerHTML += `
                 <tr style="transition: background 0.2s;" onmouseover="this.style.background='rgba(255,255,255,0.02)'" onmouseout="this.style.background='transparent'">
-                    <td style="padding: 16px 24px; font-weight: 600; color: var(--text-main);">${m.campaign_name}</td>
-                    <td style="padding: 16px 24px; color: var(--text-muted);">${m.sent || 0}</td>
-                    <td style="padding: 16px 24px; color: var(--text-muted);">${m.delivered || 0}</td>
+                    <td style="padding: 16px 24px; font-weight: 600; color: var(--text-main);">${cn}</td>
+                    <td style="padding: 16px 24px;"><a href="#" onclick="openCampaignContactsLive('${cn}','sent');return false" style="color:var(--text-muted); font-weight:700; text-decoration:underline; cursor:pointer;">${m.sent || 0}</a></td>
+                    <td style="padding: 16px 24px;"><a href="#" onclick="openCampaignContactsLive('${cn}','delivered');return false" style="color:#0284c7; font-weight:700; text-decoration:underline; cursor:pointer;">${m.delivered || 0}</a></td>
                     <td style="padding: 16px 24px;">
-                        <span class="analytics-badge read">${m.read || 0}</span>
+                        <a href="#" onclick="openCampaignContactsLive('${cn}','read');return false" style="text-decoration:underline; cursor:pointer;"><span class="analytics-badge read">${m.read || 0}</span></a>
                     </td>
                     <td style="padding: 16px 24px;">
-                        <span class="analytics-badge replied">${m.replied || 0}</span>
+                        <a href="#" onclick="openCampaignContactsLive('${cn}','replied');return false" style="text-decoration:underline; cursor:pointer;"><span class="analytics-badge replied">${m.replied || 0}</span></a>
                     </td>
                     <td style="padding: 16px 24px;">
                         <span class="analytics-badge booked">${m.booked || 0}</span>
@@ -3972,6 +3974,34 @@
         if (currentPhone && aiPollTick % 4 === 0) loadAiInsights(currentPhone);
     }, 5000);
 
+    async function openCampaignContactsLive(campaignName, status){
+      var modal=document.getElementById('campaignContactsModalLive');
+      var title=document.getElementById('campaignContactsTitleLive');
+      var countEl=document.getElementById('campaignContactsCountLive');
+      var body=document.getElementById('campaignContactsBodyLive');
+      title.textContent=campaignName+' — '+status.charAt(0).toUpperCase()+status.slice(1);
+      countEl.textContent='Loading…';
+      body.innerHTML='<tr><td colspan="4" style="text-align:center; padding:18px; opacity:0.6;">Loading contacts…</td></tr>';
+      modal.style.display='flex';
+      try{
+        var res=await authFetch('/api/broadcast/campaign/'+encodeURIComponent(campaignName)+'/contacts?status='+encodeURIComponent(status));
+        var data=await res.json();
+        if(!data.ok){ body.innerHTML='<tr><td colspan="4" style="text-align:center; padding:18px; color:#f43f5e;">'+data.error+'</td></tr>'; countEl.textContent=''; return; }
+        var contacts=data.contacts||[];
+        countEl.textContent=contacts.length+' contacts';
+        if(contacts.length===0){ body.innerHTML='<tr><td colspan="4" style="text-align:center; padding:18px; opacity:0.6;">No contacts with status &quot;'+status+'&quot;</td></tr>'; return; }
+        var col={sent:'#64748b', delivered:'#0284c7', read:'#059669', failed:'#e11d48', replied:'#4f46e5'};
+        body.innerHTML=contacts.map(function(c){
+          var color=col[c.status]||'#64748b';
+          var when=c.created_at? new Date(c.created_at).toLocaleString('en-IN',{timeZone:'Asia/Kolkata'}): (c.last_message_time? new Date(c.last_message_time).toLocaleString('en-IN',{timeZone:'Asia/Kolkata'}):'-');
+          var esc2=function(s){var d=document.createElement('div');d.textContent=s;return d.innerHTML;};
+          return '<tr><td style="padding:8px 10px; border-bottom:1px solid rgba(255,255,255,0.06); font-weight:600;">'+esc2(c.name||'-')+'</td><td style="padding:8px 10px; border-bottom:1px solid rgba(255,255,255,0.06); font-family:monospace; font-size:12px;">'+esc2(c.phone)+'</td><td style="padding:8px 10px; border-bottom:1px solid rgba(255,255,255,0.06); text-align:center;"><span style="padding:2px 8px; border-radius:20px; font-size:11px; font-weight:700; color:'+color+'; background:'+color+'15; border:1px solid '+color+'30;">'+esc2(c.status)+'</span></td><td style="padding:8px 10px; border-bottom:1px solid rgba(255,255,255,0.06); text-align:center; font-size:11px; opacity:0.6;">'+esc2(when)+'</td></tr>';
+        }).join('');
+      }catch(e){ body.innerHTML='<tr><td colspan="4" style="text-align:center; padding:18px; color:#f43f5e;">'+e.message+'</td></tr>'; countEl.textContent=''; }
+    }
+    function closeCampaignContactsLive(){ document.getElementById('campaignContactsModalLive').style.display='none'; }
+    document.addEventListener('keydown', function(e){ if(e.key==='Escape') closeCampaignContactsLive(); });
+
     loadUsers();
     loadQuickReplies();
     loadContacts();
@@ -3980,5 +4010,25 @@
         showAnalyticsView();
     }
 </script>
+<!-- Campaign contacts modal (Analytics drill-down) -->
+<div id="campaignContactsModalLive" style="display:none; position:fixed; inset:0; background:rgba(15,23,42,0.55); z-index:1000; align-items:center; justify-content:center;" onclick="if(event.target===this) closeCampaignContactsLive()">
+  <div style="background:#1e293b; border:1px solid rgba(255,255,255,0.1); border-radius:16px; width:740px; max-width:94%; max-height:82vh; overflow:hidden; display:flex; flex-direction:column; box-shadow:0 20px 50px rgba(0,0,0,0.4);">
+    <div style="padding:16px 20px; border-bottom:1px solid rgba(255,255,255,0.08); display:flex; align-items:center; justify-content:space-between;">
+      <div>
+        <div id="campaignContactsTitleLive" style="font-weight:700; font-size:14px; color:#f1f5f9;">Campaign — Status</div>
+        <div id="campaignContactsCountLive" style="font-size:12px; opacity:0.6; margin-top:2px; color:#94a3b8;"></div>
+      </div>
+      <button onclick="closeCampaignContactsLive()" style="padding:6px 12px; border-radius:8px; border:1px solid rgba(255,255,255,0.12); background:rgba(255,255,255,0.06); color:#f1f5f9; cursor:pointer; font-weight:600;">✕ Close</button>
+    </div>
+    <div style="overflow-y:auto; flex:1;">
+      <table style="width:100%; border-collapse:collapse; font-size:13px;">
+        <thead style="position:sticky; top:0; background:#1e293b; z-index:1;">
+          <tr><th style="text-align:left; padding:8px 10px; border-bottom:1px solid rgba(255,255,255,0.08); color:#94a3b8;">Name</th><th style="text-align:left; padding:8px 10px; border-bottom:1px solid rgba(255,255,255,0.08); color:#94a3b8;">Phone</th><th style="text-align:center; padding:8px 10px; border-bottom:1px solid rgba(255,255,255,0.08); color:#94a3b8;">Status</th><th style="text-align:center; padding:8px 10px; border-bottom:1px solid rgba(255,255,255,0.08); color:#94a3b8;">When</th></tr>
+        </thead>
+        <tbody id="campaignContactsBodyLive"></tbody>
+      </table>
+    </div>
+  </div>
+</div>
 </body>
 </html>
