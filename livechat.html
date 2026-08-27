@@ -4081,17 +4081,14 @@
           if(hc.example && Array.isArray(hc.example.header_handle) && hc.example.header_handle[0]) hdr = hc.example.header_handle[0];
         }
       }
-      // Check Broadcast view's header input first (like Automation) — user can set video URL there
-      var bcHdrInput = document.getElementById('bc_headerUrl');
-      if(bcHdrInput && bcHdrInput.value.trim()) hdr = bcHdrInput.value.trim();
-      // For video/image templates, allow overriding header URL like in Automation
-      if(needsMedia){
-        var input = prompt('Retry "'+campaignName+'" — header requires ' + (tpl ? tpl.components.find(function(c){return c.type==='HEADER';}).format : 'media') + '.\nEnter video/image URL (leave blank to use default):\n' + (hdr ? 'Default: '+hdr : 'No default — must enter URL for video/image templates'), hdr || '');
-        if(input === null) return; // cancelled
+      // One-click from Analytics: use template's default header — only prompt if missing
+      if(needsMedia && !hdr){
+        var input = prompt('Retry "'+campaignName+'" needs a video/image header.\nEnter media URL (e.g. https://.../video.mp4):', '');
+        if(input === null) return;
         hdr = input.trim();
-        if(!hdr){ alert('Header URL is required for this template. Retry cancelled.'); return; }
+        if(!hdr){ alert('Header URL required for this template.'); return; }
       }
-      if(!confirm('Retry template "'+campaignName+'" ('+lang+') to all FAILED numbers?'+(hdr ? '\nHeader: '+hdr : ''))) return;
+      if(!confirm('Retry "'+campaignName+'" ('+lang+') to all FAILED numbers?'+(hdr ? '\nHeader: '+hdr : ''))) return;
       try{
         var res=await authFetch('/api/broadcast/campaign/'+encodeURIComponent(campaignName)+'/retry-failed', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({languageCode: lang, headerUrl: hdr || undefined})});
         var data=await res.json();
