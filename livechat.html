@@ -4081,9 +4081,10 @@
           if(hc.example && Array.isArray(hc.example.header_handle) && hc.example.header_handle[0]) hdr = hc.example.header_handle[0];
         }
       }
-      // One-click from Analytics: use template's default header — only prompt if missing
-      if(needsMedia && !hdr){
-        var input = prompt('Retry "'+campaignName+'" needs a video/image header.\nEnter media URL (e.g. https://.../video.mp4):', '');
+      // Media templates: allow pasting video/image URL right in Analytics (like Broadcast)
+      if(needsMedia){
+        var fmt = (tpl && tpl.components.find(function(c){return c.type==='HEADER';})).format || 'media';
+        var input = prompt('Retry "'+campaignName+'" — header is '+fmt+'. Paste video/image URL (like Broadcast):\nLeave as is to use default.', hdr || '');
         if(input === null) return;
         hdr = input.trim();
         if(!hdr){ alert('Header URL required for this template.'); return; }
