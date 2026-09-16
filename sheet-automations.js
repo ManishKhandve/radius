@@ -171,14 +171,14 @@ async function fetchSheetData() {
 
 // Main polling function
 async function pollSheet() {
-  if (!db.hasDb) return false;
+  if (!db.hasDb) return { success: false, error: 'Database not initialized' };
   
   const cfg = await getConfig();
-  if (!cfg || !cfg.phone_col || !cfg.status_col) return false;
+  if (!cfg || !cfg.phone_col || !cfg.status_col) return { success: false, error: 'Config missing phone or status column' };
 
   try {
     const rows = await fetchSheetData();
-    if (rows.length === 0) return false;
+    if (rows.length === 0) return { success: false, error: 'Sheet is empty' };
     
     // Resolve column indexes: check header row (rows[0]) first, fallback to letter logic
     const headerRow = rows[0].map(h => String(h).trim().toLowerCase());
@@ -190,8 +190,8 @@ async function pollSheet() {
     if (statusIdx === -1) statusIdx = colToIndex(cfg.status_col);
 
     if (phoneIdx === -1 || statusIdx === -1) {
-      console.warn('[sheet-automations] Could not resolve phone or status column index.');
-      return;
+      console.warn(`[sheet-automations] Could not resolve columns. Phone: ${cfg.phone_col}, Status: ${cfg.status_col}`);
+      return { success: false, error: `Could not find columns: '${cfg.phone_col}' or '${cfg.status_col}'. Please verify headers.` };
     }
 
     // Process each row (skip header)
@@ -266,10 +266,10 @@ async function pollSheet() {
         `, [phone, db.jb(sentCounts), db.jb(enteredAt)]);
       }
     }
-    return true;
+    return { success: true };
   } catch (err) {
     console.error('[sheet-automations] Poll error:', err.message);
-    return false;
+    return { success: false, error: err.message };
   }
 }
 

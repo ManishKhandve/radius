@@ -2574,8 +2574,8 @@ app.get('/api/sheet-automations/data', authMiddleware, async (req, res) => {
 app.post('/api/sheet-automations/sync', authMiddleware, async (req, res) => {
   if (!requireAdmin(req, res)) return;
   try {
-    const success = await sheetAutomations.triggerSync();
-    res.json({ ok: true, success });
+    const result = await sheetAutomations.triggerSync();
+    res.json({ ok: true, success: result.success, error: result.error });
   } catch (err) {
     res.status(500).json({ ok: false, error: err.message });
   }

@@ -1131,7 +1131,7 @@ async function manualSync() {
       alert('Sync completed successfully!');
       loadSheetData();
     } else {
-      alert('Sync failed or no data to process (check your headers and config).');
+      alert('Sync failed: ' + (data.error || 'Unknown error. Check your headers and config.'));
     }
   } catch(e) {
     alert('Network error during sync.');
