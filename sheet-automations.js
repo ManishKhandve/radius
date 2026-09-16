@@ -147,10 +147,6 @@ async function pollSheet() {
   const spreadsheetId = process.env.SPREADSHEET_ID || cfg.spreadsheet_id;
   if (!spreadsheetId) return;
 
-  const phoneIdx = colToIndex(cfg.phone_col);
-  const statusIdx = colToIndex(cfg.status_col);
-  if (phoneIdx === -1 || statusIdx === -1) return;
-
   try {
     let rows = [];
     if (sheets) {
@@ -164,16 +160,37 @@ async function pollSheet() {
       const res = await fetch(url);
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       let text = await res.text();
-      // Google returns: /*O_o*/ google.visualization.Query.setResponse({ ... })
       text = text.replace(/.*\(/, '');
       text = text.substring(0, text.lastIndexOf(')'));
       const json = JSON.parse(text);
       if (json.table && json.table.rows) {
-        rows = json.table.rows.map(r => r.c.map(cell => cell ? (cell.f || cell.v || '') : ''));
+        // Gviz sometimes includes the header in cols, sometimes in rows depending on query. 
+        // We will build a unified array of arrays.
+        let headerRow = json.table.cols ? json.table.cols.map(c => c.label || '') : [];
+        let bodyRows = json.table.rows.map(r => r.c.map(cell => cell ? (cell.f || cell.v || '') : ''));
+        if (headerRow.length && headerRow.some(l => l)) {
+          rows = [headerRow, ...bodyRows];
+        } else {
+          rows = bodyRows;
+        }
       }
     }
 
     if (rows.length === 0) return;
+    
+    // Resolve column indexes: check header row (rows[0]) first, fallback to letter logic
+    const headerRow = rows[0].map(h => String(h).trim().toLowerCase());
+    
+    let phoneIdx = headerRow.indexOf(cfg.phone_col.trim().toLowerCase());
+    if (phoneIdx === -1) phoneIdx = colToIndex(cfg.phone_col);
+    
+    let statusIdx = headerRow.indexOf(cfg.status_col.trim().toLowerCase());
+    if (statusIdx === -1) statusIdx = colToIndex(cfg.status_col);
+
+    if (phoneIdx === -1 || statusIdx === -1) {
+      console.warn('[sheet-automations] Could not resolve phone or status column index.');
+      return;
+    }
 
     // Process each row (skip header)
     for (let i = 1; i < rows.length; i++) {
