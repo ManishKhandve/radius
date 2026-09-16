@@ -78,6 +78,35 @@ input:focus,select:focus{border-color:var(--primary)}
 .ro-banner{background:rgba(217,119,6,.1);color:var(--warning);font-size:12.5px;font-weight:600;padding:8px 14px;border-radius:9px;display:none}
 .tpl-card{border:1px solid var(--border-color);border-radius:12px;padding:14px;margin-bottom:10px;cursor:pointer}
 .tpl-card:hover{border-color:var(--primary);background:var(--primary-glow)}
+/* ── Premium Sheet Sync Modal ── */
+.sync-backdrop { background: rgba(15, 23, 42, 0.6); backdrop-filter: blur(8px); }
+.sync-modal { background: #ffffff; border-radius: 24px; padding: 32px; width: 780px; box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25); border: 1px solid rgba(255, 255, 255, 0.2); }
+.sync-header { font-family: 'Outfit', sans-serif; font-size: 24px; font-weight: 700; color: #0f172a; margin-bottom: 8px; letter-spacing: -0.5px; }
+.sync-subtitle { font-size: 14px; color: #64748b; margin-bottom: 28px; line-height: 1.5; }
+.sync-config-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 32px; }
+.sync-input-group { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 16px; padding: 12px 16px; transition: all 0.2s ease; }
+.sync-input-group:focus-within { background: #ffffff; border-color: var(--primary); box-shadow: 0 4px 12px var(--primary-glow); transform: translateY(-1px); }
+.sync-input-group label { display: block; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; color: #64748b; margin-bottom: 6px; }
+.sync-input-group input { width: 100%; border: none; background: transparent; padding: 0; font-size: 14px; font-weight: 500; color: #0f172a; outline: none; }
+.sync-input-group input::placeholder { color: #cbd5e1; font-weight: 400; }
+.sync-status-zone { border-radius: 16px; padding: 20px; margin-bottom: 20px; border-left: 4px solid transparent; background: #ffffff; box-shadow: 0 2px 8px rgba(0,0,0,0.04); border-top: 1px solid #f1f5f9; border-right: 1px solid #f1f5f9; border-bottom: 1px solid #f1f5f9; transition: transform 0.2s; }
+.sync-status-zone:hover { transform: translateY(-2px); box-shadow: 0 8px 16px rgba(0,0,0,0.06); }
+.sync-status-zone.zone-open { border-left-color: #10b981; }
+.sync-status-zone.zone-interested { border-left-color: #6366f1; }
+.sync-status-zone.zone-close { border-left-color: #64748b; }
+.sync-zone-title { font-family: 'Outfit', sans-serif; font-size: 18px; font-weight: 700; margin-bottom: 16px; display: flex; align-items: center; gap: 8px; }
+.zone-open .sync-zone-title { color: #047857; }
+.zone-interested .sync-zone-title { color: #4338ca; }
+.zone-close .sync-zone-title { color: #334155; }
+.sync-tpl-row { display: flex; gap: 8px; margin-bottom: 8px; align-items: center; background: #f8fafc; padding: 6px 8px; border-radius: 12px; border: 1px solid transparent; transition: all 0.2s; }
+.sync-tpl-row:hover { background: #ffffff; border-color: #e2e8f0; box-shadow: 0 2px 6px rgba(0,0,0,0.02); }
+.sync-tpl-num { font-size: 12px; font-weight: 700; color: #94a3b8; width: 24px; text-align: center; }
+.sync-tpl-row input { flex: 1; border: 1px solid #e2e8f0; background: #ffffff; border-radius: 8px; padding: 8px 12px; font-size: 13px; outline: none; transition: all 0.2s; }
+.sync-tpl-row input:focus { border-color: var(--primary); box-shadow: 0 0 0 3px var(--primary-glow); }
+.sync-tpl-row input.tpl-name { flex: 2; }
+.sync-tpl-row input.tpl-link { flex: 2; }
+.sync-tpl-row input.tpl-day { flex: 0.8; text-align: center; }
+.sync-tpl-row input.tpl-time { flex: 1.2; }
 </style>
 </head>
 <body>
@@ -847,56 +876,57 @@ async function publishWf() {
 </script>
 
 <!-- Sheet Automations Modal -->
-<div class="modal-bg" id="sheetSyncModal">
-  <div class="modal" style="width: 700px;">
-    <h3 style="margin-bottom:15px;font-family:'Outfit',sans-serif;">📊 Google Sheets Automations</h3>
-    <p style="font-size:13px;color:var(--text-muted);margin-bottom:20px;">Automatically send WhatsApp templates when a row's status changes. The system polls Google Sheets every 5 minutes.</p>
+<div class="modal-bg sync-backdrop" id="sheetSyncModal">
+  <div class="modal sync-modal">
+    <h3 class="sync-header">✨ Google Sheets Automations</h3>
+    <p class="sync-subtitle">Configure automated WhatsApp templates triggered by status changes in your Google Sheet. The system polls securely every 5 minutes.</p>
     
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:15px;margin-bottom:20px;">
-      <div>
-        <label class="cfg-label">Spreadsheet ID</label>
+    <div class="sync-config-grid">
+      <div class="sync-input-group">
+        <label>Spreadsheet ID</label>
         <input id="ssId" placeholder="1a2b3c4d5e6f7g8h9i0j...">
       </div>
-      <div>
-        <label class="cfg-label">Sheet Name</label>
-        <input id="ssName" placeholder="Sheet1">
+      <div class="sync-input-group">
+        <label>Sheet Name</label>
+        <input id="ssName" placeholder="e.g. Leads2026">
       </div>
-      <div>
-        <label class="cfg-label">Phone Number Column (e.g., C)</label>
-        <input id="ssPhoneCol" placeholder="C">
+      <div class="sync-input-group">
+        <label>Phone Column</label>
+        <input id="ssPhoneCol" placeholder="e.g. C">
       </div>
-      <div>
-        <label class="cfg-label">Status Column (e.g., H)</label>
-        <input id="ssStatusCol" placeholder="H">
+      <div class="sync-input-group">
+        <label>Status Column</label>
+        <input id="ssStatusCol" placeholder="e.g. H">
       </div>
     </div>
 
-    <h4 style="margin-bottom:10px;font-family:'Outfit',sans-serif;">Template Configurations (Sequential)</h4>
-    <p style="font-size:12px;color:var(--text-muted);margin-bottom:15px;">Paste up to 5 template names and their optional links. Templates are sent in order for a given status.</p>
+    <h4 style="margin-bottom:12px;font-family:'Outfit',sans-serif;font-size:16px;">Template Sequences</h4>
+    <p style="font-size:13px;color:var(--text-muted);margin-bottom:20px;">Define up to 5 templates per status. They will be sent sequentially based on the configured delay (days) and time.</p>
 
-    <div style="max-height: 400px; overflow-y: auto; padding-right: 10px;">
+    <div style="max-height: 420px; overflow-y: auto; padding-right: 12px; margin-right: -12px; padding-bottom: 10px;">
+      
       <!-- Open Status -->
-      <div class="card" style="margin-bottom:15px;">
-        <h5 style="margin-bottom:10px;color:var(--primary);">Status: OPEN</h5>
+      <div class="sync-status-zone zone-open">
+        <div class="sync-zone-title"><span style="font-size:20px;">🟢</span> Status: OPEN</div>
         <div id="ssOpenTpls"></div>
       </div>
       
       <!-- Interested Status -->
-      <div class="card" style="margin-bottom:15px;">
-        <h5 style="margin-bottom:10px;color:var(--indigo);">Status: INTERESTED</h5>
+      <div class="sync-status-zone zone-interested">
+        <div class="sync-zone-title"><span style="font-size:20px;">🟣</span> Status: INTERESTED</div>
         <div id="ssIntTpls"></div>
       </div>
 
       <!-- Close Status -->
-      <div class="card" style="margin-bottom:15px;">
-        <h5 style="margin-bottom:10px;color:var(--text-main);">Status: CLOSE</h5>
+      <div class="sync-status-zone zone-close">
+        <div class="sync-zone-title"><span style="font-size:20px;">⚫</span> Status: CLOSE</div>
         <div id="ssCloseTpls"></div>
       </div>
     </div>
 
-    <div style="margin-top:20px;text-align:right;">
-      <button class="btn" onclick="document.getElementById('sheetSyncModal').style.display='none'">Cancel</button>
-      <button class="btn primary" onclick="saveSheetSync()">💾 Save & Start Polling</button>
+    <div style="margin-top:28px;text-align:right;display:flex;gap:12px;justify-content:flex-end;">
+      <button class="btn" style="padding:10px 18px;" onclick="document.getElementById('sheetSyncModal').style.display='none'">Cancel</button>
+      <button class="btn primary" style="padding:10px 24px;font-size:14px;box-shadow:0 8px 16px var(--primary-glow);" onclick="saveSheetSync()">💾 Save & Start Polling</button>
     </div>
   </div>
 </div>
@@ -906,12 +936,12 @@ function renderTplInputs(containerId) {
   let html = '';
   for(let i=1; i<=5; i++) {
     html += `
-      <div style="display:flex;gap:10px;margin-bottom:10px;align-items:center;">
-        <span style="font-size:12px;font-weight:600;color:var(--text-muted);width:20px;">#${i}</span>
-        <input id="${containerId}_tpl_${i}" placeholder="Template Name" style="flex:2;">
-        <input id="${containerId}_lnk_${i}" placeholder="Link (Optional)" style="flex:2;">
-        <input id="${containerId}_day_${i}" type="number" min="0" placeholder="Day (0=same)" style="flex:1;">
-        <input id="${containerId}_time_${i}" type="time" style="flex:1;">
+      <div class="sync-tpl-row">
+        <div class="sync-tpl-num">#${i}</div>
+        <input class="tpl-name" id="${containerId}_tpl_${i}" placeholder="Template Name (e.g. welcome_v2)">
+        <input class="tpl-link" id="${containerId}_lnk_${i}" placeholder="Attachment Link (Optional)">
+        <input class="tpl-day" id="${containerId}_day_${i}" type="number" min="0" placeholder="Day (0=same)">
+        <input class="tpl-time" id="${containerId}_time_${i}" type="time">
       </div>
     `;
   }
