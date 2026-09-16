@@ -38,14 +38,26 @@ async function initDb() {
 let sheets = null;
 try {
   const credPath = path.join(__dirname, 'credentials.json');
-  if (fs.existsSync(credPath)) {
-    const auth = new google.auth.GoogleAuth({
-      keyFile: credPath,
-      scopes: ['https://www.googleapis.com/auth/spreadsheets.readonly'],
-    });
+  let authOptions = { scopes: ['https://www.googleapis.com/auth/spreadsheets.readonly'] };
+  let hasAuth = false;
+
+  if (process.env.GOOGLE_CREDENTIALS_BASE64) {
+    const jsonStr = Buffer.from(process.env.GOOGLE_CREDENTIALS_BASE64, 'base64').toString('utf8');
+    authOptions.credentials = JSON.parse(jsonStr);
+    hasAuth = true;
+  } else if (process.env.GOOGLE_CREDENTIALS_JSON) {
+    authOptions.credentials = JSON.parse(process.env.GOOGLE_CREDENTIALS_JSON);
+    hasAuth = true;
+  } else if (fs.existsSync(credPath)) {
+    authOptions.keyFile = credPath;
+    hasAuth = true;
+  }
+
+  if (hasAuth) {
+    const auth = new google.auth.GoogleAuth(authOptions);
     sheets = google.sheets({ version: 'v4', auth });
   } else {
-    console.warn('[sheet-automations] credentials.json not found, Sheets sync disabled.');
+    console.warn('[sheet-automations] No Google credentials found (file or env). Sheets sync disabled.');
   }
 } catch (err) {
   console.error('[sheet-automations] Auth init error:', err);
