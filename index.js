@@ -103,8 +103,8 @@ function validateConfig() {
 
   // Neon Postgres is optional: without it the app runs with empty, non-persisted
   // data (demo / fresh-start mode). Never fatal — even in production.
-  if (!process.env.SUPABASE_URL || !process.env.SUPABASE_KEY) {
-    log('warn', 'boot', '⚠️  No SUPABASE_URL/KEY — running without a database (empty data, nothing persists).');
+  if (!process.env.DATABASE_URL) {
+    log('warn', 'boot', '⚠️  No DATABASE_URL — running without a database (empty data, nothing persists).');
   }
 
   if (!META_ACCESS_TOKEN || !META_PHONE_NUMBER_ID || !META_VERIFY_TOKEN) {
