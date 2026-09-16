@@ -24,6 +24,7 @@ async function initDb() {
       updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
     );
   `);
+  await db.q(`ALTER TABLE sheet_automation_config ADD COLUMN IF NOT EXISTS is_active BOOLEAN DEFAULT false;`);
   await db.q(`DROP TABLE IF EXISTS sheet_sync_status;`);
   await db.q(`
     CREATE TABLE IF NOT EXISTS sheet_sync_status (
@@ -171,11 +172,15 @@ async function fetchSheetData() {
 }
 
 // Main polling function
-async function pollSheet() {
+async function pollSheet(force = false) {
   if (!db.hasDb) return { success: false, error: 'Database not initialized' };
   
   const cfg = await getConfig();
   if (!cfg || !cfg.phone_col || !cfg.status_col) return { success: false, error: 'Config missing phone or status column' };
+
+  if (!force && !cfg.is_active) {
+    return { success: false, error: 'Polling is disabled (is_active = false)' };
+  }
 
   try {
     const rows = await fetchSheetData();
@@ -275,7 +280,7 @@ async function pollSheet() {
 }
 
 async function triggerSync() {
-  return await pollSheet();
+  return await pollSheet(true);
 }
 
 function startPolling() {
@@ -297,8 +302,8 @@ module.exports = {
     if (!db.hasDb) return;
     await db.q('TRUNCATE sheet_automation_config RESTART IDENTITY');
     await db.q(`
-      INSERT INTO sheet_automation_config (spreadsheet_id, sheet_name, phone_col, status_col, templates, links, delays, times)
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+      INSERT INTO sheet_automation_config (spreadsheet_id, sheet_name, phone_col, status_col, templates, links, delays, times, is_active)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
     `, [
       data.spreadsheet_id, 
       data.sheet_name, 
@@ -307,7 +312,8 @@ module.exports = {
       db.jb(data.templates), 
       db.jb(data.links),
       db.jb(data.delays),
-      db.jb(data.times)
+      db.jb(data.times),
+      !!data.is_active
     ]);
   }
 };

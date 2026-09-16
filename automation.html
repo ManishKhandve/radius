@@ -965,7 +965,8 @@ async function publishWf() {
 
     <div style="margin-top:28px;text-align:right;display:flex;gap:12px;justify-content:flex-end;">
       <button class="btn" style="padding:10px 18px;" onclick="document.getElementById('sheetSyncModal').style.display='none'">Cancel</button>
-      <button class="btn primary" style="padding:10px 24px;font-size:14px;box-shadow:0 8px 16px var(--primary-glow);" onclick="saveSheetSync()">💾 Save & Start Polling</button>
+      <button class="btn" style="padding:10px 18px;" onclick="saveSheetSync(false)">💾 Save Config</button>
+      <button class="btn primary" style="padding:10px 24px;font-size:14px;box-shadow:0 8px 16px var(--primary-glow);" onclick="saveSheetSync(true)">💾 Save & Start Polling</button>
     </div>
   </div>
 </div>
@@ -1032,7 +1033,7 @@ async function openSheetSync() {
   }
 }
 
-async function saveSheetSync() {
+async function saveSheetSync(startPolling = false) {
   const payload = {
     spreadsheet_id: document.getElementById('ssId').value.trim(),
     sheet_name: document.getElementById('ssName').value.trim(),
@@ -1041,7 +1042,8 @@ async function saveSheetSync() {
     templates: { open: [], interested: [], close: [] },
     links: { open: [], interested: [], close: [] },
     delays: { open: [], interested: [], close: [] },
-    times: { open: [], interested: [], close: [] }
+    times: { open: [], interested: [], close: [] },
+    is_active: startPolling
   };
   
   ['open','interested','close'].forEach(status => {
@@ -1068,7 +1070,11 @@ async function saveSheetSync() {
     });
     const data = await res.json();
     if (data.ok) {
-      alert('Config saved successfully! Background polling is active.');
+      if (startPolling) {
+        alert('Config saved! Background polling is active.');
+      } else {
+        alert('Config saved! Polling is paused. Use "Sync Now" to sync manually.');
+      }
       document.getElementById('sheetSyncModal').style.display='none';
     } else {
       alert('Error: ' + data.error);
