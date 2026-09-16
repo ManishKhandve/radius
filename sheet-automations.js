@@ -36,6 +36,8 @@ async function initDb() {
 }
 
 let sheets = null;
+let isPublicMode = false;
+
 try {
   const credPath = path.join(__dirname, 'credentials.json');
   let authOptions = { scopes: ['https://www.googleapis.com/auth/spreadsheets.readonly'] };
@@ -56,11 +58,14 @@ try {
   if (hasAuth) {
     const auth = new google.auth.GoogleAuth(authOptions);
     sheets = google.sheets({ version: 'v4', auth });
+    console.log('[sheet-automations] Google Auth loaded successfully.');
   } else {
-    console.warn('[sheet-automations] No Google credentials found (file or env). Sheets sync disabled.');
+    isPublicMode = true;
+    console.log('[sheet-automations] No Google Auth found. Defaulting to Public Mode.');
   }
 } catch (err) {
   console.error('[sheet-automations] Auth init error:', err);
+  isPublicMode = true;
 }
 
 // Map column letter to index (A=0, B=1, Z=25, AA=26)
@@ -131,7 +136,9 @@ async function sendTemplate(phone, templateName, templateLink) {
 
 // Main polling function
 async function pollSheet() {
-  if (!sheets || !db.hasDb) return;
+  if (!db.hasDb) return;
+  if (!sheets && !isPublicMode) return;
+  
   const cfg = await getConfig();
   if (!cfg || !cfg.spreadsheet_id || !cfg.sheet_name || !cfg.phone_col || !cfg.status_col) {
     return;
@@ -142,12 +149,27 @@ async function pollSheet() {
   if (phoneIdx === -1 || statusIdx === -1) return;
 
   try {
-    const response = await sheets.spreadsheets.values.get({
-      spreadsheetId: cfg.spreadsheet_id,
-      range: `${cfg.sheet_name}!A:ZZ`,
-    });
+    let rows = [];
+    if (sheets) {
+      const response = await sheets.spreadsheets.values.get({
+        spreadsheetId: cfg.spreadsheet_id,
+        range: `${cfg.sheet_name}!A:ZZ`,
+      });
+      rows = response.data.values || [];
+    } else if (isPublicMode) {
+      const url = `https://docs.google.com/spreadsheets/d/${cfg.spreadsheet_id}/gviz/tq?tqx=out:json&sheet=${encodeURIComponent(cfg.sheet_name)}`;
+      const res = await fetch(url);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      let text = await res.text();
+      // Google returns: /*O_o*/ google.visualization.Query.setResponse({ ... })
+      text = text.replace(/.*\(/, '');
+      text = text.substring(0, text.lastIndexOf(')'));
+      const json = JSON.parse(text);
+      if (json.table && json.table.rows) {
+        rows = json.table.rows.map(r => r.c.map(cell => cell ? (cell.f || cell.v || '') : ''));
+      }
+    }
 
-    const rows = response.data.values || [];
     if (rows.length === 0) return;
 
     // Process each row (skip header)
