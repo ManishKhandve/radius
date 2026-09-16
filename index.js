@@ -79,10 +79,6 @@ const OWNER_PHONE = process.env.OWNER_PHONE || process.env.ADMIN_WHATSAPP || '';
 const ADMIN_TOKEN = process.env.ADMIN_TOKEN || '';
 if (!ADMIN_TOKEN || ADMIN_TOKEN === 'your-secret-token-here') {
   log('warn', 'boot', '⚠️  ADMIN_TOKEN is missing or uses the default placeholder — admin endpoints are insecure!');
-  if (NODE_ENV === 'production') {
-    log('error', 'boot', '❌ Refusing to start in production with default ADMIN_TOKEN');
-    process.exit(1);
-  }
 }
 
 // ─── Input validation helpers ───────────────────────────────
