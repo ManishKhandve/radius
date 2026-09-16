@@ -1062,9 +1062,8 @@ async function saveSheetSync() {
   });
 
   try {
-    const res = await fetch('/api/sheet-automations/config', {
+    const res = await api('/api/sheet-automations/config', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'auth-token': localStorage.token },
       body: JSON.stringify(payload)
     });
     const data = await res.json();
@@ -1095,7 +1094,7 @@ async function loadSheetData() {
   body.innerHTML = '';
   
   try {
-    const res = await fetch('/api/sheet-automations/data', { headers: { 'auth-token': localStorage.token } });
+    const res = await api('/api/sheet-automations/data');
     const data = await res.json();
     if (data.ok && data.data && data.data.length > 0) {
       const rows = data.data;
@@ -1125,7 +1124,7 @@ async function manualSync() {
   btn.innerHTML = '⏳ Syncing...';
   btn.disabled = true;
   try {
-    const res = await fetch('/api/sheet-automations/sync', { method: 'POST', headers: { 'auth-token': localStorage.token } });
+    const res = await api('/api/sheet-automations/sync', { method: 'POST' });
     const data = await res.json();
     if (data.ok && data.success) {
       alert('Sync completed successfully!');
