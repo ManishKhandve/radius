@@ -153,9 +153,10 @@ async function fetchSheetData() {
     const res = await fetch(url);
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     let text = await res.text();
-    text = text.replace(/.*\(/, '');
-    text = text.substring(0, text.lastIndexOf(')'));
-    const json = JSON.parse(text);
+    const startIndex = text.indexOf('{');
+    const endIndex = text.lastIndexOf('}');
+    if (startIndex === -1 || endIndex === -1) throw new Error('Invalid JSON response from Google Sheets');
+    const json = JSON.parse(text.substring(startIndex, endIndex + 1));
     if (json.table && json.table.rows) {
       let headerRow = json.table.cols ? json.table.cols.map(c => c.label || '') : [];
       let bodyRows = json.table.rows.map(r => r.c.map(cell => cell ? (cell.f || cell.v || '') : ''));
