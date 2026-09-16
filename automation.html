@@ -78,6 +78,18 @@ input:focus,select:focus{border-color:var(--primary)}
 .ro-banner{background:rgba(217,119,6,.1);color:var(--warning);font-size:12.5px;font-weight:600;padding:8px 14px;border-radius:9px;display:none}
 .tpl-card{border:1px solid var(--border-color);border-radius:12px;padding:14px;margin-bottom:10px;cursor:pointer}
 .tpl-card:hover{border-color:var(--primary);background:var(--primary-glow)}
+/* ── Tabs ── */
+.dash-tabs { display:flex; gap:16px; margin-bottom:24px; border-bottom:1px solid #e2e8f0; padding-bottom:8px; }
+.dash-tab { font-family:'Outfit',sans-serif; font-size:16px; font-weight:600; color:#64748b; cursor:pointer; padding:8px 16px; border-radius:8px; transition:all 0.2s; position:relative; }
+.dash-tab:hover { color:#0f172a; background:#f8fafc; }
+.dash-tab.active { color:var(--primary); }
+.dash-tab.active::after { content:''; position:absolute; bottom:-9px; left:0; right:0; height:3px; background:var(--primary); border-radius:3px 3px 0 0; }
+/* ── Sheet Data Table ── */
+.sheet-data-container { overflow-x:auto; background:#fff; border-radius:12px; border:1px solid #e2e8f0; box-shadow:0 4px 6px -1px rgba(0,0,0,0.05); max-height: 600px;}
+.sheet-data-table { width:100%; border-collapse:collapse; white-space:nowrap; }
+.sheet-data-table th { background:#f8fafc; font-weight:600; font-size:12px; color:#475569; padding:12px 16px; text-transform:uppercase; letter-spacing:0.5px; border-bottom:1px solid #e2e8f0; position:sticky; top:0; z-index:10; }
+.sheet-data-table td { padding:12px 16px; font-size:13.5px; color:#334155; border-bottom:1px solid #f1f5f9; }
+.sheet-data-table tr:hover td { background:#f8fafc; }
 /* ── Premium Sheet Sync Modal ── */
 .sync-backdrop { background: rgba(15, 23, 42, 0.6); backdrop-filter: blur(8px); }
 .sync-modal { background: #ffffff; border-radius: 24px; padding: 32px; width: 780px; box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25); border: 1px solid rgba(255, 255, 255, 0.2); }
@@ -133,21 +145,48 @@ input:focus,select:focus{border-color:var(--primary)}
 <!-- ═══ DASHBOARD ═══ -->
 <div id="dashView">
   <div class="stats-row" id="statsRow"></div>
-  <div class="card">
-    <div style="display:flex;align-items:center;gap:12px;margin-bottom:12px;flex-wrap:wrap;">
-      <h3 style="font-family:'Outfit',sans-serif;font-size:15px;">Workflows</h3>
-      <input id="wfSearch" placeholder="Search workflows…" oninput="renderWfList()" style="width:220px;margin-left:auto;">
-      <select id="wfFilter" onchange="renderWfList()">
-        <option value="all">All statuses</option><option value="active">Active</option>
-        <option value="draft">Draft</option><option value="paused">Paused</option>
-        <option value="completed">Completed</option>
-      </select>
-    </div>
-    <div style="overflow-x:auto;"><table>
-      <thead><tr><th>Name</th><th>Status</th><th>Ver</th><th>Next Run</th><th>Last Run</th><th>Updated By</th><th style="text-align:right;">Actions</th></tr></thead>
-      <tbody id="wfBody"></tbody>
-    </table></div>
+  
+  <div class="dash-tabs">
+    <div id="tabWorkflows" class="dash-tab active" onclick="switchTab('workflows')">Workflows</div>
+    <div id="tabSheetData" class="dash-tab" onclick="switchTab('sheetData')">Sheet Data</div>
   </div>
+
+  <div id="workflowsContent">
+    <div class="card">
+      <div style="display:flex;align-items:center;gap:12px;margin-bottom:12px;flex-wrap:wrap;">
+        <h3 style="font-family:'Outfit',sans-serif;font-size:15px;">Workflows</h3>
+        <input id="wfSearch" placeholder="Search workflows…" oninput="renderWfList()" style="width:220px;margin-left:auto;">
+        <select id="wfFilter" onchange="renderWfList()">
+          <option value="all">All statuses</option><option value="active">Active</option>
+          <option value="draft">Draft</option><option value="paused">Paused</option>
+          <option value="completed">Completed</option>
+        </select>
+      </div>
+      <div style="overflow-x:auto;"><table>
+        <thead><tr><th>Name</th><th>Status</th><th>Ver</th><th>Next Run</th><th>Last Run</th><th>Updated By</th><th style="text-align:right;">Actions</th></tr></thead>
+        <tbody id="wfBody"></tbody>
+      </table></div>
+    </div>
+  </div>
+
+  <div id="sheetDataContent" style="display:none;">
+    <div class="card">
+      <div style="display:flex;align-items:center;gap:12px;margin-bottom:16px;flex-wrap:wrap;">
+        <h3 style="font-family:'Outfit',sans-serif;font-size:15px;margin:0;">Live Sheet Data</h3>
+        <span style="font-size:12px;color:#64748b;">This is a read-only view of your connected Google Sheet.</span>
+        <button id="btnManualSync" class="btn primary" style="margin-left:auto;padding:8px 16px;font-size:13px;box-shadow:0 4px 12px var(--primary-glow);" onclick="manualSync()">
+          🔄 Sync Now
+        </button>
+      </div>
+      <div class="sheet-data-container">
+        <table class="sheet-data-table" id="sheetDataTable">
+          <thead id="sheetDataHead"><tr><th style="text-align:center;color:#94a3b8;font-weight:400;font-size:13px;text-transform:none;">No sheet connected or data is loading...</th></tr></thead>
+          <tbody id="sheetDataBody"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
   <div class="card">
     <div style="display:flex;align-items:center;gap:12px;margin-bottom:12px;flex-wrap:wrap;">
       <h3 style="font-family:'Outfit',sans-serif;font-size:15px;">Recent Executions</h3>
@@ -1036,6 +1075,68 @@ async function saveSheetSync() {
     }
   } catch(e) {
     alert('Failed to save config.');
+  }
+}
+
+// ─── Sheet Data & Tabs ───
+function switchTab(tab) {
+  document.getElementById('tabWorkflows').classList.toggle('active', tab === 'workflows');
+  document.getElementById('tabSheetData').classList.toggle('active', tab === 'sheetData');
+  document.getElementById('workflowsContent').style.display = tab === 'workflows' ? 'block' : 'none';
+  document.getElementById('sheetDataContent').style.display = tab === 'sheetData' ? 'block' : 'none';
+  if (tab === 'sheetData') loadSheetData();
+}
+
+async function loadSheetData() {
+  const head = document.getElementById('sheetDataHead');
+  const body = document.getElementById('sheetDataBody');
+  head.innerHTML = '<tr><th style="text-align:center;color:#94a3b8;font-weight:400;font-size:13px;text-transform:none;">Loading data from Google...</th></tr>';
+  body.innerHTML = '';
+  
+  try {
+    const res = await fetch('/api/sheet-automations/data', { headers: { 'auth-token': localStorage.token } });
+    const data = await res.json();
+    if (data.ok && data.data && data.data.length > 0) {
+      const rows = data.data;
+      let hHtml = '<tr>';
+      rows[0].forEach(cell => hHtml += `<th>${cell}</th>`);
+      hHtml += '</tr>';
+      head.innerHTML = hHtml;
+      
+      let bHtml = '';
+      for (let i = 1; i < rows.length; i++) {
+        bHtml += '<tr>';
+        rows[i].forEach(cell => bHtml += `<td>${cell}</td>`);
+        bHtml += '</tr>';
+      }
+      body.innerHTML = bHtml;
+    } else {
+      head.innerHTML = '<tr><th style="text-align:center;color:#94a3b8;font-weight:400;font-size:13px;text-transform:none;">No data found. Is your sheet connected?</th></tr>';
+    }
+  } catch (err) {
+    head.innerHTML = '<tr><th style="text-align:center;color:#ef4444;font-weight:400;font-size:13px;text-transform:none;">Error fetching sheet data.</th></tr>';
+  }
+}
+
+async function manualSync() {
+  const btn = document.getElementById('btnManualSync');
+  const ogText = btn.innerHTML;
+  btn.innerHTML = '⏳ Syncing...';
+  btn.disabled = true;
+  try {
+    const res = await fetch('/api/sheet-automations/sync', { method: 'POST', headers: { 'auth-token': localStorage.token } });
+    const data = await res.json();
+    if (data.ok && data.success) {
+      alert('Sync completed successfully!');
+      loadSheetData();
+    } else {
+      alert('Sync failed or no data to process (check your headers and config).');
+    }
+  } catch(e) {
+    alert('Network error during sync.');
+  } finally {
+    btn.innerHTML = ogText;
+    btn.disabled = false;
   }
 }
 </script>

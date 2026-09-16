@@ -134,49 +134,51 @@ async function sendTemplate(phone, templateName, templateLink) {
   }
 }
 
-// Main polling function
-async function pollSheet() {
-  if (!db.hasDb) return;
-  if (!sheets && !isPublicMode) return;
-  
+async function fetchSheetData() {
+  if (!sheets && !isPublicMode) throw new Error('No Google credentials found and not in public mode.');
   const cfg = await getConfig();
-  if (!cfg || !cfg.sheet_name || !cfg.phone_col || !cfg.status_col) {
-    return;
-  }
-  
+  if (!cfg || !cfg.sheet_name) throw new Error('Sheet Name not configured.');
   const spreadsheetId = process.env.SPREADSHEET_ID || cfg.spreadsheet_id;
-  if (!spreadsheetId) return;
+  if (!spreadsheetId) throw new Error('Spreadsheet ID not configured.');
 
-  try {
-    let rows = [];
-    if (sheets) {
-      const response = await sheets.spreadsheets.values.get({
-        spreadsheetId: spreadsheetId,
-        range: `${cfg.sheet_name}!A:ZZ`,
-      });
-      rows = response.data.values || [];
-    } else if (isPublicMode) {
-      const url = `https://docs.google.com/spreadsheets/d/${spreadsheetId}/gviz/tq?tqx=out:json&sheet=${encodeURIComponent(cfg.sheet_name)}`;
-      const res = await fetch(url);
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      let text = await res.text();
-      text = text.replace(/.*\(/, '');
-      text = text.substring(0, text.lastIndexOf(')'));
-      const json = JSON.parse(text);
-      if (json.table && json.table.rows) {
-        // Gviz sometimes includes the header in cols, sometimes in rows depending on query. 
-        // We will build a unified array of arrays.
-        let headerRow = json.table.cols ? json.table.cols.map(c => c.label || '') : [];
-        let bodyRows = json.table.rows.map(r => r.c.map(cell => cell ? (cell.f || cell.v || '') : ''));
-        if (headerRow.length && headerRow.some(l => l)) {
-          rows = [headerRow, ...bodyRows];
-        } else {
-          rows = bodyRows;
-        }
+  let rows = [];
+  if (sheets) {
+    const response = await sheets.spreadsheets.values.get({
+      spreadsheetId: spreadsheetId,
+      range: `${cfg.sheet_name}!A:ZZ`,
+    });
+    rows = response.data.values || [];
+  } else if (isPublicMode) {
+    const url = `https://docs.google.com/spreadsheets/d/${spreadsheetId}/gviz/tq?tqx=out:json&sheet=${encodeURIComponent(cfg.sheet_name)}`;
+    const res = await fetch(url);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    let text = await res.text();
+    text = text.replace(/.*\(/, '');
+    text = text.substring(0, text.lastIndexOf(')'));
+    const json = JSON.parse(text);
+    if (json.table && json.table.rows) {
+      let headerRow = json.table.cols ? json.table.cols.map(c => c.label || '') : [];
+      let bodyRows = json.table.rows.map(r => r.c.map(cell => cell ? (cell.f || cell.v || '') : ''));
+      if (headerRow.length && headerRow.some(l => l)) {
+        rows = [headerRow, ...bodyRows];
+      } else {
+        rows = bodyRows;
       }
     }
+  }
+  return rows;
+}
 
-    if (rows.length === 0) return;
+// Main polling function
+async function pollSheet() {
+  if (!db.hasDb) return false;
+  
+  const cfg = await getConfig();
+  if (!cfg || !cfg.phone_col || !cfg.status_col) return false;
+
+  try {
+    const rows = await fetchSheetData();
+    if (rows.length === 0) return false;
     
     // Resolve column indexes: check header row (rows[0]) first, fallback to letter logic
     const headerRow = rows[0].map(h => String(h).trim().toLowerCase());
@@ -264,9 +266,15 @@ async function pollSheet() {
         `, [phone, db.jb(sentCounts), db.jb(enteredAt)]);
       }
     }
+    return true;
   } catch (err) {
     console.error('[sheet-automations] Poll error:', err.message);
+    return false;
   }
+}
+
+async function triggerSync() {
+  return await pollSheet();
 }
 
 function startPolling() {
@@ -282,6 +290,8 @@ function startPolling() {
 module.exports = {
   startPolling,
   getConfig,
+  fetchSheetData,
+  triggerSync,
   saveConfig: async (data) => {
     if (!db.hasDb) return;
     await db.q('TRUNCATE sheet_automation_config RESTART IDENTITY');

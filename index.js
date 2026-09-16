@@ -2561,6 +2561,26 @@ app.post('/api/sheet-automations/config', authMiddleware, async (req, res) => {
   res.json({ ok: true });
 });
 
+app.get('/api/sheet-automations/data', authMiddleware, async (req, res) => {
+  if (!requireAdmin(req, res)) return;
+  try {
+    const rows = await sheetAutomations.fetchSheetData();
+    res.json({ ok: true, data: rows });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+app.post('/api/sheet-automations/sync', authMiddleware, async (req, res) => {
+  if (!requireAdmin(req, res)) return;
+  try {
+    const success = await sheetAutomations.triggerSync();
+    res.json({ ok: true, success });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
 // ─── Global error handler ───────────────────────────────────
 // Catches unhandled Express errors to return consistent JSON.
 app.use((err, req, res, _next) => {
