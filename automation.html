@@ -1104,15 +1104,31 @@ async function loadSheetData() {
     const data = await res.json();
     if (data.ok && data.data && data.data.length > 0) {
       const rows = data.data;
+      const hiddenCols = [
+        'id', 'created_time', 'ad_id', 'ad_name', 'adset_id', 
+        'adset_name', 'campaign_id', 'campaign_name', 'form_id', 
+        'form_name', 'is_organic', 'platform'
+      ];
+      const visibleIndexes = [];
+      
       let hHtml = '<tr>';
-      rows[0].forEach(cell => hHtml += `<th>${cell}</th>`);
+      rows[0].forEach((cell, idx) => {
+        if (!hiddenCols.includes(String(cell).trim().toLowerCase())) {
+          visibleIndexes.push(idx);
+          hHtml += `<th>${cell}</th>`;
+        }
+      });
       hHtml += '</tr>';
       head.innerHTML = hHtml;
       
       let bHtml = '';
       for (let i = 1; i < rows.length; i++) {
         bHtml += '<tr>';
-        rows[i].forEach(cell => bHtml += `<td>${cell}</td>`);
+        rows[i].forEach((cell, idx) => {
+          if (visibleIndexes.includes(idx)) {
+            bHtml += `<td>${cell}</td>`;
+          }
+        });
         bHtml += '</tr>';
       }
       body.innerHTML = bHtml;
