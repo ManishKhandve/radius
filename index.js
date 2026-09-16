@@ -108,8 +108,8 @@ function validateConfig() {
   }
 
   if (!META_ACCESS_TOKEN || !META_PHONE_NUMBER_ID || !META_VERIFY_TOKEN) {
-    log('error', 'boot', '❌ Meta Cloud API Configuration Error: META_ACCESS_TOKEN, META_PHONE_NUMBER_ID, and META_VERIFY_TOKEN must be set');
-    hasErrors = true;
+    log('warn', 'boot', '⚠️  Meta Cloud API tokens missing — WhatsApp messaging will be disabled until configured.');
+    // We intentionally don't set hasErrors = true so the app can start
   }
 
   if (hasErrors && NODE_ENV === 'production') {
