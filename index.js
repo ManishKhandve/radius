@@ -2547,8 +2547,12 @@ app.post('/api/workflows/hook/:id', async (req, res) => {
 // ─── Sheet Automations ──────────────────────────────────────
 app.get('/api/sheet-automations/config', authMiddleware, async (req, res) => {
   if (!requireAdmin(req, res)) return;
-  const cfg = await sheetAutomations.getConfig();
-  res.json({ ok: true, config: cfg });
+  const cfg = await sheetAutomations.getConfig() || {};
+  const envOverride = !!process.env.SPREADSHEET_ID;
+  if (envOverride) {
+    cfg.spreadsheet_id = process.env.SPREADSHEET_ID;
+  }
+  res.json({ ok: true, config: cfg, envOverride });
 });
 
 app.post('/api/sheet-automations/config', authMiddleware, async (req, res) => {

@@ -956,11 +956,21 @@ async function openSheetSync() {
   try {
     const res = await fetch('/api/sheet-automations/config', { headers:{'auth-token':localStorage.token} });
     const data = await res.json();
-    if (data.ok && data.config) {
-      document.getElementById('ssId').value = data.config.spreadsheet_id || '';
-      document.getElementById('ssName').value = data.config.sheet_name || '';
-      document.getElementById('ssPhoneCol').value = data.config.phone_col || '';
-      document.getElementById('ssStatusCol').value = data.config.status_col || '';
+    if (data.ok) {
+      if (data.envOverride) {
+        document.getElementById('ssId').value = data.config.spreadsheet_id || 'Hidden (Set via Environment)';
+        document.getElementById('ssId').disabled = true;
+        document.getElementById('ssId').title = 'Spreadsheet ID is currently hardcoded in your Render environment variables. You cannot edit it here.';
+      } else if (data.config) {
+        document.getElementById('ssId').value = data.config.spreadsheet_id || '';
+        document.getElementById('ssId').disabled = false;
+        document.getElementById('ssId').title = '';
+      }
+
+      if (data.config) {
+        document.getElementById('ssName').value = data.config.sheet_name || '';
+        document.getElementById('ssPhoneCol').value = data.config.phone_col || '';
+        document.getElementById('ssStatusCol').value = data.config.status_col || '';
       
       const tpls = data.config.templates || {};
       const lnks = data.config.links || {};

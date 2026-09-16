@@ -140,9 +140,12 @@ async function pollSheet() {
   if (!sheets && !isPublicMode) return;
   
   const cfg = await getConfig();
-  if (!cfg || !cfg.spreadsheet_id || !cfg.sheet_name || !cfg.phone_col || !cfg.status_col) {
+  if (!cfg || !cfg.sheet_name || !cfg.phone_col || !cfg.status_col) {
     return;
   }
+  
+  const spreadsheetId = process.env.SPREADSHEET_ID || cfg.spreadsheet_id;
+  if (!spreadsheetId) return;
 
   const phoneIdx = colToIndex(cfg.phone_col);
   const statusIdx = colToIndex(cfg.status_col);
@@ -152,12 +155,12 @@ async function pollSheet() {
     let rows = [];
     if (sheets) {
       const response = await sheets.spreadsheets.values.get({
-        spreadsheetId: cfg.spreadsheet_id,
+        spreadsheetId: spreadsheetId,
         range: `${cfg.sheet_name}!A:ZZ`,
       });
       rows = response.data.values || [];
     } else if (isPublicMode) {
-      const url = `https://docs.google.com/spreadsheets/d/${cfg.spreadsheet_id}/gviz/tq?tqx=out:json&sheet=${encodeURIComponent(cfg.sheet_name)}`;
+      const url = `https://docs.google.com/spreadsheets/d/${spreadsheetId}/gviz/tq?tqx=out:json&sheet=${encodeURIComponent(cfg.sheet_name)}`;
       const res = await fetch(url);
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       let text = await res.text();
