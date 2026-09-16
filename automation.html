@@ -3,16 +3,18 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Cleanly WhatsApp - Automation</title>
+<title>WhatsApp CRM - Automation</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@500;600;700&display=swap" rel="stylesheet">
 <style>
 :root {
-  --bg-main:#f1f5f9; --bg-panel:#ffffff; --border-color:#94a3b8; --text-main:#0f172a;
-  --text-muted:#334155; --primary:#10b981; --primary-glow:rgba(16,185,129,0.08);
+  --bg-main:#edf0f5; --bg-panel:#ffffff; --border-color:#e4e9f1; --text-main:#0f172a;
+  --text-muted:#64748b; --primary:#10b981; --primary-glow:rgba(16,185,129,0.10);
   --indigo:#4f46e5; --indigo-glow:rgba(79,70,229,0.08); --error:#e11d48; --warning:#d97706;
 }
+body{ -webkit-font-smoothing:antialiased; }
+::selection{ background:rgba(16,185,129,.22); }
 *{box-sizing:border-box;margin:0;padding:0;scrollbar-width:thin;}
 ::-webkit-scrollbar{width:8px;height:8px}::-webkit-scrollbar-thumb{background:rgba(0,0,0,.15);border-radius:4px}
 body{font-family:'Inter',system-ui,sans-serif;background:var(--bg-main);color:var(--text-main);height:100vh;display:flex;flex-direction:column;overflow:hidden}
@@ -86,6 +88,7 @@ input:focus,select:focus{border-color:var(--primary)}
   <div id="dashBar" style="display:flex;gap:10px;margin-left:auto;">
     <button class="btn" onclick="location.href='/chat'">← Back to CRM</button>
     <button class="btn indigo admin-only" onclick="openTemplates()">📋 New from Template</button>
+    <button class="btn primary admin-only" onclick="openSheetSync()">📊 Sheet Sync</button>
     <button class="btn primary admin-only" onclick="newWorkflow()">+ New Workflow</button>
   </div>
   <div id="editBar" style="display:none;gap:10px;margin-left:auto;align-items:center;">
@@ -160,7 +163,22 @@ input:focus,select:focus{border-color:var(--primary)}
 </div></div>
 
 <script>
-const token = localStorage.getItem('crm_token');
+let token = localStorage.getItem('crm_token');
+if (!token) {
+    // Demo servers (no database) accept an empty login — same probe as livechat.
+    try {
+        const _xhr = new XMLHttpRequest();
+        _xhr.open('POST', '/api/login', false);
+        _xhr.setRequestHeader('Content-Type', 'application/json');
+        _xhr.send('{}');
+        const _j = JSON.parse(_xhr.responseText || '{}');
+        if (_j && _j.token) {
+            localStorage.setItem('crm_token', _j.token);
+            localStorage.setItem('crm_role', _j.role || 'admin');
+            token = _j.token;
+        }
+    } catch (e) { /* fall through to login redirect */ }
+}
 if (!token) location.href = '/login';
 let role = localStorage.getItem('crm_role') || 'employee';
 const isAdmin = () => role === 'admin';
@@ -181,6 +199,8 @@ const CATALOG = {
   trigger_schedule:        { cat:'Triggers', icon:'⏰', label:'Schedule', outs:[{id:'out'}] },
   trigger_customer_created:{ cat:'Triggers', icon:'✨', label:'Record Created', outs:[{id:'out'}] },
   trigger_followup_due:    { cat:'Triggers', icon:'📅', label:'Follow-up Due', outs:[{id:'out'}] },
+  trigger_keyword:         { cat:'Triggers', icon:'🔑', label:'Keyword Reply', outs:[{id:'out'}] },
+  trigger_status_changed:  { cat:'Triggers', icon:'🏷️', label:'Status Changed', outs:[{id:'out'}] },
   trigger_webhook:         { cat:'Triggers', icon:'🔗', label:'Custom Trigger (URL)', outs:[{id:'out'}] },
   audience:                { cat:'Audience', icon:'👥', label:'Audience', outs:[{id:'out'}] },
   action_send_template:    { cat:'Actions', icon:'💬', label:'Send WhatsApp Template', outs:[{id:'out'}] },
@@ -412,6 +432,8 @@ function nodeSummary(n) {
   switch (n.type) {
     case 'trigger_schedule': return esc(c.mode ? `${c.mode}${c.time ? ' @ ' + fmt12(c.time) : ''}${c.daysFilter && c.daysFilter !== 'all' ? ' (' + c.daysFilter + ')' : ''}` : 'not configured');
     case 'trigger_customer_created': return 'new rows in ' + esc(c.source || '?');
+    case 'trigger_keyword': return ((c.keywords || []).length ? (c.keywords || []).slice(0, 2).map(esc).join(', ') + ((c.keywords || []).length > 2 ? ' +' + ((c.keywords || []).length - 2) + ' more' : '') : 'not configured');
+    case 'trigger_status_changed': return (c.value ? '→ ' + esc(c.value) : 'not configured') + ((c.cancelGroups || []).length ? ' · stops [' + c.cancelGroups.map(esc).join(', ') + ']' : '');
     case 'audience': return esc((META.sources[c.source] || {}).label || c.source || 'choose source') + (c.groups && c.groups.length ? ` · ${c.groups.reduce((a, g) => a + (g.conditions || []).length, 0)} filters` : '');
     case 'action_send_template': return esc(c.templateName || 'choose template');
     case 'action_update_status': return '→ ' + esc(c.value || '?');
@@ -698,6 +720,12 @@ function renderConfig() {
   const dis = isAdmin() ? '' : 'disabled';
   if (!n) {
     panel.innerHTML = `<h4 style="font-family:'Outfit',sans-serif;">Workflow settings</h4>
+      <div class="cfg-label">Group label (lets status triggers stop this workflow — e.g. new-lead, proposal, onboarding)</div>
+      <input ${dis} value="${esc(def.settings.group || '')}" placeholder="e.g. new-lead" onchange="settingsSet('group', this.value.trim())">
+      <div class="cfg-label">Stop this workflow when the customer replies</div>
+      <select ${dis} onchange="settingsSet('stopOnReply', this.value==='yes')">
+        <option value="yes" ${def.settings.stopOnReply !== false ? 'selected' : ''}>Yes — replies stop auto messages</option>
+        <option value="no" ${def.settings.stopOnReply === false ? 'selected' : ''}>No — keep going after replies</option></select>
       <div class="cfg-label">Prevent duplicate sends (same person never messaged twice by this workflow)</div>
       <select ${dis} onchange="settingsSet('preventDuplicates', this.value==='yes')">
         <option value="no" ${!def.settings.preventDuplicates ? 'selected' : ''}>No</option>
@@ -742,6 +770,17 @@ function renderConfig() {
       break;
     case 'trigger_followup_due':
       h += `<div style="font-size:12.5px;color:var(--text-muted);">Fires for each contact whose scheduled follow-up time passes (status "Follow-up Required").</div>`; break;
+    case 'trigger_keyword':
+      h += `<div style="font-size:12.5px;color:var(--text-muted);margin-bottom:4px;">Fires when a customer <b>replies</b> with matching text. One phrase per line.</div>`;
+      h += `<div class="cfg-label">Keywords / phrases (match if message contains)</div><textarea ${dis} rows="4" placeholder="i'll think&#10;price is high&#10;too expensive" onchange="(function(v){const n=def.nodes.find(x=>x.id===selectedNode);n.config.keywords=String(v).split('\\n').map(s=>s.trim()).filter(Boolean);touchSummary();})(this.value)">${esc((c.keywords || []).join('\n'))}</textarea>`;
+      h += sel('Match mode', 'matchMode', [['contains', 'Contains (recommended)'], ['exact', 'Exact message']]);
+      break;
+    case 'trigger_status_changed':
+      h += `<div style="font-size:12.5px;color:var(--text-muted);margin-bottom:4px;">Fires when a salesperson changes a contact's status <b>to</b> this value. Runs the "stop groups" first, then starts this workflow for that contact.</div>`;
+      h += inp('Fire when status becomes', 'value', 'text', 'e.g. Proposal Sent, Connected, Payment Received');
+      h += `<div class="cfg-label">Stop groups first (comma-separated, * = all other workflows)</div><input ${dis} value="${esc((c.cancelGroups || []).join(', '))}" placeholder="e.g. new-lead  —  or  *  —  or blank" onchange="(function(v){const n=def.nodes.find(x=>x.id===selectedNode);n.config.cancelGroups=String(v).split(',').map(s=>s.trim()).filter(Boolean);touchSummary();})(this.value)">`;
+      h += `<div style="font-size:11px;color:var(--text-muted);margin-top:3px;">Group names come from each workflow's Settings → Group label.</div>`;
+      break;
     case 'audience':
       h += `<div class="cfg-label">Data source</div><select ${dis} onchange="cfgSet('source', this.value); valueCache={};">${[['', 'choose…'], ...Object.entries(META.sources).map(([k, v]) => [k, v.label])].map(o => `<option value="${o[0]}" ${String(c.source ?? '') === String(o[0]) ? 'selected' : ''}>${o[1]}</option>`).join('')}</select>`;
       h += `<div class="cfg-label">Filters — groups are OR'd, rows inside a group are AND'd</div>` + condGroupsHtml(c.groups, 'groups');
@@ -806,5 +845,160 @@ async function publishWf() {
     + (j.clearedTasks ? `\n\n⚠️ ${j.clearedTasks} recipient(s) still queued from a previous run were cancelled, so they won't be messaged now.` : ''));
 }
 </script>
+
+<!-- Sheet Automations Modal -->
+<div class="modal-bg" id="sheetSyncModal">
+  <div class="modal" style="width: 700px;">
+    <h3 style="margin-bottom:15px;font-family:'Outfit',sans-serif;">📊 Google Sheets Automations</h3>
+    <p style="font-size:13px;color:var(--text-muted);margin-bottom:20px;">Automatically send WhatsApp templates when a row's status changes. The system polls Google Sheets every 5 minutes.</p>
+    
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:15px;margin-bottom:20px;">
+      <div>
+        <label class="cfg-label">Spreadsheet ID</label>
+        <input id="ssId" placeholder="1a2b3c4d5e6f7g8h9i0j...">
+      </div>
+      <div>
+        <label class="cfg-label">Sheet Name</label>
+        <input id="ssName" placeholder="Sheet1">
+      </div>
+      <div>
+        <label class="cfg-label">Phone Number Column (e.g., C)</label>
+        <input id="ssPhoneCol" placeholder="C">
+      </div>
+      <div>
+        <label class="cfg-label">Status Column (e.g., H)</label>
+        <input id="ssStatusCol" placeholder="H">
+      </div>
+    </div>
+
+    <h4 style="margin-bottom:10px;font-family:'Outfit',sans-serif;">Template Configurations (Sequential)</h4>
+    <p style="font-size:12px;color:var(--text-muted);margin-bottom:15px;">Paste up to 5 template names and their optional links. Templates are sent in order for a given status.</p>
+
+    <div style="max-height: 400px; overflow-y: auto; padding-right: 10px;">
+      <!-- Open Status -->
+      <div class="card" style="margin-bottom:15px;">
+        <h5 style="margin-bottom:10px;color:var(--primary);">Status: OPEN</h5>
+        <div id="ssOpenTpls"></div>
+      </div>
+      
+      <!-- Interested Status -->
+      <div class="card" style="margin-bottom:15px;">
+        <h5 style="margin-bottom:10px;color:var(--indigo);">Status: INTERESTED</h5>
+        <div id="ssIntTpls"></div>
+      </div>
+
+      <!-- Close Status -->
+      <div class="card" style="margin-bottom:15px;">
+        <h5 style="margin-bottom:10px;color:var(--text-main);">Status: CLOSE</h5>
+        <div id="ssCloseTpls"></div>
+      </div>
+    </div>
+
+    <div style="margin-top:20px;text-align:right;">
+      <button class="btn" onclick="document.getElementById('sheetSyncModal').style.display='none'">Cancel</button>
+      <button class="btn primary" onclick="saveSheetSync()">💾 Save & Start Polling</button>
+    </div>
+  </div>
+</div>
+
+<script>
+function renderTplInputs(containerId) {
+  let html = '';
+  for(let i=1; i<=5; i++) {
+    html += `
+      <div style="display:flex;gap:10px;margin-bottom:10px;align-items:center;">
+        <span style="font-size:12px;font-weight:600;color:var(--text-muted);width:20px;">#${i}</span>
+        <input id="${containerId}_tpl_${i}" placeholder="Template Name" style="flex:2;">
+        <input id="${containerId}_lnk_${i}" placeholder="Link (Optional)" style="flex:2;">
+        <input id="${containerId}_day_${i}" type="number" min="0" placeholder="Day (0=same)" style="flex:1;">
+        <input id="${containerId}_time_${i}" type="time" style="flex:1;">
+      </div>
+    `;
+  }
+  document.getElementById(containerId).innerHTML = html;
+}
+renderTplInputs('ssOpenTpls');
+renderTplInputs('ssIntTpls');
+renderTplInputs('ssCloseTpls');
+
+async function openSheetSync() {
+  document.getElementById('sheetSyncModal').style.display='flex';
+  try {
+    const res = await fetch('/api/sheet-automations/config', { headers:{'auth-token':localStorage.token} });
+    const data = await res.json();
+    if (data.ok && data.config) {
+      document.getElementById('ssId').value = data.config.spreadsheet_id || '';
+      document.getElementById('ssName').value = data.config.sheet_name || '';
+      document.getElementById('ssPhoneCol').value = data.config.phone_col || '';
+      document.getElementById('ssStatusCol').value = data.config.status_col || '';
+      
+      const tpls = data.config.templates || {};
+      const lnks = data.config.links || {};
+      const days = data.config.delays || {};
+      const times = data.config.times || {};
+      
+      ['open','interested','close'].forEach(status => {
+        const prefix = status === 'open' ? 'ssOpenTpls' : status === 'interested' ? 'ssIntTpls' : 'ssCloseTpls';
+        for(let i=1; i<=5; i++) {
+          document.getElementById(`${prefix}_tpl_${i}`).value = (tpls[status] && tpls[status][i-1]) ? tpls[status][i-1] : '';
+          document.getElementById(`${prefix}_lnk_${i}`).value = (lnks[status] && lnks[status][i-1]) ? lnks[status][i-1] : '';
+          document.getElementById(`${prefix}_day_${i}`).value = (days[status] && days[status][i-1] !== undefined) ? days[status][i-1] : '';
+          document.getElementById(`${prefix}_time_${i}`).value = (times[status] && times[status][i-1]) ? times[status][i-1] : '';
+        }
+      });
+    }
+  } catch(e) {
+    console.error('Failed to load sheet sync config', e);
+  }
+}
+
+async function saveSheetSync() {
+  const payload = {
+    spreadsheet_id: document.getElementById('ssId').value.trim(),
+    sheet_name: document.getElementById('ssName').value.trim(),
+    phone_col: document.getElementById('ssPhoneCol').value.trim(),
+    status_col: document.getElementById('ssStatusCol').value.trim(),
+    templates: { open: [], interested: [], close: [] },
+    links: { open: [], interested: [], close: [] },
+    delays: { open: [], interested: [], close: [] },
+    times: { open: [], interested: [], close: [] }
+  };
+  
+  ['open','interested','close'].forEach(status => {
+    const prefix = status === 'open' ? 'ssOpenTpls' : status === 'interested' ? 'ssIntTpls' : 'ssCloseTpls';
+    for(let i=1; i<=5; i++) {
+      const t = document.getElementById(`${prefix}_tpl_${i}`).value.trim();
+      const l = document.getElementById(`${prefix}_lnk_${i}`).value.trim();
+      const d = document.getElementById(`${prefix}_day_${i}`).value.trim();
+      const tm = document.getElementById(`${prefix}_time_${i}`).value.trim();
+      
+      if (t) {
+        payload.templates[status].push(t);
+        payload.links[status].push(l);
+        payload.delays[status].push(d === '' ? 0 : parseInt(d, 10));
+        payload.times[status].push(tm);
+      }
+    }
+  });
+
+  try {
+    const res = await fetch('/api/sheet-automations/config', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'auth-token': localStorage.token },
+      body: JSON.stringify(payload)
+    });
+    const data = await res.json();
+    if (data.ok) {
+      alert('Config saved successfully! Background polling is active.');
+      document.getElementById('sheetSyncModal').style.display='none';
+    } else {
+      alert('Error: ' + data.error);
+    }
+  } catch(e) {
+    alert('Failed to save config.');
+  }
+}
+</script>
+
 </body>
 </html>

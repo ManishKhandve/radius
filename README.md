@@ -1,310 +1,118 @@
-# Maid Service — WhatsApp Chatbot
+# White-label WhatsApp CRM
 
-Automated WhatsApp chatbot for a maid placement business.  
-Customers chat with the bot, browse maid profiles, and book — all inside WhatsApp.
+Wati-style WhatsApp platform for **any business**. One deploy = one brand.
+Rebrand entirely through environment variables — no code changes.
+
+Customers message you on WhatsApp; your team replies from a shared inbox,
+sends template broadcasts, and builds no-code automations — all in one place.
+
+## Features
+
+| Area | What you get |
+|------|--------------|
+| 💬 Shared inbox | Multi-agent conversations, assignment, labels, notes, follow-up reminders, quick replies |
+| 🤖 Bot | Generic auto-responder: welcome message, keyword rules (`BOT_RULES_JSON`), human handoff. `BOT_ENABLED=false` = pure human inbox |
+| 📣 Broadcasts | Template campaigns with delivery/read/reply tracking + retry-failed |
+| ⚡ Automation | Visual workflow builder: manual / schedule / new-contact / follow-up-due triggers, delays, loops, conditions, template sends |
+| 🧠 AI assist | Per-chat insights, suggested replies, Hindi/Hinglish translation, draft polish (OpenRouter, optional) |
+| 🔔 Notifications | Follow-up reminders + delivery-failure alerts (in-app + optional admin WhatsApp) |
 
 ## Tech Stack
 
 | Layer | Technology |
 |-------|-----------|
-| Runtime | Node.js |
+| Runtime | Node.js 18+ |
 | WhatsApp | Meta WhatsApp Cloud API |
 | Web Server | Express.js |
-| Database | Google Sheets API v4 |
-| Hosting | Render.com (free tier) |
-| Keep-alive | UptimeRobot (5-min ping) |
-
----
+| Database | Neon Postgres (`pg`) — optional, runs empty without it |
+| Hosting | Render.com |
+| Keep-alive | UptimeRobot (5-min ping on `/ping`) |
 
 ## 1. Prerequisites
 
-- **Node.js** v18+ installed locally
-- **GitHub** account (to push code for Render)
-- **Render.com** account (free)
-- **Google account** (for Sheets + service account)
-- A **Meta WhatsApp Business Account** (with a verified phone number) and an app on the Meta Developer Dashboard.
+- Node.js v18+, GitHub + Render.com accounts
+- Neon Postgres database (**optional** — without `DATABASE_URL` the app runs
+  with empty, non-persisted data; on a fresh database run `neon-schema.sql`
+  once: `psql $DATABASE_URL -f neon-schema.sql`)
+- Meta WhatsApp Business Account: **Phone Number ID**, permanent **Access Token**, chosen **Verify Token**
 
----
+## 2. Configure (no code changes)
 
-## 2. Google Sheets Setup
-
-1. Go to [Google Sheets](https://sheets.google.com) → **Create a new spreadsheet**
-2. Create **3 tabs** (rename the sheet tabs at the bottom):
-
-### Tab: MAIDS
-Add these headers in Row 1:
-`Maid ID | Full Name | Age | Work Type | Timing | Languages | Experience (Years) | Budget Range | Area Available | Reference Check | Photo Link | Glide Profile ID | Status | Notes`
-
-### Tab: CUSTOMERS
-`Customer ID | Name | WhatsApp Number | Flat/Area | Work Type Needed | Timing Preference | Budget | Enquiry Date | Status | Assigned Maid ID | Source | Notes`
-
-### Tab: BOOKINGS
-`Booking ID | Customer Name | Customer WhatsApp | Maid Name | Maid ID | Work Type | Timing | Start Date | Monthly Salary | Flat/Address | Booking Date | Status | Commission Paid | Follow-up Day 1 | Follow-up Day 2 | Follow-up Day 3 | Monthly Check-in`
-
-3. Copy the **Spreadsheet ID** from the URL:
-`https://docs.google.com/spreadsheets/d/SPREADSHEET_ID_IS_HERE/edit`
-
----
-
-## 3. Google Service Account Setup
-
-1. Go to [Google Cloud Console](https://console.cloud.google.com)
-2. Create a **new project** (e.g. "Maid Bot")
-3. Enable the **Google Sheets API**:
-   - APIs & Services → Library → search "Google Sheets API" → Enable
-4. Create a **Service Account**:
-   - APIs & Services → Credentials → Create Credentials → Service Account
-   - Give it any name → Done
-5. Create a **JSON key**:
-   - Click the service account → Keys tab → Add Key → JSON → Download
-6. Rename the downloaded file to `credentials.json`
-7. Place it in the **project root** folder
-8. Copy the **service account email** (looks like `xxx@project.iam.gserviceaccount.com`)
-9. Go to your Google Sheet → **Share** → paste the service account email → give **Editor** access
-
----
-
-## 4. Configure config.js
-
-Open `config.js` and fill in:
-
-| Setting | What to put |
-|---------|------------|
-| `businessName` | Your business name |
-| `ownerWhatsApp` | Your WhatsApp number: `91XXXXXXXXXX@c.us` |
-| `glideAppUrl` | Link to your Glide maid-browsing app |
-| `contactNumber` | Display phone number for customers |
-| `address` | Your city/office address |
-
----
-
-## 5. Meta Cloud API Setup
-
-1. Go to the [Meta Developer Dashboard](https://developers.facebook.com) and create an App.
-2. Add the **WhatsApp** product.
-3. Note down your **Phone Number ID** and generate a permanent **Access Token**.
-4. Decide on a **Verify Token** (a random string you choose) to verify webhooks.
-
----
-
-## 6. Test Locally
-
-To test locally, you need a public URL for Meta's webhook to hit your server.
+Copy `.env.example` → `.env` and set at minimum:
 
 ```bash
-# Install dependencies
+BUSINESS_NAME="Acme Traders"
+CONTACT_NUMBER="+91 XXXXXXXXXX"
+WELCOME_MESSAGE="👋 Welcome to Acme! How can we help?"
+SUPABASE_URL=…  SUPABASE_KEY=…
+META_ACCESS_TOKEN=…  META_PHONE_NUMBER_ID=…  META_VERIFY_TOKEN=…
+ADMIN_TOKEN=<strong random string>
+OWNER_PHONE=<admin alerts, optional>
+```
+
+Full branding + bot options (`BUSINESS_TYPE`, `BRAND_COLOR`, `LOGO_URL`,
+`BOT_RULES_JSON`, `FALLBACK_MESSAGE`, …) are documented in `.env.example`.
+
+## 3. Run locally
+
+```bash
 npm install
-
-# Set your env variables locally in a .env file:
-# META_ACCESS_TOKEN=your_token
-# META_PHONE_NUMBER_ID=your_id
-# META_VERIFY_TOKEN=your_verify_token
-
-# Start the bot
-npm run dev
+npm run dev        # PORT from .env (default 3000)
 ```
 
-1. Use a tool like **ngrok** to expose your local port 3000: `ngrok http 3000`
-2. In Meta App Dashboard, go to **Webhooks** and configure your webhook URL to `https://<ngrok_id>.ngrok-free.app/wati-webhook`.
-3. Use the **Verify Token** you chose.
-4. Subscribe to the `messages` field.
-5. Send "hi" to your bot's WhatsApp number to test the flow.
+Expose with ngrok (`ngrok http 3000`), set the Meta webhook to
+`https://<id>.ngrok-free.app/wati-webhook` with your verify token,
+subscribe to `messages`, and send “hi” to the business number.
 
----
+## 4. Deploy on Render
 
-## 7. Deploy on Render
+Push to GitHub → Render **New → Web Service** (`npm install` / `node index.js`),
+add the env vars above, update the Meta webhook to
+`https://your-app.onrender.com/wati-webhook`, and add an UptimeRobot
+HTTP monitor on `https://your-app.onrender.com/ping` (5 min).
 
-> **Important:** Do NOT push `credentials.json` to GitHub — it's in `.gitignore`.
+## 5. How it works
 
-1. Push your code to a **GitHub repository**
-2. Go to [Render.com](https://render.com) → **New → Web Service**
-3. Connect your GitHub repo
-4. Settings:
-   - **Build Command:** `npm install`
-   - **Start Command:** `node index.js`
-5. Add **Environment Variables:**
-   - `SPREADSHEET_ID` = your Google Sheet ID
-   - `GOOGLE_CREDENTIALS_PATH` = `./credentials.json`
-   - `META_ACCESS_TOKEN` = from Meta App Dashboard
-   - `META_PHONE_NUMBER_ID` = from Meta App Dashboard
-   - `META_VERIFY_TOKEN` = your chosen verify token
-6. For `credentials.json` on Render:
-   - Option A: Add the JSON content as a secret file via Render dashboard
-   - Option B: Base64 encode it and decode in your start script
-7. Click **Deploy**
-8. Update the Meta Webhook URL to your Render domain: `https://your-app.onrender.com/wati-webhook`.
-
----
-
-## 8. Set Up UptimeRobot (CRITICAL for 24/7)
-
-This is **essential** — without it, Render's free tier sleeps after 15 minutes of inactivity, killing your bot.
-
-1. Go to [UptimeRobot](https://uptimerobot.com) → create a **free account**
-2. Click **Add New Monitor**
-3. Settings:
-   - **Monitor Type:** HTTP(s)
-   - **Friendly Name:** Maid Bot Ping
-   - **URL:** `https://your-app.onrender.com/ping`
-   - **Monitoring Interval:** 5 minutes
-4. Save
-
-This pings your `/ping` endpoint every 5 minutes, keeping Render alive.
-
----
-
-## 9. How Sessions Work
-
-| Component | Storage | Persistence |
-|-----------|---------|------------|
-| Customer chat sessions | JavaScript `Map` (RAM) | Survives as long as process is alive |
-| Customer/booking data | Google Sheets | Permanent |
-
-- **UptimeRobot** prevents Render from sleeping → RAM sessions stay active
-- If Render ever restarts (rare deploy/maintenance), customers just type "hi" to restart.
-- Meta Cloud API operates statelessly without QR code scanning, so login persists forever as long as your access token is valid.
-
----
-
-## Chat Flow Diagram
-
-```
-Customer sends "hi"
-        │
-        ▼
-   ┌─────────┐
-   │ Welcome  │
-   └────┬─────┘
-        ▼
-   ┌──────────┐
-   │ Work Type │  (1-4)
-   └────┬──────┘
-        ▼
-   ┌─────────┐
-   │ Timing  │  (1-2)
-   └────┬────┘
-        ▼
-   ┌─────────┐
-   │ Budget  │  (1-4)  → Saves lead to Google Sheets
-   └────┬────┘
-        ▼
-   ┌────────────┐
-   │ Glide Link │  (browse maids)
-   └────┬───────┘
-        ▼
-   ┌─────────────┐
-   │ Maid Choice │  (name or ID)
-   └────┬────────┘
-        ▼
-   ┌──────────────┐
-   │ Collect Flat │  (address)
-   └────┬─────────┘
-        ▼
-   ┌──────────────┐
-   │ Collect Date │  (start date)
-   └────┬─────────┘
-        ▼
-   ┌──────────┐
-   │ Confirm  │  1 = ✅  |  2 = ❌
-   └────┬─────┘
-        ▼
-   Booking saved to Sheets
-   Owner gets WhatsApp alert
-```
-
----
+- Webhook `POST /wati-webhook` → per-user serial queue → `flow.js`
+  (welcome / keyword / handoff rules) → replies via Meta Graph API.
+- Anything the bot doesn't answer stays in the **inbox** (`/chat`)
+  for humans. Agent replies auto-pause the bot for that chat.
+- Bulk/out-of-window messaging goes through **broadcasts** and
+  **automation** (`/automation`) using Meta-approved templates.
+- Sessions are in-memory (survive via UptimeRobot keep-alive);
+  all business data is permanent in Neon Postgres.
 
 ## API Endpoints
 
 | Route | Method | Description |
 |-------|--------|------------|
-| `/wati-webhook` | GET | Meta Cloud API webhook verification |
-| `/wati-webhook` | POST | Meta Cloud API incoming messages |
-| `/status` | GET | JSON: `{ activeSessions, uptime }` |
-| `/ping` | GET | Returns "pong" — for UptimeRobot |
-
----
-
-## Error Handling
-
-- Invalid input at any step → re-sends the current question
-- "hi" / "hello" / "menu" / "start" / "help" → restarts from welcome
-- Google Sheets write fails → logged, but flow continues normally
-- Meta Cloud API fails → logged and retried with exponential backoff (unless 4xx error).
-
----
+| `/wati-webhook` | GET/POST | Meta verification + incoming messages/statuses |
+| `/api/branding` | GET | Public business name/colors (white-label UI) |
+| `/api/chat/*` | GET/POST | Contacts, messages, send, pause, labels, CRM fields |
+| `/api/broadcast` | POST | Start template campaign (+ status/retry endpoints) |
+| `/api/workflows/*` | * | Automation CRUD, publish, run-now, field values |
+| `/api/ai/*` | * | Insights, translate, ask, polish-draft |
+| `/api/insights` | GET | Missed opportunities + today's tasks |
+| `/api/notifications` | GET/POST | Follow-ups + alerts |
+| `/status`, `/ping` | GET | Health + send metrics |
 
 ## Project Structure
 
 ```
-chat flow/
-├── index.js          # Express server + Meta API integration
-├── flow.js           # Chat flow state machine
-├── sheets.js         # Google Sheets API helpers
-├── config.js         # Business settings + message templates
-├── package.json      # Dependencies
-├── render.yaml       # Render.com deployment config
-├── .gitignore        # Ignores node_modules, credentials
-├── credentials.json  # Google service account key (DO NOT COMMIT)
-└── README.md         # This file
+├── index.js            # Express server + Meta API integration
+├── flow.js             # Generic bot engine (welcome/keywords/handoff)
+├── config.js           # Branding + bot settings (env-driven)
+├── chat-store.js       # Neon: contacts/messages/notifications/users
+├── db.js               # pg pool + no-database fallback
+├── neon-schema.sql     # Full database schema (run once on a fresh DB)
+├── workflow-engine.js  # Automation execution engine
+├── workflow-store.js   # Automation persistence
+├── ai-assistant.js     # OpenRouter per-chat AI layer
+├── livechat.html       # Inbox + CRM dashboard (/chat)
+├── automation.html     # Workflow builder (/automation)
+├── login.html          # Agent login (/login)
+└── render.yaml         # Render.com deployment config
 ```
-
----
-
-## Testing
-
-This project includes a comprehensive Playwright test suite with **92 automated tests**.
-
-### Quick Start
-
-```bash
-# Install dependencies
-npm install
-
-# Install Playwright browsers
-npx playwright install
-
-# Run all tests
-npm test
-
-# View test summary
-npm run test:summary
-
-# Interactive testing
-npm run test:ui
-```
-
-### Test Coverage
-
-- ✅ **API Endpoints** (12 tests)
-- ✅ **Conversation Flows** (35 tests)
-- ✅ **Module Tests** (15 tests)
-- ✅ **Integration Tests** (20 tests)
-- ✅ **Performance Tests** (10 tests)
-
-### Documentation
-
-- **Quick Setup**: `TEST_SETUP.md`
-- **Testing Guide**: `TESTING.md`
-- **Command Reference**: `TEST_COMMANDS.md`
-- **Complete Guide**: `COMPLETE_TEST_GUIDE.md`
-- **Implementation Summary**: `TEST_IMPLEMENTATION_SUMMARY.md`
-
-### Test Commands
-
-```bash
-npm test                    # Run all tests
-npm run test:ui            # Interactive UI
-npm run test:api           # API tests only
-npm run test:flow          # Flow tests only
-npm run test:integration   # Integration tests
-npm run test:performance   # Performance tests
-npm run test:report        # View HTML report
-```
-
-For detailed testing information, see `COMPLETE_TEST_GUIDE.md`.
-
----
 
 ## License
 

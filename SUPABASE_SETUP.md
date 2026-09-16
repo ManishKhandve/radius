@@ -5,7 +5,7 @@
 Your Supabase credentials have been added to the `.env` file:
 
 ```env
-SUPABASE_URL=https://ikwyrrzipzfbyzmkrfmu.supabase.co
+SUPABASE_URL=https://your-project.supabase.co
 SUPABASE_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
 ```
 

@@ -1,7 +1,7 @@
 {
-  "name": "cleanly-whatsapp",
-  "version": "1.0.0",
-  "description": "WhatsApp CRM chatbot for Cleanly using Meta Cloud API, Supabase, and Google Sheets",
+  "name": "whitelabel-whatsapp-crm",
+  "version": "2.0.0",
+  "description": "White-label WhatsApp CRM (Wati-style inbox, broadcasts, automation) using Meta Cloud API and Neon Postgres",
   "main": "index.js",
   "engines": {
     "node": ">=18.0.0"
@@ -25,17 +25,18 @@
   },
   "keywords": [
     "whatsapp",
+    "crm",
     "chatbot",
-    "maid-service",
-    "meta-cloud-api"
+    "meta-cloud-api",
+    "white-label"
   ],
   "author": "",
   "license": "ISC",
   "dependencies": {
-    "@supabase/supabase-js": "^2.105.4",
     "dotenv": "^17.4.2",
     "express": "^4.18.2",
-    "googleapis": "^131.0.0"
+    "googleapis": "^131.0.0",
+    "pg": "^8.23.0"
   },
   "devDependencies": {
     "@playwright/test": "^1.48.0"

@@ -1,6 +1,6 @@
 services:
   - type: web
-    name: cleanly-whatsapp
+    name: whatsapp-crm
     env: node
     plan: starter
     buildCommand: npm install
@@ -19,13 +19,17 @@ services:
         sync: false
       - key: ADMIN_TOKEN
         sync: false
-      - key: SUPABASE_URL
+      - key: DATABASE_URL
         sync: false
-      - key: SUPABASE_KEY
+      - key: DEMO_MODE
+        value: "false"
+      - key: BUSINESS_NAME
         sync: false
-      - key: GOOGLE_CREDENTIALS
+      - key: CONTACT_NUMBER
         sync: false
-      - key: SPREADSHEET_ID
+      - key: BOT_ENABLED
+        value: "true"
+      - key: WELCOME_MESSAGE
         sync: false
       - key: OWNER_PHONE
         sync: false

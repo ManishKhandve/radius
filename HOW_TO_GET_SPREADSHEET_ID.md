@@ -177,7 +177,7 @@ CONTACT_NUMBER="+91 8767572043"
 SPREADSHEET_ID="1a2b3c4d5e6f7g8h9i0j1k2l3m4n5o6p7q8r9s0t1u2v3w4x5y6z"
 
 # ─── Supabase Configuration ──────────────────────────────────
-SUPABASE_URL=https://ikwyrrzipzfbyzmkrfmu.supabase.co
+SUPABASE_URL=https://your-project.supabase.co
 SUPABASE_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
 ```
 

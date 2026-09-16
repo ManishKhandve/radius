@@ -215,13 +215,14 @@ function groupsMatch(record, groups) {
 }
 
 // ─── Audience resolution ────────────────────────────────────
-const SOURCES = { customers: 'customers', flat_customers: 'flat_customers', maids: 'maids', contacts: 'contacts' };
-const NAME_FIELD = { customers: 'name', flat_customers: 'full_name', maids: 'name', contacts: 'name' };
+// Single generic audience: WhatsApp contacts.
+const SOURCES = { contacts: 'contacts' };
+const NAME_FIELD = { contacts: 'name' };
 
 async function resolveAudience(node) {
   const table = SOURCES[node.config.source];
   if (!table) return [];
-  const { data } = await store.supabase.from(table).select('*').limit(5000);
+  const data = await store.fetchAudienceRows(table);
   const out = [];
   const seen = new Set(); // the same number can appear on several rows —
                           // without this they'd each get the same message.
@@ -242,18 +243,17 @@ async function resolveAudience(node) {
 }
 
 // Re-fetch a task's record so loop/if conditions see CURRENT data.
+// contacts is keyed by phone, not a numeric id — look it up by the task's
+// phone via the chat store. Only the contacts audience exists in the
+// white-label core, so anything else resolves to null (filtered out).
 async function fetchRecord(task) {
-  if (!task.source) return null;
-  // contacts is keyed by phone, not a numeric id — look it up by the task's
-  // phone. (Using record_id here silently returned nothing, so If/Else and
-  // loop stop-conditions always saw an empty record.)
-  if (task.source === 'contacts') {
-    const { data } = await store.supabase.from('contacts').select('*').eq('phone', task.phone).single();
-    return data || null;
+  if (!task || task.source !== 'contacts') return null;
+  try {
+    if (deps && deps.chatStore) return (await deps.chatStore.getContactByPhone(task.phone)) || null;
+    return await store.fetchAudienceRows('contacts').then((rows) => rows.find((r) => r.phone === task.phone) || null);
+  } catch {
+    return null;
   }
-  if (task.record_id == null) return null;
-  const { data } = await store.supabase.from(task.source).select('*').eq('id', task.record_id).single();
-  return data || null;
 }
 
 // ─── Graph helpers ──────────────────────────────────────────
@@ -261,6 +261,48 @@ const nodeById = (def, id) => (def.nodes || []).find(n => n.id === id);
 const nextOf = (def, id, port = 'out') =>
   (def.connections || []).filter(c => c.from === id && (c.port || 'out') === port).map(c => c.to);
 const isTrigger = (n) => n && n.type.startsWith('trigger_');
+
+// Per-workflow sales-flow settings (def.settings):
+//   group       — string label, e.g. 'new-lead', 'proposal', 'onboarding'.
+//                 Lets one workflow cancel another group's tasks for a phone.
+//   stopOnReply — when the customer replies, cancel this workflow's tasks
+//                 for them. Default true (sales sequences stop on reply).
+const wfGroup = (wf) => String((((wf || {}).definition || {}).settings || {}).group || '').trim();
+const wfStopOnReply = (wf) => {
+  const s = (((wf || {}).definition || {}).settings || {}).stopOnReply;
+  return s !== false && s !== 'no' && s !== 0;
+};
+
+async function _activeWorkflows() {
+  const out = [];
+  try {
+    const list = await store.listWorkflows();
+    for (const w of list.filter(x => x.status === 'active')) {
+      const wf = await store.getWorkflow(w.id);
+      if (wf) out.push(wf);
+    }
+  } catch (err) {
+    deps.log('error', 'workflow', 'list active failed:', err.message);
+  }
+  return out;
+}
+
+// Pure keyword matcher for trigger_keyword nodes.
+// matchMode 'contains' (default): case-insensitive substring.
+// matchMode 'exact': full-text equality (still case-insensitive).
+// Returns the matched keyword or null.
+function matchKeywordTrigger(text, cfg = {}) {
+  const t = String(text || '').toLowerCase().trim();
+  if (!t) return null;
+  const kws = Array.isArray(cfg.keywords) ? cfg.keywords : [];
+  const mode = cfg.matchMode === 'exact' ? 'exact' : 'contains';
+  for (const k of kws) {
+    const kw = String(k || '').toLowerCase().trim();
+    if (!kw) continue;
+    if (mode === 'exact' ? t === kw : t.includes(kw)) return String(k).trim();
+  }
+  return null;
+}
 
 function firstNodeAfterTrigger(def) {
   const trig = (def.nodes || []).find(isTrigger);
@@ -301,7 +343,18 @@ function validate(def) {
       if (!tpl) errors.push('Send Template node is missing the template name.');
       // Meta template names allow only lowercase letters, digits and underscores.
       else if (!/^[a-z0-9_]+$/.test(tpl)) {
-        errors.push(`Template name "${tpl}" is not a valid Meta name — use only lowercase letters, digits and underscores (e.g. maid_job_opening_hi). Spaces and capitals are rejected by WhatsApp.`);
+        errors.push(`Template name "${tpl}" is not a valid Meta name — use only lowercase letters, digits and underscores (e.g. follow_up_1). Spaces and capitals are rejected by WhatsApp.`);
+      }
+    }
+    if (n.type === 'trigger_keyword') {
+      const kws = (n.config || {}).keywords;
+      if (!Array.isArray(kws) || !kws.map(k => String(k || '').trim()).filter(Boolean).length) {
+        errors.push('Keyword trigger needs at least one keyword/phrase.');
+      }
+    }
+    if (n.type === 'trigger_status_changed') {
+      if (!String((n.config || {}).value || '').trim()) {
+        errors.push('Status trigger needs the status value to fire on (e.g. Proposal Sent).');
       }
     }
     if (n.type === 'logic_loop' && !((n.config || {}).maxIterations > 0) && !((n.config || {}).stopGroups || []).length) {
@@ -355,9 +408,7 @@ async function execNode(wf, def, task, node, state) {
     }
 
     case 'action_update_status': {
-      if (task.source && task.record_id != null && task.source !== 'contacts') {
-        await store.supabase.from(task.source).update({ status: cfg.value }).eq('id', task.record_id);
-      }
+      // Single-audience core: the contact row IS the record.
       await deps.chatStore.updateContactCRM(task.phone, { lead_status: cfg.value }).catch(() => {});
       await store.addLog(wf.id, task.run_id, node.id, 'action', task.phone, 'ok', `status → ${cfg.value}`);
       return { next: nextOf(def, node.id)[0] || null };
@@ -365,11 +416,9 @@ async function execNode(wf, def, task, node, state) {
 
     case 'action_add_note': {
       const stamp = `[wf ${new Date().toISOString().slice(0, 10)}] ${cfg.text || ''}`;
-      if (task.source && task.record_id != null && task.source !== 'contacts') {
-        const rec = await fetchRecord(task);
-        const notes = rec && rec.notes ? rec.notes + '\n' + stamp : stamp;
-        await store.supabase.from(task.source).update({ notes }).eq('id', task.record_id);
-      }
+      try {
+        if (deps && deps.chatStore) await deps.chatStore.addNote(task.phone, stamp, 'Workflow');
+      } catch { /* notes are best-effort */ }
       await store.addLog(wf.id, task.run_id, node.id, 'action', task.phone, 'ok', 'note added');
       return { next: nextOf(def, node.id)[0] || null };
     }
@@ -545,11 +594,25 @@ async function processTask(task) {
 }
 
 // ─── Runs: start a workflow for its audience ────────────────
-async function startRun(wf, triggerLabel, recipients = null) {
+// opts.skipPaused (default true): drop contacts who manually paused
+// automation. Manual run-now / webhook calls pass false — an explicit
+// human action overrides the pause.
+async function startRun(wf, triggerLabel, recipients = null, opts = {}) {
   const def = wf.definition || {};
   const audienceNode = (def.nodes || []).find(n => n.type === 'audience');
   let people = recipients;
   if (!people) people = audienceNode ? await resolveAudience(audienceNode) : [];
+
+  if (opts.skipPaused !== false) {
+    const kept = [];
+    for (const p of people) {
+      try {
+        if (await store.isAutomationPaused(p.phone)) continue;
+      } catch { /* check must never block a run */ }
+      kept.push(p);
+    }
+    people = kept;
+  }
 
   // Final safety net: never queue the same number twice in one run, whoever
   // supplied the list (audience node, event trigger, or a manual call).
@@ -576,6 +639,97 @@ async function startRun(wf, triggerLabel, recipients = null) {
   return run;
 }
 
+// ─── Sales-flow event handlers (called from index.js) ──────
+// These power the lead-follow-up rules:
+//   reply  → STOP automatic messages (workflows with stopOnReply)
+//   status → STOP listed groups + START this workflow for the contact
+//   keyword→ START this workflow for the contact
+// All no-op gracefully when nothing matches.
+
+// IF customer replies → STOP automatic messages.
+async function handleInboundReply(phone) {
+  if (!phone) return 0;
+  let stopped = 0;
+  for (const wf of await _activeWorkflows()) {
+    if (!wfStopOnReply(wf)) continue;
+    const n = await store.cancelTasksForPhone(phone, { onlyWorkflowIds: [wf.id], reason: 'customer replied' });
+    if (n > 0) {
+      stopped += n;
+      await store.addLog(wf.id, null, null, 'run', phone, 'stopped', `customer replied — ${n} automatic message(s) stopped`);
+    }
+  }
+  return stopped;
+}
+
+// IF customer says <keyword> → START the matching sequence(s).
+async function handleInboundText(phone, name, text) {
+  if (!phone || !String(text || '').trim()) return [];
+  if (await store.isAutomationPaused(phone)) return [];
+  const started = [];
+  for (const wf of await _activeWorkflows()) {
+    const def = wf.definition || {};
+    const trig = (def.nodes || []).find(isTrigger);
+    if (!trig || trig.type !== 'trigger_keyword') continue;
+    const hit = matchKeywordTrigger(text, trig.config || {});
+    if (!hit) continue;
+    const run = await startRun(wf, `keyword "${hit}"`, [{
+      phone, name: name || 'Customer', source: 'contacts', record_id: null,
+    }]);
+    if (run) started.push(wf.name);
+  }
+  return started;
+}
+
+// IF status changes to <value> → STOP listed groups + START this workflow.
+// cancelGroups: array of workflow group labels to stop for this phone,
+// or ['*'] for "stop everything else" (e.g. Payment Received stops ALL
+// sales follow-ups before onboarding starts).
+async function handleStatusChange(phone, oldStatus, newStatus) {
+  if (!phone || !newStatus) return [];
+  const want = String(newStatus).toLowerCase().trim();
+  if (String(oldStatus || '').toLowerCase().trim() === want) return [];
+  const started = [];
+  const all = await _activeWorkflows();
+  const byId = new Map(all.map(w => [w.id, w]));
+
+  // The contact row, for the name + the optional audience-style filter.
+  let record = null;
+  try {
+    if (deps && deps.chatStore) record = (await deps.chatStore.getContactByPhone(phone)) || null;
+  } catch { /* filter simply won't apply */ }
+  const name = (record && record.name) || 'Customer';
+
+  for (const wf of all) {
+    const def = wf.definition || {};
+    const trig = (def.nodes || []).find(isTrigger);
+    if (!trig || trig.type !== 'trigger_status_changed') continue;
+    const cfg = trig.config || {};
+    if (String(cfg.value || '').toLowerCase().trim() !== want) continue;
+
+    // 1) STOP the configured groups for this phone.
+    const groups = Array.isArray(cfg.cancelGroups) ? cfg.cancelGroups : [];
+    if (groups.length) {
+      const stopAll = groups.includes('*');
+      const ids = all
+        .filter(w => w.id !== wf.id && (stopAll || groups.includes(wfGroup(w))))
+        .map(w => w.id);
+      if (ids.length) {
+        const n = await store.cancelTasksForPhone(phone, { onlyWorkflowIds: ids, reason: `status → ${newStatus}` });
+        if (n > 0) await store.addLog(wf.id, null, null, 'run', phone, 'stopped', `status → ${newStatus}: stopped ${n} message(s) in [${groups.join(', ')}]`);
+      }
+    }
+
+    // 2) START this workflow (unless the contact paused automation).
+    if (await store.isAutomationPaused(phone)) continue;
+    if (record && !groupsMatch(record, cfg.groups)) continue;
+    const run = await startRun(wf, `status → ${newStatus}`, [{
+      phone, name, source: 'contacts', record_id: null,
+    }]);
+    if (run) started.push(wf.name);
+  }
+  return started;
+}
+
 // ─── Event triggers (polled) ────────────────────────────────
 async function pollEventTriggers(wf) {
   const def = wf.definition || {};
@@ -585,9 +739,9 @@ async function pollEventTriggers(wf) {
   const nowIso = new Date().toISOString();
 
   if (trig.type === 'trigger_customer_created') {
-    const table = SOURCES[trig.config?.source] || 'customers';
+    const table = SOURCES[trig.config?.source] || 'contacts';
     const since = es['created_' + table] || wf.updated_at || nowIso;
-    const { data } = await store.supabase.from(table).select('*').gt('created_at', since).order('created_at', { ascending: true }).limit(200);
+    const data = await store.listCreatedSince(table, since, 200);
     if (data && data.length) {
       const people = data
         .filter(r => groupsMatch(r, trig.config?.groups))
@@ -601,8 +755,7 @@ async function pollEventTriggers(wf) {
 
   if (trig.type === 'trigger_followup_due') {
     const since = es.followup_since || nowIso;
-    const { data } = await store.supabase.from('contacts').select('*')
-      .eq('lead_status', 'Follow-up Required').gt('follow_up_time', since).lte('follow_up_time', nowIso);
+    const data = await store.listFollowupsDue(since, nowIso);
     if (data && data.length) {
       const people = data.map(c => ({ phone: deps.toMetaPhone(c.phone), name: c.name || 'Customer', source: 'contacts', record_id: null })).filter(p => p.phone);
       if (people.length) await startRun(wf, 'follow-up due', people);
@@ -614,7 +767,7 @@ async function pollEventTriggers(wf) {
 
 // ─── Main tick ──────────────────────────────────────────────
 async function tick() {
-  if (busy || !store.supabase) return;
+  if (busy || !store.hasDb) return;
   busy = true;
   try {
     const wfs = await store.listWorkflows();
@@ -660,5 +813,6 @@ function init(dependencies) {
 
 module.exports = {
   init, tick, validate, computeNextRun, cronMatches, groupsMatch, condMatches,
-  resolveAudience, startRun, SOURCES,
+  resolveAudience, startRun, handleInboundReply, handleInboundText,
+  handleStatusChange, matchKeywordTrigger, SOURCES,
 };

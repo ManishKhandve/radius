@@ -1,14 +1,14 @@
 // ============================================================
 // workflow-store.js — persistence for the Automation workflow builder
 // ============================================================
-// All state lives in Supabase so the engine survives Render restarts:
+// All state lives in Neon Postgres so the engine survives Render restarts:
 //   workflows          — definition (nodes/connections/settings), status, next run
 //   workflow_versions  — snapshot on every save (version history / restore)
 //   workflow_runs      — one row per execution batch, with counters
 //   workflow_tasks     — per-recipient walker state (current node, wake_at, loops)
 //   workflow_logs      — every action/audit event (who edited, what was sent, errors)
 //
-// Required SQL (run once in the Supabase SQL editor):
+// Required SQL lives in neon-schema.sql (run once on a fresh database):
 //   CREATE TABLE IF NOT EXISTS workflows (
 //     id bigserial PRIMARY KEY, name text NOT NULL, status text DEFAULT 'draft',
 //     definition jsonb DEFAULT '{}'::jsonb, version int DEFAULT 1,
@@ -41,44 +41,73 @@
 // ============================================================
 
 require('dotenv').config();
-const { createClient } = require('@supabase/supabase-js');
+const { q, one, all, jb, hasDb } = require('./db');
 
-const supabase = (process.env.SUPABASE_URL && process.env.SUPABASE_KEY)
-  ? createClient(process.env.SUPABASE_URL, process.env.SUPABASE_KEY)
-  : null;
+if (!hasDb) {
+  console.log(`${new Date().toISOString()} [workflow-store] no database — automation is in-memory only (nothing persists).`);
+}
 
-let tablesMissingWarned = false;
-function warnMissing(err) {
-  if (!tablesMissingWarned && /does not exist|schema cache/i.test(err.message || '')) {
-    tablesMissingWarned = true;
-    console.error('[workflow-store] ❌ workflow tables missing — run the SQL in workflow-store.js header. Automation is disabled until then.');
+// JSON-safe param for jsonb columns (definition, engine_state, state).
+function sqlVal(v) {
+  return (v !== null && typeof v === 'object') ? JSON.stringify(v) : v;
+}
+
+// ─── Audience / event reads (table-whitelisted — never interpolate raw input) ──
+const AUDIENCE_TABLES = new Set(['contacts']);
+async function fetchAudienceRows(table) {
+  if (!AUDIENCE_TABLES.has(table)) return [];
+  try { return await all(`SELECT * FROM ${table} LIMIT 5000`); } catch { return []; }
+}
+async function listCreatedSince(table, since, limit = 200) {
+  if (!AUDIENCE_TABLES.has(table)) return [];
+  try {
+    return await all(`SELECT * FROM ${table} WHERE created_at > $1 ORDER BY created_at ASC LIMIT $2`, [since, limit]);
+  } catch { return []; }
+}
+async function listFollowupsDue(since, until) {
+  try {
+    return await all(
+      "SELECT * FROM contacts WHERE lead_status='Follow-up Required' AND follow_up_time > $1 AND follow_up_time <= $2",
+      [since, until]
+    );
+  } catch { return []; }
+}
+async function countRows(table) {
+  if (!AUDIENCE_TABLES.has(table)) return 0;
+  try {
+    const r = await one(`SELECT COUNT(*)::int AS c FROM ${table}`);
+    return (r && r.c) || 0;
+  } catch { return 0; }
+}
+async function columnValues(source, field, limit = 5000) {
+  if (!AUDIENCE_TABLES.has(source) || !/^[A-Za-z_][A-Za-z0-9_]*$/.test(field)) {
+    throw new Error('Unknown source/field');
   }
+  const rows = await all(`SELECT "${field}" AS v FROM ${source} LIMIT $1`, [limit]);
+  return rows.map((r) => r.v);
 }
 
 // ─── Workflows ──────────────────────────────────────────────
 async function listWorkflows() {
   try {
-    const { data, error } = await supabase.from('workflows')
-      .select('id, name, status, version, next_run_at, last_run_at, created_by, updated_by, updated_at')
-      .order('updated_at', { ascending: false });
-    if (error) { warnMissing(error); return []; }
-    return data || [];
+    return await all(
+      'SELECT id, name, status, version, next_run_at, last_run_at, created_by, updated_by, updated_at FROM workflows ORDER BY updated_at DESC'
+    );
   } catch { return []; }
 }
 
 async function getWorkflow(id) {
   try {
-    const { data, error } = await supabase.from('workflows').select('*').eq('id', id).single();
-    if (error) { warnMissing(error); return null; }
-    return data;
+    return await one('SELECT * FROM workflows WHERE id=$1', [id]);
   } catch { return null; }
 }
 
 async function createWorkflow(name, definition, username) {
-  const { data, error } = await supabase.from('workflows')
-    .insert({ name, definition, status: 'draft', created_by: username, updated_by: username })
-    .select().single();
-  if (error) { warnMissing(error); throw new Error(error.message); }
+  const data = await one(
+    'INSERT INTO workflows (name, definition, status, created_by, updated_by) VALUES ($1,$2,$3,$4,$5) RETURNING *',
+    [name, jb(definition), 'draft', username, username]
+  );
+  if (!data) throw new Error('Database not connected — cannot save workflows.');
   await saveVersion(data.id, 1, definition, username);
   return data;
 }
@@ -86,8 +115,13 @@ async function createWorkflow(name, definition, username) {
 async function updateWorkflow(id, patch, username) {
   patch.updated_by = username;
   patch.updated_at = new Date().toISOString();
-  const { data, error } = await supabase.from('workflows').update(patch).eq('id', id).select().single();
-  if (error) throw new Error(error.message);
+  const keys = Object.keys(patch);
+  const set = keys.map((k, i) => `"${k}"=$${i + 1}`).join(', ');
+  const data = await one(
+    `UPDATE workflows SET ${set} WHERE id=$${keys.length + 1} RETURNING *`,
+    [...keys.map((k) => sqlVal(patch[k])), id]
+  );
+  if (!data) throw new Error('Workflow not found');
   return data;
 }
 
@@ -102,73 +136,64 @@ async function saveDefinition(id, definition, username) {
 
 async function deleteWorkflow(id) {
   for (const t of ['workflow_tasks', 'workflow_runs', 'workflow_versions', 'workflow_logs']) {
-    await supabase.from(t).delete().eq('workflow_id', id);
+    await q(`DELETE FROM ${t} WHERE workflow_id=$1`, [id]);
   }
-  const { error } = await supabase.from('workflows').delete().eq('id', id);
-  if (error) throw new Error(error.message);
+  await q('DELETE FROM workflows WHERE id=$1', [id]);
 }
 
 // ─── Versions ───────────────────────────────────────────────
 async function saveVersion(workflowId, version, definition, username) {
   try {
-    await supabase.from('workflow_versions').insert({ workflow_id: workflowId, version, definition, saved_by: username });
+    await q(
+      'INSERT INTO workflow_versions (workflow_id, version, definition, saved_by) VALUES ($1,$2,$3,$4)',
+      [workflowId, version, jb(definition), username]
+    );
   } catch { /* non-fatal */ }
 }
 
 async function listVersions(workflowId) {
   try {
-    const { data } = await supabase.from('workflow_versions')
-      .select('id, version, saved_by, saved_at')
-      .eq('workflow_id', workflowId).order('version', { ascending: false }).limit(30);
-    return data || [];
+    return await all(
+      'SELECT id, version, saved_by, saved_at FROM workflow_versions WHERE workflow_id=$1 ORDER BY version DESC LIMIT 30',
+      [workflowId]
+    );
   } catch { return []; }
 }
 
 async function getVersion(workflowId, version) {
   try {
-    const { data } = await supabase.from('workflow_versions')
-      .select('*').eq('workflow_id', workflowId).eq('version', version).single();
-    return data;
+    return await one(
+      'SELECT * FROM workflow_versions WHERE workflow_id=$1 AND version=$2',
+      [workflowId, version]
+    );
   } catch { return null; }
 }
 
 // ─── Runs ───────────────────────────────────────────────────
 async function createRun(workflowId, trigger, total) {
-  const { data, error } = await supabase.from('workflow_runs')
-    .insert({ workflow_id: workflowId, trigger, total }).select().single();
-  if (error) { warnMissing(error); return null; }
-  return data;
+  return await one(
+    'INSERT INTO workflow_runs (workflow_id, trigger, total) VALUES ($1,$2,$3) RETURNING *',
+    [workflowId, trigger, total]
+  );
 }
 
 async function bumpRun(runId, field) {
   try {
-    // Atomic increment: single UPDATE that reads and writes in one statement.
-    // The old read-then-write could undercount when two tasks for the same run
-    // are processed concurrently (e.g. across server instances or future
-    // parallelism changes).  PostgREST doesn't support `SET x = x + 1`
-    // directly, but we can achieve the same via a Postgres function call.
-    // Fallback: the sequential `for...await` in tick() makes the read-then-
-    // write safe in a single-process deployment, so degrade gracefully.
-    const { error } = await supabase.rpc('increment_field', {
-      table_name: 'workflow_runs', row_id: runId, field_name: field,
-    });
-    if (error) {
-      // RPC not available — fall back to read-then-write (safe in single process)
-      const { data } = await supabase.from('workflow_runs').select(field).eq('id', runId).single();
-      if (data) await supabase.from('workflow_runs').update({ [field]: (data[field] || 0) + 1 }).eq('id', runId);
-    }
+    // Atomic increment in a single statement — no lost updates under
+    // concurrency. Column is whitelist-checked (only run counters).
+    if (!['sent', 'failed', 'skipped'].includes(field)) return;
+    await q(`UPDATE workflow_runs SET "${field}" = "${field}" + 1 WHERE id=$1`, [runId]);
   } catch { /* stats are best-effort */ }
 }
 
 async function finishOpenRuns() {
   // Mark runs finished once none of their tasks are still active.
   try {
-    const { data: open } = await supabase.from('workflow_runs').select('id').eq('status', 'running').limit(50);
+    const open = await all("SELECT id FROM workflow_runs WHERE status='running' LIMIT 50");
     for (const r of (open || [])) {
-      const { count } = await supabase.from('workflow_tasks')
-        .select('*', { count: 'exact', head: true }).eq('run_id', r.id).eq('status', 'active');
-      if (count === 0) {
-        await supabase.from('workflow_runs').update({ status: 'finished', finished_at: new Date().toISOString() }).eq('id', r.id);
+      const c = await one("SELECT COUNT(*)::int AS c FROM workflow_tasks WHERE run_id=$1 AND status='active'", [r.id]);
+      if (c && c.c === 0) {
+        await q('UPDATE workflow_runs SET status=$1, finished_at=$2 WHERE id=$3', ['finished', new Date().toISOString(), r.id]);
       }
     }
   } catch { /* best-effort */ }
@@ -176,84 +201,165 @@ async function finishOpenRuns() {
 
 async function listRuns(workflowId, limit = 25) {
   try {
-    let q = supabase.from('workflow_runs').select('*').order('started_at', { ascending: false }).limit(limit);
-    if (workflowId) q = q.eq('workflow_id', workflowId);
-    const { data } = await q;
-    return data || [];
+    if (workflowId) {
+      return await all('SELECT * FROM workflow_runs WHERE workflow_id=$1 ORDER BY started_at DESC LIMIT $2', [workflowId, limit]);
+    }
+    return await all('SELECT * FROM workflow_runs ORDER BY started_at DESC LIMIT $1', [limit]);
   } catch { return []; }
 }
 
 // ─── Tasks (per-recipient walker state) ─────────────────────
 async function createTasks(rows) {
   if (!rows.length) return;
-  // Supabase/PostgREST rejects oversized payloads — large audiences (100+
+  // Large audiences (100+
   // recipients) silently fail as a single insert, leaving zero tasks and
   // causing the run to finish immediately. Chunk into small batches.
   const BATCH = 50;
+  const cols = '(workflow_id, run_id, phone, name, source, record_id, node_id, state, wake_at)';
   for (let i = 0; i < rows.length; i += BATCH) {
     const chunk = rows.slice(i, i + BATCH);
-    const { error } = await supabase.from('workflow_tasks').insert(chunk);
-    if (error) {
-      warnMissing(error);
-      console.error(`[workflow-store] createTasks batch ${Math.floor(i / BATCH) + 1}/${Math.ceil(rows.length / BATCH)} failed (${chunk.length} rows):`, error.message);
+    try {
+      const ph = chunk.map((_, k) => `($${k * 9 + 1}, $${k * 9 + 2}, $${k * 9 + 3}, $${k * 9 + 4}, $${k * 9 + 5}, $${k * 9 + 6}, $${k * 9 + 7}, $${k * 9 + 8}, $${k * 9 + 9})`).join(', ');
+      const params = chunk.flatMap((r) => [r.workflow_id, r.run_id, r.phone, r.name, r.source || null, r.record_id ?? null, r.node_id, jb(r.state || {}), r.wake_at]);
+      await q(`INSERT INTO workflow_tasks ${cols} VALUES ${ph}`, params);
+    } catch (err) {
+      console.error(`[workflow-store] createTasks batch ${Math.floor(i / BATCH) + 1}/${Math.ceil(rows.length / BATCH)} failed (${chunk.length} rows):`, err.message);
     }
   }
 }
 
 async function dueTasks(limit = 40) {
   try {
-    const { data, error } = await supabase.from('workflow_tasks')
-      .select('*').eq('status', 'active').lte('wake_at', new Date().toISOString())
-      .order('wake_at', { ascending: true }).limit(limit);
-    if (error) { warnMissing(error); return []; }
-    return data || [];
+    return await all(
+      "SELECT * FROM workflow_tasks WHERE status='active' AND wake_at <= $1 ORDER BY wake_at ASC LIMIT $2",
+      [new Date().toISOString(), limit]
+    );
   } catch { return []; }
 }
 
 async function updateTask(id, patch) {
   patch.updated_at = new Date().toISOString();
-  await supabase.from('workflow_tasks').update(patch).eq('id', id);
+  const keys = Object.keys(patch);
+  if (!keys.length) return;
+  const set = keys.map((k, i) => `"${k}"=$${i + 1}`).join(', ');
+  await q(`UPDATE workflow_tasks SET ${set} WHERE id=$${keys.length + 1}`, [...keys.map((k) => sqlVal(patch[k])), id]);
 }
 
 // Cancels every still-active task for a workflow. Returns how many were cleared.
 async function cancelTasks(workflowId) {
   try {
-    const { data } = await supabase.from('workflow_tasks')
-      .update({ status: 'cancelled' })
-      .eq('workflow_id', workflowId).eq('status', 'active')
-      .select('id');
-    return (data || []).length;
+    const rows = await all(
+      "UPDATE workflow_tasks SET status='cancelled' WHERE workflow_id=$1 AND status='active' RETURNING id",
+      [workflowId]
+    );
+    return (rows || []).length;
   } catch { return 0; }
+}
+
+// Cancels active tasks for ONE phone (one customer), optionally scoped to a
+// subset of workflows. This is the "customer replied / status changed /
+// agent paused" stop mechanism for sales sequences.
+//   opts.onlyWorkflowIds   — cancel only these workflows (array of ids)
+//   opts.excludeWorkflowIds — cancel everything except these (e.g. the onboarding
+//                             workflow that just started for the same phone)
+// Returns how many tasks were cleared.
+async function cancelTasksForPhone(phone, opts = {}) {
+  if (!phone) return 0;
+  try {
+    const reason = 'stopped: ' + (opts.reason || 'rule');
+    let sql = "UPDATE workflow_tasks SET status='cancelled', last_error=$1 WHERE phone=$2 AND status='active'";
+    const params = [reason, phone];
+    if (Array.isArray(opts.onlyWorkflowIds) && opts.onlyWorkflowIds.length) {
+      params.push(opts.onlyWorkflowIds);
+      sql += ` AND workflow_id = ANY($${params.length}::bigint[])`;
+    } else if (Array.isArray(opts.excludeWorkflowIds) && opts.excludeWorkflowIds.length) {
+      params.push(opts.excludeWorkflowIds);
+      sql += ` AND NOT (workflow_id = ANY($${params.length}::bigint[]))`;
+    }
+    sql += ' RETURNING id';
+    const rows = await all(sql, params);
+    return (rows || []).length;
+  } catch { return 0; }
+}
+
+// Lists a phone's still-active tasks (for the inbox "automation" indicator).
+async function activeTasksForPhone(phone, limit = 50) {
+  if (!phone) return [];
+  try {
+    return await all(
+      "SELECT id, workflow_id, node_id, wake_at, retry_count FROM workflow_tasks WHERE phone=$1 AND status='active' ORDER BY wake_at ASC LIMIT $2",
+      [phone, limit]
+    );
+  } catch { return []; }
+}
+
+// ─── Per-contact automation pause ───────────────────────────
+// "Salesperson manually pauses automation → STOP ALL AUTOMATIC MESSAGES".
+// Memory map is the source of truth at runtime; the optional
+// contacts.automation_paused column (see SALES_FLOW_SETUP.md) makes it
+// survive restarts. Every read/write degrades gracefully when the column
+// doesn't exist yet.
+const _automationPaused = new Map(); // phone -> true
+
+function _colMissing(err) {
+  const msg = String((err && err.message) || '');
+  return /automation_paused|column.*does not exist|PGRST204|42703/i.test(msg);
+}
+
+async function isAutomationPaused(phone) {
+  if (!phone) return false;
+  if (_automationPaused.has(phone)) return true;
+  try {
+    const row = await one('SELECT automation_paused FROM contacts WHERE phone=$1', [phone]);
+    if (row && row.automation_paused) {
+      _automationPaused.set(phone, true);
+      return true;
+    }
+    return false;
+  } catch { return false; }
+}
+
+async function setAutomationPaused(phone, paused) {
+  if (!phone) return;
+  if (paused) _automationPaused.set(phone, true);
+  else _automationPaused.delete(phone);
+  try {
+    await q('UPDATE contacts SET automation_paused=$1 WHERE phone=$2', [!!paused, phone]);
+  } catch { /* memory map still applies */ }
 }
 
 // ─── Logs (executions + audit trail) ────────────────────────
 async function addLog(workflowId, runId, nodeId, type, recipient, status, message, retryCount = 0) {
   try {
-    await supabase.from('workflow_logs').insert({
-      workflow_id: workflowId, run_id: runId, node_id: nodeId, type,
-      recipient, status, message: String(message || '').slice(0, 500), retry_count: retryCount,
-    });
+    await q(
+      'INSERT INTO workflow_logs (workflow_id, run_id, node_id, type, recipient, status, message, retry_count) VALUES ($1,$2,$3,$4,$5,$6,$7,$8)',
+      [workflowId, runId, nodeId, type, recipient, status, String(message || '').slice(0, 500), retryCount]
+    );
   } catch { /* logging must never break execution */ }
 }
 
 async function listLogs({ workflowId, type, limit = 100 } = {}) {
   try {
-    let q = supabase.from('workflow_logs').select('*').order('created_at', { ascending: false }).limit(limit);
-    if (workflowId) q = q.eq('workflow_id', workflowId);
-    if (type) q = q.eq('type', type);
-    const { data } = await q;
-    return data || [];
+    const conds = [];
+    const params = [];
+    if (workflowId) { params.push(workflowId); conds.push(`workflow_id=$${params.length}`); }
+    if (type) { params.push(type); conds.push(`type=$${params.length}`); }
+    params.push(limit);
+    return await all(
+      `SELECT * FROM workflow_logs${conds.length ? ' WHERE ' + conds.join(' AND ') : ''} ORDER BY created_at DESC LIMIT $${params.length}`,
+      params
+    );
   } catch { return []; }
 }
 
 // Has this workflow ever successfully messaged this phone? (duplicate guard)
 async function hasSentBefore(workflowId, phone) {
   try {
-    const { count } = await supabase.from('workflow_logs')
-      .select('*', { count: 'exact', head: true })
-      .eq('workflow_id', workflowId).eq('recipient', phone)
-      .eq('type', 'send').eq('status', 'sent');
-    return (count || 0) > 0;
+    const row = await one(
+      "SELECT COUNT(*)::int AS c FROM workflow_logs WHERE workflow_id=$1 AND recipient=$2 AND type='send' AND status='sent'",
+      [workflowId, phone]
+    );
+    return ((row && row.c) || 0) > 0;
   } catch { return false; }
 }
 
@@ -261,25 +367,26 @@ async function hasSentBefore(workflowId, phone) {
 async function dashboardStats() {
   const out = { active: 0, draft: 0, paused: 0, sent: 0, failed: 0, nextRun: null };
   try {
-    const { data: wfs } = await supabase.from('workflows').select('status, next_run_at');
+    const wfs = await all('SELECT status, next_run_at FROM workflows');
     for (const w of (wfs || [])) {
       if (w.status === 'active') out.active++;
       else if (w.status === 'draft') out.draft++;
       else if (w.status === 'paused') out.paused++;
       if (w.status === 'active' && w.next_run_at && (!out.nextRun || w.next_run_at < out.nextRun)) out.nextRun = w.next_run_at;
     }
-    const { count: sent } = await supabase.from('workflow_logs').select('*', { count: 'exact', head: true }).eq('type', 'send').eq('status', 'sent');
-    const { count: failed } = await supabase.from('workflow_logs').select('*', { count: 'exact', head: true }).eq('type', 'send').eq('status', 'failed');
-    out.sent = sent || 0; out.failed = failed || 0;
+    const snt = await one("SELECT COUNT(*)::int AS c FROM workflow_logs WHERE type='send' AND status='sent'");
+    const fld = await one("SELECT COUNT(*)::int AS c FROM workflow_logs WHERE type='send' AND status='failed'");
+    out.sent = (snt && snt.c) || 0; out.failed = (fld && fld.c) || 0;
   } catch { /* partial stats are fine */ }
   return out;
 }
 
 module.exports = {
-  supabase,
+  hasDb, fetchAudienceRows, listCreatedSince, listFollowupsDue, countRows, columnValues,
   listWorkflows, getWorkflow, createWorkflow, updateWorkflow, saveDefinition, deleteWorkflow,
   listVersions, getVersion,
   createRun, bumpRun, finishOpenRuns, listRuns,
-  createTasks, dueTasks, updateTask, cancelTasks,
+  createTasks, dueTasks, updateTask, cancelTasks, cancelTasksForPhone, activeTasksForPhone,
+  isAutomationPaused, setAutomationPaused,
   addLog, listLogs, hasSentBefore, dashboardStats,
 };

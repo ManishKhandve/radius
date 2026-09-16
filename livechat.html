@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Cleanly WhatsApp - Workspace</title>
+    <title>WhatsApp CRM - Workspace</title>
     <!-- Google Fonts -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -15,21 +15,25 @@
 
     <style>
         :root {
-            --bg-main: #f1f5f9;
+            --bg-main: #edf0f5;
             --bg-sidebar: #ffffff;
             --bg-panel: #ffffff;
-            --bg-chat: #f8fafc;
-            --border-color: #94a3b8;
+            --bg-chat: #f4f6fa;
+            --border-color: #e4e9f1;
+            --border-strong: #cbd5e1;
             --text-main: #0f172a;
-            --text-muted: #334155;
+            --text-muted: #64748b;
             --primary: #10b981; /* Emerald / WhatsApp Green */
             --primary-hover: #059669;
-            --primary-glow: rgba(16, 185, 129, 0.08);
+            --primary-glow: rgba(16, 185, 129, 0.10);
             --indigo: #4f46e5;
             --indigo-glow: rgba(79, 70, 229, 0.08);
             --error: #e11d48;
             --warning: #d97706;
             --card-bg: #ffffff;
+            --shadow-sm: 0 1px 2px rgba(15, 23, 42, 0.05);
+            --shadow-md: 0 4px 14px rgba(15, 23, 42, 0.07);
+            --ring: 0 0 0 3px rgba(16, 185, 129, 0.15);
         }
 
         * {
@@ -49,11 +53,11 @@
             background: transparent;
         }
         ::-webkit-scrollbar-thumb {
-            background: rgba(0, 0, 0, 0.1);
+            background: rgba(15, 23, 42, 0.14);
             border-radius: 4px;
         }
         ::-webkit-scrollbar-thumb:hover {
-            background: rgba(0, 0, 0, 0.2);
+            background: rgba(15, 23, 42, 0.24);
         }
 
         body {
@@ -63,6 +67,16 @@
             height: 100vh;
             display: flex;
             overflow: hidden;
+            -webkit-font-smoothing: antialiased;
+            text-rendering: optimizeLegibility;
+        }
+
+        ::selection {
+            background: rgba(16, 185, 129, 0.22);
+        }
+
+        button:focus-visible, input:focus-visible, select:focus-visible {
+            outline: none;
         }
 
         /* Main SaaS Grid */
@@ -74,9 +88,9 @@
             background: var(--bg-main);
         }
 
-        /* Far-Left Sidebar Navigation (260px) */
+        /* Far-Left Sidebar Navigation */
         .sidebar {
-            width: 260px;
+            width: 248px;
             background: var(--bg-sidebar);
             border-right: 1px solid var(--border-color);
             display: flex;
@@ -86,7 +100,7 @@
         }
 
         .sidebar-brand {
-            padding: 24px;
+            padding: 18px 20px;
             display: flex;
             align-items: center;
             gap: 12px;
@@ -94,15 +108,14 @@
         }
 
         .brand-logo {
-            width: 38px;
-            height: 38px;
+            width: 36px;
+            height: 36px;
             background: linear-gradient(135deg, var(--primary) 0%, #047857 100%);
-            border-radius: 10px;
+            border-radius: 11px;
             display: flex;
             align-items: center;
             justify-content: center;
-            box-shadow: 0 4px 12px rgba(16, 185, 129, 0.3);
-            transform: rotate(-3deg);
+            box-shadow: 0 2px 8px rgba(16, 185, 129, 0.35);
         }
 
         .brand-logo svg {
@@ -113,33 +126,32 @@
 
         .brand-name {
             font-family: 'Outfit', sans-serif;
-            font-size: 20px;
+            font-size: 17px;
             font-weight: 700;
-            background: linear-gradient(to right, #0f172a, #475569);
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
+            color: var(--text-main);
+            letter-spacing: -0.2px;
         }
 
         .sidebar-menu {
             flex: 1;
-            padding: 24px 16px;
+            padding: 16px 12px;
             display: flex;
             flex-direction: column;
-            gap: 8px;
+            gap: 4px;
         }
 
         .menu-item {
             display: flex;
             align-items: center;
-            gap: 12px;
-            padding: 12px 16px;
-            border-radius: 12px;
+            gap: 10px;
+            padding: 10px 12px;
+            border-radius: 10px;
             color: var(--text-muted);
             text-decoration: none;
             font-weight: 500;
-            font-size: 14.5px;
+            font-size: 14px;
             cursor: pointer;
-            transition: all 0.2s ease;
+            transition: background 0.15s ease, color 0.15s ease;
             background: transparent;
             border: none;
             text-align: left;
@@ -147,20 +159,22 @@
         }
 
         .menu-item svg {
-            width: 20px;
-            height: 20px;
-            transition: stroke 0.2s;
+            width: 18px;
+            height: 18px;
+            transition: stroke 0.15s;
+            flex-shrink: 0;
         }
 
         .menu-item:hover {
             color: var(--text-main);
-            background: #f1f5f9;
+            background: #f3f6fa;
         }
 
         .menu-item.active {
-            color: var(--primary);
+            color: var(--primary-hover);
             background: var(--primary-glow);
             font-weight: 600;
+            box-shadow: inset 3px 0 0 var(--primary);
         }
 
         .menu-item.active svg {
@@ -178,9 +192,9 @@
         }
 
         .sidebar-footer {
-            padding: 20px 16px;
+            padding: 16px 12px;
             border-top: 1px solid var(--border-color);
-            background: #f8fafc;
+            background: #fafbfc;
         }
 
         .user-profile {
@@ -257,7 +271,7 @@
         }
 
         .leads-header {
-            padding: 24px;
+            padding: 18px 18px 16px;
             border-bottom: 1px solid var(--border-color);
         }
 
@@ -270,12 +284,13 @@
 
         .leads-header-title h2 {
             font-family: 'Outfit', sans-serif;
-            font-size: 18px;
+            font-size: 16px;
             font-weight: 600;
+            letter-spacing: -0.2px;
         }
 
         .leads-count-badge {
-            background: #f1f5f9;
+            background: #eef2f7;
             padding: 4px 10px;
             border-radius: 99px;
             font-size: 12px;
@@ -298,18 +313,20 @@
 
         .search-input-wrapper input {
             flex: 1;
-            background: #ffffff;
-            border: 1px solid var(--border-color);
+            background: #f3f6fa;
+            border: 1px solid transparent;
             border-radius: 10px;
             padding: 10px 12px 10px 38px;
             color: var(--text-main);
             outline: none;
             font-size: 13.5px;
-            transition: border-color 0.2s;
+            transition: background 0.15s, border-color 0.15s, box-shadow 0.15s;
         }
 
         .search-input-wrapper input:focus {
+            background: #ffffff;
             border-color: var(--primary);
+            box-shadow: var(--ring);
         }
 
         .search-icon {
@@ -329,13 +346,15 @@
             color: var(--text-muted);
             font-size: 13px;
             cursor: pointer;
-            font-weight: 500;
-            transition: all 0.2s;
+            font-weight: 600;
+            transition: border-color 0.15s, color 0.15s, background 0.15s;
+            white-space: nowrap;
         }
 
         .btn-unread-filter:hover {
             color: var(--text-main);
-            background: #f1f5f9;
+            border-color: var(--border-strong);
+            background: #f8fafc;
         }
 
         .filter-grid {
@@ -345,7 +364,7 @@
         }
 
         .leads-pane select {
-            background: #ffffff;
+            background: #f8fafc;
             border: 1px solid var(--border-color);
             border-radius: 8px;
             padding: 8px 10px;
@@ -353,12 +372,13 @@
             font-size: 12px;
             outline: none;
             cursor: pointer;
-            transition: border-color 0.2s;
+            transition: border-color 0.15s, box-shadow 0.15s;
             width: 100%;
         }
 
         .leads-pane select:focus {
             border-color: var(--primary);
+            box-shadow: var(--ring);
         }
 
         .contact-list {
@@ -369,21 +389,21 @@
 
         .contact-item {
             display: flex;
-            padding: 16px 24px;
+            padding: 12px 18px;
             cursor: pointer;
-            border-bottom: 1px solid #f1f5f9;
+            border-bottom: 1px solid #eef2f7;
             align-items: center;
-            transition: all 0.2s;
+            transition: background 0.15s;
             position: relative;
         }
 
         .contact-item:hover {
-            background: #f8fafc;
+            background: #f6f8fb;
         }
 
         .contact-item.active {
-            background: rgba(16, 185, 129, 0.06);
-            border-left: 4px solid var(--primary);
+            background: rgba(16, 185, 129, 0.07);
+            box-shadow: inset 3px 0 0 var(--primary);
         }
 
         .avatar {
@@ -398,7 +418,7 @@
             color: #fff;
             font-weight: bold;
             flex-shrink: 0;
-            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.08);
+            box-shadow: 0 1px 3px rgba(15, 23, 42, 0.18);
         }
 
         .contact-info {
@@ -505,22 +525,22 @@
             left: 0;
             width: 100%;
             height: 100%;
-            opacity: 0.05;
+            opacity: 1;
             pointer-events: none;
-            background-image: url('https://upload.wikimedia.org/wikipedia/commons/8/82/WhatsApp_background.png');
-            background-repeat: repeat;
+            background-image: radial-gradient(circle, rgba(15, 23, 42, 0.06) 1px, transparent 1px);
+            background-size: 22px 22px;
         }
 
         .chat-header {
             background: var(--bg-panel);
-            height: 72px;
-            padding: 12px 24px;
+            min-height: 66px;
+            padding: 10px 20px;
             display: flex;
             align-items: center;
             justify-content: space-between;
+            gap: 12px;
             z-index: 2;
             border-bottom: 1px solid var(--border-color);
-            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.03);
         }
 
         .chat-header-user {
@@ -555,23 +575,27 @@
         .bot-control {
             display: flex;
             align-items: center;
-            gap: 16px;
+            gap: 8px;
+            flex-wrap: wrap;
+            justify-content: flex-end;
         }
 
         .btn-header-action {
             background: #ffffff;
             border: 1px solid var(--border-color);
-            padding: 8px 16px;
-            border-radius: 10px;
+            padding: 7px 13px;
+            border-radius: 9px;
             color: var(--text-main);
             font-size: 13px;
-            font-weight: 500;
+            font-weight: 600;
             cursor: pointer;
-            transition: all 0.2s;
+            transition: border-color 0.15s, background 0.15s;
+            white-space: nowrap;
         }
 
         .btn-header-action:hover {
-            background: #f1f5f9;
+            background: #f8fafc;
+            border-color: var(--border-strong);
         }
 
         /* Modern Toggle Switch */
@@ -642,22 +666,21 @@
         }
 
         .msg-bubble {
-            max-width: 65%;
-            padding: 10px 14px;
-            border-radius: 16px;
+            max-width: 68%;
+            padding: 9px 13px;
+            border-radius: 14px;
             position: relative;
             word-wrap: break-word;
             font-size: 14px;
-            line-height: 1.5;
+            line-height: 1.55;
             color: var(--text-main);
-            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.03);
         }
 
         .msg-in {
             background: #ffffff;
             align-self: flex-start;
             border-bottom-left-radius: 4px;
-            border: 1px solid var(--border-color);
+            box-shadow: var(--shadow-sm);
         }
 
         /* Still-unanswered message: customer waiting 15+ min for a reply —
@@ -669,10 +692,10 @@
         }
 
         .msg-out {
-            background: #dcf8c6;
+            background: #d9fdd3;
             align-self: flex-end;
             border-bottom-right-radius: 4px;
-            border: 1px solid #cbdba8;
+            box-shadow: var(--shadow-sm);
         }
 
         .msg-time {
@@ -722,14 +745,13 @@
         /* Chat Input Area */
         .chat-input-area {
             background: var(--bg-panel);
-            padding: 16px 24px;
+            padding: 12px 20px;
             display: flex;
             align-items: center;
-            gap: 12px;
+            gap: 10px;
             z-index: 2;
             position: relative;
             border-top: 1px solid var(--border-color);
-            box-shadow: 0 -2px 8px rgba(0, 0, 0, 0.02);
         }
 
         .chat-input-wrapper {
@@ -739,40 +761,47 @@
 
         .chat-input-area input {
             width: 100%;
-            padding: 14px 18px;
-            border: 1px solid var(--border-color);
-            border-radius: 12px;
+            padding: 12px 18px;
+            border: 1px solid transparent;
+            border-radius: 24px;
             font-size: 14.5px;
             outline: none;
-            background: #ffffff;
+            background: #eef2f7;
             color: var(--text-main);
-            transition: border-color 0.2s;
+            transition: background 0.15s, border-color 0.15s, box-shadow 0.15s;
         }
 
         .chat-input-area input:focus {
+            background: #ffffff;
             border-color: var(--primary);
+            box-shadow: var(--ring);
         }
 
         .chat-input-area button {
             background: linear-gradient(135deg, var(--primary) 0%, #047857 100%);
             color: white;
             border: none;
-            padding: 14px 24px;
-            border-radius: 12px;
+            padding: 12px 22px;
+            border-radius: 24px;
             cursor: pointer;
             font-weight: 600;
             font-family: inherit;
-            font-size: 14.5px;
-            transition: opacity 0.2s;
-            box-shadow: 0 4px 12px rgba(16, 185, 129, 0.15);
+            font-size: 14px;
+            transition: opacity 0.15s, transform 0.1s;
+            box-shadow: 0 2px 8px rgba(16, 185, 129, 0.25);
+            white-space: nowrap;
         }
 
         .chat-input-area button:hover {
-            opacity: 0.95;
+            opacity: 0.93;
+        }
+
+        .chat-input-area button:active {
+            transform: scale(0.97);
         }
 
         .chat-input-area button:disabled {
-            background: #e2e8f0;
+            background: #e6ebf2;
             color: #94a3b8;
             box-shadow: none;
             cursor: not-allowed;
@@ -786,7 +815,8 @@
             left: 24px;
             background: #ffffff;
             border-radius: 14px;
-            box-shadow: 0 10px 25px rgba(0,0,0,0.08);
+            border: 1px solid var(--border-color);
+            box-shadow: var(--shadow-md);
             width: 320px;
             max-height: 240px;
             overflow-y: auto;
@@ -826,10 +856,10 @@
         }
 
         .profile-card-header {
-            padding: 32px 24px;
+            padding: 26px 20px 22px;
             text-align: center;
             border-bottom: 1px solid var(--border-color);
-            background: #f8fafc;
+            background: #fafbfc;
         }
 
         .profile-avatar {
@@ -861,7 +891,7 @@
         }
 
         .crm-section {
-            padding: 24px;
+            padding: 18px 20px;
             border-bottom: 1px solid var(--border-color);
         }
 
@@ -882,18 +912,20 @@
             width: 100%;
             padding: 10px 12px;
             border: 1px solid var(--border-color);
-            border-radius: 8px;
+            border-radius: 9px;
             font-size: 13.5px;
-            margin-bottom: 16px;
+            margin-bottom: 14px;
             outline: none;
-            background: #ffffff;
+            background: #f8fafc;
             color: var(--text-main);
             font-family: inherit;
-            transition: border-color 0.2s;
+            transition: border-color 0.15s, box-shadow 0.15s, background 0.15s;
         }
 
         .crm-input:focus {
+            background: #ffffff;
             border-color: var(--primary);
+            box-shadow: var(--ring);
         }
 
         .tags-container {
@@ -1247,62 +1279,48 @@
                         <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 3c1.66 0 3 1.34 3 3s-1.34 3-3 3-3-1.34-3-3 1.34-3 3-3zm0 14.2c-2.5 0-4.71-1.28-6-3.22.03-1.99 4-3.08 6-3.08 1.99 0 5.97 1.09 6 3.08-1.29 1.94-3.5 3.22-6 3.22z"/>
                     </svg>
                 </div>
-                <span class="brand-name">Cleanly WhatsApp</span>
+                <span class="brand-name" id="brandName">WhatsApp CRM</span>
             </div>
             
             <div class="sidebar-menu">
                 <button onclick="showChatView()" id="navChatsBtn" class="menu-item active">
-                    <svg fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" d="M8.684 10.742a3 3 0 005.13 0M15.914 10a3 3 0 00-6.828 0M12 21V3"></path>
+                    <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M8.625 12a.375.375 0 11-.75 0 .375.375 0 01.75 0zm3.75 0a.375.375 0 11-.75 0 .375.375 0 01.75 0zm3.75 0a.375.375 0 11-.75 0 .375.375 0 01.75 0zM21 12c0 4.556-4.03 8.25-9 8.25a9.76 9.76 0 01-2.555-.337A5.972 5.972 0 015.41 20.97a.75.75 0 01-.474-.065.75.75 0 01-.283-.976l.79-1.847a7.59 7.59 0 01-1.293-4.082C4.15 8.444 8.18 4.5 12 4.5s9 3.944 9 7.5z"></path>
                     </svg>
                     <span>Conversations</span>
                 </button>
 
                 <button onclick="showNotifView()" id="notifNavBtn" class="menu-item">
-                    <svg fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24">
+                    <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" d="M14.857 17.082a23.848 23.848 0 005.454-1.31A8.967 8.967 0 0118 9.75v-.7V9A6 6 0 006 9v.75a8.967 8.967 0 01-2.312 6.022c1.733.64 3.56 1.085 5.455 1.31m5.714 0a24.255 24.255 0 01-5.714 0m5.714 0a3 3 0 11-5.714 0"></path>
                     </svg>
                     <span>Notifications</span>
                     <span id="notifBadge" class="notif-badge" style="display:none;">0</span>
                 </button>
 
-                <button onclick="showPeopleView('flat_customers')" id="peopleNav_flat_customers" class="menu-item people-nav">
-                    <svg fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"></path>
-                    </svg>
-                    <span>Flat Customers</span>
-                </button>
-
-                <button onclick="showPeopleView('customers')" id="peopleNav_customers" class="menu-item people-nav">
-                    <svg fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24">
+                <button onclick="showPeopleView('customers')" id="peopleNav_customers" class="menu-item people-nav" style="display:none;">
+                    <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" d="M17 20h5v-2a4 4 0 00-3-3.87M9 20H4v-2a4 4 0 013-3.87m6-1.13a4 4 0 10-4-4 4 4 0 004 4z"></path>
                     </svg>
-                    <span>Maid Customers</span>
-                </button>
-
-                <button onclick="showPeopleView('maids')" id="peopleNav_maids" class="menu-item people-nav">
-                    <svg fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"></path>
-                    </svg>
-                    <span>Maids</span>
+                    <span>Customers</span>
                 </button>
 
                 <button onclick="showBroadcastView()" id="navBroadcastBtn" class="menu-item" style="display: none;">
-                    <svg fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" d="M10.34 15.84c-.68-.68-1.79-.68-2.47 0M4.16 9.66c-.68-.68-1.79-.68-2.47 0M19.84 9.66c.68-.68 1.79-.68 2.47 0m-6.38 6.18c.68-.68 1.79-.68 2.47 0M12 18.75v-13.5"></path>
+                    <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M10.34 15.84c-.68-.68-1.79-.68-2.47 0l-2.83 2.83c-.68.68-1.79.68-2.47 0-.68-.68-.68-1.79 0-2.47l2.83-2.83M19.84 9.66c.68-.68 1.79-.68 2.47 0 .68.68.68 1.79 0 2.47l-2.83 2.83M12 18.75V6.75"></path>
                     </svg>
                     <span>Campaigns</span>
                 </button>
                 
                 <button onclick="showAnalyticsView()" id="analyticsNavBtn" class="menu-item" style="display: none;">
-                    <svg fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24">
+                    <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" d="M3 13.125C3 12.504 3.504 12 4.125 12h2.25c.621 0 1.125.504 1.125 1.125v5.75c0 .621-.504 1.125-1.125 1.125h-2.25A1.125 1.125 0 013 18.875v-5.75zM9.75 8.625c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125v10.25c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 01-1.125-1.125v-10.25zM16.5 4.125c0-.621.504-1.125 1.125-1.125h2.25C20.496 3 21 3.504 21 4.125v14.75c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 01-1.125-1.125V4.125z"></path>
                     </svg>
                     <span>Analytics</span>
                 </button>
 
                 <button onclick="showInsightsView()" id="insightsNavBtn" class="menu-item">
-                    <svg fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24">
+                    <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"></path>
                     </svg>
                     <span>Insights</span>
@@ -1310,7 +1328,7 @@
                 </button>
 
                 <a href="/automation" id="automationNavBtn" class="menu-item">
-                    <svg fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24">
+                    <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z"></path>
                     </svg>
                     <span>Automation</span>
@@ -1362,14 +1380,14 @@
                     <option value="New Lead">New Lead</option>
                     <option value="Contacted">Contacted</option>
                     <option value="Interested">Interested</option>
-                    <option value="Interview Scheduled">Interview Scheduled</option>
-                    <option value="Maid Sent">Maid Sent</option>
-                    <option value="Selected">Selected</option>
+                    <option value="Follow-up Required">Follow-up Required</option>
+                    <option value="Quote Sent">Quote Sent</option>
                     <option value="Payment Pending">Payment Pending</option>
                     <option value="Payment Received">Payment Received</option>
-                    <option value="Replacement">Replacement</option>
+                    <option value="Booked">Booked</option>
                     <option value="Completed">Completed</option>
                     <option value="Lost">Lost</option>
+                    <option value="Not Interested">Not Interested</option>
                 </select>
                 <select id="sortBy" onchange="renderContacts()">
                     <option value="recent">Sort: Most recent</option>
@@ -1380,10 +1398,11 @@
                 
                 <div class="filter-grid">
                     <select id="filterCategory" onchange="renderContacts()">
-                        <option value="all">All Services</option>
-                        <option value="cleaning">Cleaning (Flat Customer)</option>
-                        <option value="maid">Maid Customer</option>
-                        <option value="worker">Maid (Worker)</option>
+                        <option value="all">All Categories</option>
+                        <option value="Sales">Sales</option>
+                        <option value="Support">Support</option>
+                        <option value="Service">Service</option>
+                        <option value="General">General</option>
                     </select>
                     <select id="filterTemperature" onchange="renderContacts()">
                         <option value="all">All Priorities</option>
@@ -1433,6 +1452,7 @@
             <div class="bot-control">
                 <button class="btn-header-action" onclick="toggleAskAiPanel()">🤖 Ask AI</button>
                 <button class="btn-header-action" onclick="markAsUnread()">Mark Unread</button>
+                <button class="btn-header-action" id="autoPauseBtn" title="Pause/resume automatic workflow messages for this contact" onclick="toggleAutomationPause()">⚡ Auto: ON</button>
                 <div class="toggle-container">
                     <span class="bot-status-txt" id="botStatusLabel">Bot Active</span>
                     <label class="toggle-switch">
@@ -1500,12 +1520,9 @@
                 <option value="New Lead">New Lead</option>
                 <option value="Contacted">Contacted</option>
                 <option value="Interested">Interested</option>
-                <option value="Interview Scheduled">Interview Scheduled</option>
-                <option value="Maid Sent">Maid Sent</option>
                 <option value="Selected">Selected</option>
                 <option value="Payment Pending">Payment Pending</option>
                 <option value="Payment Received">Payment Received</option>
-                <option value="Replacement">Replacement</option>
                 <option value="Completed">Completed</option>
                 <option value="Lost">Lost</option>
             </select>
@@ -1540,12 +1557,11 @@
                 <button class="btn-save" style="width:auto; white-space:nowrap;" onclick="addTag()">Add</button>
             </div>
             <div style="display: flex; gap: 4px; flex-wrap: wrap;">
-                <span class="tag-preset" onclick="addPresetTag('Deep Cleaning')">+ Deep</span>
-                <span class="tag-preset" onclick="addPresetTag('Bathroom Cleaning')">+ Bath</span>
-                <span class="tag-preset" onclick="addPresetTag('Maid Service')">+ Maid</span>
+                <span class="tag-preset" onclick="addPresetTag('Hot Lead')">+ Hot Lead</span>
+                <span class="tag-preset" onclick="addPresetTag('VIP')">+ VIP</span>
+                <span class="tag-preset" onclick="addPresetTag('B2B')">+ B2B</span>
                 <span class="tag-preset" onclick="addPresetTag('Repeat Customer')">+ Repeat</span>
                 <span class="tag-preset" onclick="addPresetTag('High Value Lead')">+ Value</span>
-                <span class="tag-preset" onclick="addPresetTag('Society Lead')">+ Society</span>
             </div>
         </div>
 
@@ -1651,7 +1667,7 @@
                 <div class="form-grid">
                     <div class="form-group">
                         <label for="bc_templateName">Approved Template Name</label>
-                        <input type="text" id="bc_templateName" placeholder="e.g. day3_follow_up" value="cleanly_deep_cleaning_offer">
+                        <input type="text" id="bc_templateName" placeholder="e.g. follow_up_1" value="">
                     </div>
                     <div class="form-group">
                         <label for="bc_languageCode">Language Code</label>
@@ -1788,10 +1804,9 @@
             <div style="display:flex; flex-direction:column; gap:12px;">
                 <div><label style="font-size:13px; color:var(--text-muted);">Template</label>
                     <select id="pmTemplateSel" onchange="onTemplateChange()" style="width:100%; margin-top:6px; padding:11px 14px; border:1px solid var(--border-color); border-radius:10px; font-family:inherit; font-size:14px; outline:none;">
-                        <option value="day3_follow_up">day3_follow_up (video)</option>
-                        <option value="day7_follow_up">day7_follow_up (video)</option>
-                        <option value="day15_follow_up">day15_follow_up (image)</option>
-                        <option value="cleanly_deep_cleaning_offer">cleanly_deep_cleaning_offer</option>
+                        <option value="follow_up_1">follow_up_1</option>
+                        <option value="reengagement_1">reengagement_1</option>
+                        <option value="check_in_1">check_in_1</option>
                         <option value="__custom">Custom template name…</option>
                     </select>
                     <input id="pmTemplateCustom" placeholder="approved_template_name" style="display:none; width:100%; margin-top:8px; padding:11px 14px; border:1px solid var(--border-color); border-radius:10px; font-family:inherit; font-size:14px; outline:none;"></div>
@@ -1805,9 +1820,6 @@
                 <div id="pmHeaderRow"><label style="font-size:13px; color:var(--text-muted);">Video / image header</label>
                     <select id="pmHeaderSel" onchange="pmToggleCustom()" style="width:100%; margin-top:6px; padding:11px 14px; border:1px solid var(--border-color); border-radius:10px; font-family:inherit; font-size:14px; outline:none;">
                         <option value="">None (text-only template)</option>
-                        <option value="https://ikwyrrzipzfbyzmkrfmu.supabase.co/storage/v1/object/public/media/Untitled%20design%20(1).mp4">Video 1 — intro (day3)</option>
-                        <option value="https://ikwyrrzipzfbyzmkrfmu.supabase.co/storage/v1/object/public/media/WhatsApp%20Video%202026-06-10%20at%204.08.29%20PM.mp4">Video 2 — follow-up (day7)</option>
-                        <option value="https://ikwyrrzipzfbyzmkrfmu.supabase.co/storage/v1/object/public/media/WhatsApp%20Image%202026-06-10%20at%205.13.53%20PM.jpeg">Image — offer (day15)</option>
                         <option value="__custom">Custom URL…</option>
                     </select>
                     <input id="pmHeaderCustom" placeholder="https://…/video.mp4" style="display:none; width:100%; margin-top:8px; padding:11px 14px; border:1px solid var(--border-color); border-radius:10px; font-family:inherit; font-size:14px; outline:none;"></div>
@@ -1856,8 +1868,40 @@
 </div>
 
 <script>
-    const token = localStorage.getItem('crm_token');
+    // Boot gate: demo servers (no database) accept an empty login and hand
+    // back a token — grab one automatically instead of bouncing to /login.
+    // Real servers reject the empty login, so this falls through to /login.
+    let token = localStorage.getItem('crm_token');
+    if (!token) {
+        try {
+            const _xhr = new XMLHttpRequest();
+            _xhr.open('POST', '/api/login', false); // sync: runs once, pre-boot
+            _xhr.setRequestHeader('Content-Type', 'application/json');
+            _xhr.send('{}');
+            const _j = JSON.parse(_xhr.responseText || '{}');
+            if (_j && _j.token) {
+                localStorage.setItem('crm_token', _j.token);
+                localStorage.setItem('crm_role', _j.role || 'admin');
+                localStorage.setItem('crm_user', _j.username || 'Demo');
+                token = _j.token;
+            }
+        } catch (e) { /* fall through to login redirect */ }
+    }
     if (!token) window.location.href = '/login';
+
+    // Demo-mode plumbing (defined synchronously so any loader can use it
+    // no matter what order async responses arrive in).
+    window.__demoMode = null;       // set by the /api/branding callback below
+    window.__noDb = false;          // true when demo mode AND no database
+    window.__contactsFailed = false;
+    window.showDemoPill = function () {
+        if (document.getElementById('demoPill') || window.__noDb !== true) return;
+        const pill = document.createElement('div');
+        pill.id = 'demoPill';
+        pill.innerText = 'Demo mode — no database connected';
+        pill.style.cssText = 'position:fixed;bottom:14px;left:50%;transform:translateX(-50%);background:#0f172a;color:#fff;font-size:12px;font-weight:600;padding:7px 16px;border-radius:99px;z-index:2000;box-shadow:0 4px 14px rgba(0,0,0,0.25);pointer-events:none;';
+        document.body.appendChild(pill);
+    };
 
     const currentUser = localStorage.getItem('crm_user');
     const currentRole = localStorage.getItem('crm_role');
@@ -1907,7 +1951,16 @@
     async function loadContacts() {
         const res = await authFetch('/api/chat/contacts');
         const data = await res.json();
-        
+        // Backend error shape (or logged-out 401 mid-redirect): keep the
+        // current list instead of throwing on undefined. In demo mode with
+        // no database, explain the empty list with the demo pill.
+        if (!data || !data.ok || !Array.isArray(data.contacts)) {
+            window.__contactsFailed = true;
+            if (window.showDemoPill) window.showDemoPill();
+            return;
+        }
+        window.__contactsFailed = false;
+
         // Custom Sort: Overdue follow-ups bubble to the top
         data.contacts.sort((a, b) => {
             const now = new Date();
@@ -1921,7 +1974,7 @@
         allContacts = data.contacts;
         
         // Dynamically build list of all unique tags
-        const presetTags = ['Deep Cleaning', 'Bathroom Cleaning', 'Maid Service', 'Repeat Customer', 'High Value Lead', 'Society Lead'];
+        const presetTags = ['Hot Lead', 'VIP', 'B2B', 'Repeat Customer', 'High Value Lead'];
         const tagSet = new Set(presetTags);
         allContacts.forEach(c => {
             if (c.tags) {
@@ -1959,7 +2012,7 @@
         const filterAgent = document.getElementById('filterAgent');
         const crmAgent = document.getElementById('crmAgent');
         
-        data.users.forEach(u => {
+        (data.users || []).forEach(u => {
             filterAgent.add(new Option(u.username, u.username));
             crmAgent.add(new Option(u.username, u.username));
         });
@@ -2140,11 +2193,25 @@
         bcUpdateSendState();
     }
 
-    // ── People directory (flat_customers / customers / maids) ──
+    // ── White-label branding (public endpoint, no login needed) ──
+    fetch('/api/branding').then(r => r.json()).then(j => {
+        const b = (j && j.branding) || {};
+        if (b.businessName) {
+            document.title = b.businessName + ' - Workspace';
+            const brandEl = document.getElementById('brandName');
+            if (brandEl) brandEl.innerText = b.businessName;
+        }
+        if (b.brandColor) document.documentElement.style.setProperty('--primary', b.brandColor);
+        window.__demoMode = !!b.demo;
+        window.__noDb = !!b.demo && !b.db;
+        // Show immediately when there is truly no database (not merely on
+        // load failure — a connected-but-empty database shows no pill).
+        if (window.__noDb && window.showDemoPill) window.showDemoPill();
+    }).catch(() => {});
+
+    // ── Directory configuration ──
     const PEOPLE_META = {
-        flat_customers: { title: 'Flat Customers', sub: 'Home-cleaning customers · flat_customers', tagHead: 'Home Type' },
-        customers:      { title: 'Maid Customers', sub: 'Customers who need a maid · customers',    tagHead: 'Service Needed' },
-        maids:          { title: 'Maids',          sub: 'Workers · maids',                          tagHead: 'Work Type' },
+        customers: { title: 'Contacts', sub: 'All customers · customers', tagHead: 'Tags' }
     };
     let peopleData = [];
     let peopleGroup = null;
@@ -2191,12 +2258,10 @@
         renderPeople();
     }
 
-    // Checkbox selection — enabled for all directory groups so maids can be
-    // bulk-selected (e.g. filter to "interested" / "available") and sent a template.
+    // Checkbox selection
     let peopleSel = new Set();
-    const selectableGroup = () => peopleGroup === 'flat_customers' || peopleGroup === 'customers' || peopleGroup === 'maids';
-    // Proximity matching only spans the customers ⇄ maids tables.
-    const matchableGroup = () => peopleGroup === 'customers' || peopleGroup === 'maids';
+    const selectableGroup = () => true;
+    const matchableGroup = () => false;
 
     // Search across every visible column. Space-separated terms must ALL match
     // ("interested cooking" = Interested customers who need cooking).
@@ -2374,7 +2439,7 @@
             return;
         }
 
-        const SERVICE_LABEL = { cleaning: '🧹 Cleaning / Flat Customers', maid: '🧺 Maid Customers', worker: '👩‍🔧 Maids', other: '📋 Other / Unspecified' };
+        const SERVICE_LABEL = { other: '📋 Contacts' };
         const groups = {};
         dayFiltered.forEach(n => { const g = SERVICE_LABEL[n.service_category] ? n.service_category : 'other'; (groups[g] = groups[g] || []).push(n); });
 
@@ -2516,7 +2581,7 @@
             insightsData = j.ok ? j : null;
         } catch { insightsData = null; }
         const badge = document.getElementById('insightsBadge');
-        const n = insightsData ? insightsData.missed.length : 0;
+        const n = insightsData && Array.isArray(insightsData.missed) ? insightsData.missed.length : 0;
         if (n > 0) { badge.innerText = n > 99 ? '99+' : n; badge.style.display = 'inline-flex'; }
         else badge.style.display = 'none';
         if (document.getElementById('insightsView').style.display === 'block') renderInsights();
@@ -2582,8 +2647,7 @@
     // Fallback keeps this working even against an older /api/insights that
     // only returns the combined `heatmap` (pre-segregation).
     const HEAT_TABS = [
-        ['customer', '🧺 Maid Customers'], ['flat', '🏠 Flat Customers'],
-        ['maid', '👩‍🔧 Maids'], ['all', '🌐 All Combined'],
+        ['all', '🌐 All Combined'],
     ];
     let heatTypeFilter = 'customer';
 
@@ -2777,14 +2841,13 @@
     // right params/header and avoid Meta #132000 (param count mismatch).
     //   nameParam: template body has {{1}} = the contact's name.
     //   header:    the media URL the template's header expects ('' = no header).
-    const VID1 = 'https://ikwyrrzipzfbyzmkrfmu.supabase.co/storage/v1/object/public/media/Untitled%20design%20(1).mp4';
-    const VID2 = 'https://ikwyrrzipzfbyzmkrfmu.supabase.co/storage/v1/object/public/media/WhatsApp%20Video%202026-06-10%20at%204.08.29%20PM.mp4';
-    const IMG1 = 'https://ikwyrrzipzfbyzmkrfmu.supabase.co/storage/v1/object/public/media/WhatsApp%20Image%202026-06-10%20at%205.13.53%20PM.jpeg';
+    // Per-template send spec (body {{1}} = name? media header? language?).
+    // Unknown names default to { nameParam: true, no header } — adjust here
+    // to match each approved template's EXACT structure (Meta #132000).
     const TEMPLATE_SPEC = {
-        cleanly_deep_cleaning_offer: { nameParam: true,  header: '',   lang: 'en_US' },
-        day3_follow_up:  { nameParam: false, header: VID1, lang: 'en' },
-        day7_follow_up:  { nameParam: false, header: VID2, lang: 'en' },
-        day15_follow_up: { nameParam: false, header: IMG1, lang: 'en' },
+        follow_up_1:    { nameParam: true, header: '', lang: 'en' },
+        reengagement_1: { nameParam: true, header: '', lang: 'en' },
+        check_in_1:     { nameParam: true, header: '', lang: 'en' },
     };
 
     function selectedTemplateName() {
@@ -2864,7 +2927,7 @@
 
     async function sendOneTemplate(phone, templateName, languageCode, headerUrl, bodyParams) {
         try {
-            const res = await authFetch('/api/people/message', {
+            const res = await authFetch('/api/contacts/message', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ phone, templateName, languageCode, headerUrl, bodyParams })
@@ -3067,14 +3130,13 @@
     }
 
     // ── Customer pipeline stages (in order) ──
-    const STAGES = ['New Lead','Contacted','Interested','Interview Scheduled','Maid Sent','Selected','Payment Pending','Payment Received','Replacement','Completed','Lost'];
+    const STAGES = ['New Lead','Contacted','Interested','Selected','Payment Pending','Payment Received','Completed','Lost'];
     // Which visual group each stage (new + legacy statuses) belongs to.
     const STAGE_GROUP = {
         'New Lead':'early','Contacted':'early','Quote Sent':'early',
-        'Interested':'warm','Interview Scheduled':'warm','Maid Sent':'warm','Selected':'warm','Follow-up Required':'warm',
-        'Payment Pending':'won','Payment Received':'won','Completed':'won','Booked':'won','Service Completed':'won',
-        'Replacement':'repl',
-        'Lost':'lost','Not Interested':'lost',
+        'Interested':'warm','Follow-up Required':'warm',
+        'Payment Pending':'won','Payment Received':'won','Completed':'won','Booked':'won',
+        'Lost':'lost','Not Interested':'lost','Canceled':'lost',
     };
     function getStatusDot(status) { return 'dot-stage-' + (STAGE_GROUP[status] || 'none').replace('none','none'); }
     function getStatusClass(status) {
@@ -3296,8 +3358,8 @@
         }
     }
 
-    // ── Quick lead summary (flat/maid-customer/maid record, if any) ──
-    const LEAD_SUMMARY_LABELS = { name: 'Name', location: 'Location', service: 'Service', flat_type: 'Flat Type', salary: 'Salary/Budget', working_hours: 'Working Hours', status: 'Status' };
+    // ── Quick contact summary (CRM row + conversation stats) ──
+    const LEAD_SUMMARY_LABELS = { name: 'Name', phone: 'Phone', status: 'Status', agent: 'Agent', category: 'Category', temperature: 'Priority', tags: 'Tags', totalMessages: 'Messages', inboundMessages: 'Incoming', lastMessageAt: 'Last Active' };
 
     async function loadLeadSummary(phone) {
         document.getElementById('leadSummarySection').style.display = 'none'; // hide while loading / switching contacts
@@ -3310,10 +3372,9 @@
 
     function renderLeadSummary(summary) {
         const section = document.getElementById('leadSummarySection');
+        if (!summary || typeof summary !== 'object') { section.style.display = 'none'; return; }
         const blocks = [
-            ['🏠 Flat Customer', summary.flat],
-            ['🧺 Maid Customer', summary.customer],
-            ['👩‍🔧 Maid', summary.maid],
+            ['👤 Contact', summary],
         ].filter(([, data]) => data && Object.keys(data).length > 0);
 
         if (!blocks.length) { section.style.display = 'none'; return; }
@@ -3326,14 +3387,52 @@
         section.style.display = 'block';
     }
 
+    // ── Per-contact automation state (sales-flow manual pause) ──
+    // "Salesperson manually pauses automation → STOP ALL AUTOMATIC MESSAGES."
+    let autoPausedCache = null;
+    async function refreshAutomationState() {
+        const btn = document.getElementById('autoPauseBtn');
+        autoPausedCache = null;
+        if (btn) { btn.innerText = '⚡ Auto: …'; btn.title = 'Loading automation state…'; }
+        if (!currentPhone) return;
+        try {
+            const j = await (await authFetch('/api/automation/contact/' + currentPhone)).json();
+            if (!j.ok || currentPhone !== (j.phone || currentPhone)) return; // stale
+            autoPausedCache = !!j.paused;
+            if (btn) {
+                btn.innerText = j.paused ? '⚡ Auto: OFF' : '⚡ Auto: ON';
+                const n = (j.activeTasks || []).length;
+                btn.title = j.paused
+                    ? 'Automation paused — no automatic messages. Click to resume.'
+                    : (n ? `${n} automatic message(s) pending for this contact. Click to pause.` : 'Automation active. Click to pause all automatic messages.');
+                btn.style.borderColor = j.paused ? 'var(--error)' : '';
+                btn.style.color = j.paused ? 'var(--error)' : '';
+            }
+        } catch (e) { /* non-fatal */ }
+    }
+    async function toggleAutomationPause() {
+        if (!currentPhone) return;
+        const wantPaused = autoPausedCache !== true;
+        if (wantPaused && !confirm('Pause ALL automatic messages for this contact? In-flight sequences stop and no new ones will start until resumed.')) return;
+        try {
+            const res = await authFetch('/api/automation/pause-contact', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ phone: currentPhone, paused: wantPaused })
+            });
+            const j = await res.json();
+            if (!res.ok || !j.ok) { alert('❌ ' + (j.error || res.statusText)); return; }
+            await refreshAutomationState();
+        } catch (e) { alert('❌ Network error: ' + e.message); }
+    }
+
     // ── AI Assistant (per chat): extracted fields, category/locality badges,
     //    suggestion popup. Everything here is scoped to the currently open
     //    chat (currentPhone) — see /api/ai/insights/:phone in index.js.
     const AI_FIELD_LABELS = {
-        customer_name: 'Customer Name', phone_number: 'Phone Number', locality: 'Locality',
-        society: 'Society', building: 'Building', flat_number: 'Flat Number',
-        requirement: 'Requirement', maid_type: 'Maid Type', budget: 'Budget',
-        preferred_timing: 'Preferred Timing', move_in_date: 'Move-in Date',
+        customer_name: 'Customer Name', phone_number: 'Phone Number', location: 'Location',
+        requirement: 'Requirement', product_interest: 'Interested In', budget: 'Budget',
+        preferred_timing: 'Preferred Timing', followup_date: 'Follow-up Date',
         lead_status: 'Lead Status', notes: 'Notes',
     };
     const AI_FIELD_ORDER = Object.keys(AI_FIELD_LABELS);
@@ -3395,12 +3494,8 @@
         const section = document.getElementById('aiExtractedSection');
         extracted = extracted || {};
         if (!AI_FIELD_ORDER.some(f => extracted[f])) { section.style.display = 'none'; return; }
-        document.getElementById('aiExtractedBody').innerHTML = AI_FIELD_ORDER.map(f => {
-            const v = extracted[f];
-            if (v) {
-                return `<div><span style="color:#10b981;">✓</span> <span style="color:var(--text-muted); text-decoration:line-through; text-decoration-color:#94a3b8;">${esc(AI_FIELD_LABELS[f])}:</span> <strong>${esc(v)}</strong></div>`;
-            }
-            return `<div style="background:rgba(245,158,11,0.1); border-radius:6px; padding:2px 6px; margin:1px 0;"><span style="color:#f59e0b;">●</span> ${esc(AI_FIELD_LABELS[f])}: <em style="color:var(--text-muted);">missing</em></div>`;
+        document.getElementById('aiExtractedBody').innerHTML = AI_FIELD_ORDER.filter(f => extracted[f]).map(f => {
+            return `<div><span style="color:#10b981;">✓</span> <span style="color:var(--text-muted);">${esc(AI_FIELD_LABELS[f])}:</span> <strong>${esc(extracted[f])}</strong></div>`;
         }).join('');
         section.style.display = 'block';
     }
@@ -3565,6 +3660,7 @@
         renderTypingBanner(contact);
         loadLeadSummary(contact.phone);
         loadAiInsights(contact.phone, true);
+        refreshAutomationState();
 
         // Populate Profile Panel
         document.getElementById('panelName').innerText = contact.name || contact.phone;
@@ -4031,12 +4127,14 @@
 
     let aiPollTick = 0;
     setInterval(() => {
-        loadContacts();
-        if (currentPhone) loadMessages();
+        // Each poll is independently guarded: a failed refresh must never
+        // throw uncaught (console spam) or break the next tick.
+        loadContacts().catch(() => { if (window.showDemoPill) window.showDemoPill(); });
+        if (currentPhone) loadMessages().catch(() => {});
         // AI insights are cheap cached reads, but still only poll every ~20s
         // (every 4th tick) rather than on the 5s message cadence.
         aiPollTick++;
-        if (currentPhone && aiPollTick % 4 === 0) loadAiInsights(currentPhone);
+        if (currentPhone && aiPollTick % 4 === 0) loadAiInsights(currentPhone).catch(() => {});
     }, 5000);
 
     async function openCampaignContactsLive(campaignName, status){
@@ -4115,10 +4213,12 @@
       }catch(e){}
     }
 
-    loadUsers();
-    loadQuickReplies();
-    loadContacts();
-    loadTemplateMap();
+    // Boot: every loader is independent — one failing backend must not
+    // take down the rest of the workspace (or spam uncaught errors).
+    loadUsers().catch(() => {});
+    loadQuickReplies().catch(() => {});
+    loadContacts().catch(() => { if (window.showDemoPill) window.showDemoPill(); });
+    loadTemplateMap().catch(() => {});
     
     if (window.location.hash === '#analytics') {
         showAnalyticsView();

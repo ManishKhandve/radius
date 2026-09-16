@@ -1,5 +1,5 @@
 // ============================================================
-// index.js — CLEANLY bot — Meta WhatsApp Cloud API edition
+// index.js — White-label WhatsApp CRM — Meta WhatsApp Cloud API edition
 // ============================================================
 // Receives incoming WhatsApp messages via Meta Cloud API webhook,
 // processes them through flow.js, sends replies via Meta Graph API.
@@ -9,14 +9,11 @@ require('dotenv').config();
 const express = require('express');
 const flow    = require('./flow');
 const config  = require('./config');
-const sheets  = require('./sheets');
-const { addInvite, isInvited, uploadReceipt } = require('./invite-store');
 const chatStore = require('./chat-store');
-const matching = require('./matching');
-const match = require('./match');
 const wfStore = require('./workflow-store');
 const wfEngine = require('./workflow-engine');
 const aiAssistant = require('./ai-assistant');
+const sheetAutomations = require('./sheet-automations');
 
 // ─── Structured logging ─────────────────────────────────────
 function log(level, tag, ...args) {
@@ -30,6 +27,13 @@ process.on('unhandledRejection', (r)   => log('error', 'crash', 'Unhandled rejec
 
 const app  = express();
 const NODE_ENV = process.env.NODE_ENV || 'development';
+
+// ─── Demo mode (no database) ────────────────────────────────
+// DEMO_MODE=true (or missing SUPABASE_* vars): login is skipped, all
+// API auth passes as a demo admin, and every endpoint degrades to empty
+// data. For local UI review only — never enable in production.
+const DEMO_MODE = process.env.DEMO_MODE === 'true' || !process.env.DATABASE_URL;
+if (DEMO_MODE) log('warn', 'boot', '⚠️  DEMO MODE — login skipped, data will be empty. Set DEMO_MODE=false + DATABASE_URL for real use.');
 
 // ─── Trust proxy (for Render, Cloudflare, Nginx) ────────────
 app.set('trust proxy', 1);
@@ -67,9 +71,9 @@ const META_VERIFY_TOKEN    = process.env.META_VERIFY_TOKEN   || '';
 const META_GRAPH_BASE      = `https://graph.facebook.com/${META_API_VERSION}`;
 const BOT_NUMBER           = process.env.META_BOT_NUMBER || ''; // display only
 
-// Owner phone for booking/payment/lead alerts.
-// Falls back to hardcoded value to prevent misrouting.
-const OWNER_PHONE = process.env.OWNER_PHONE || '919975233763';
+// Admin phone for delivery-failure / follow-up alerts (optional).
+// Set OWNER_PHONE in env to receive these on WhatsApp.
+const OWNER_PHONE = process.env.OWNER_PHONE || process.env.ADMIN_WHATSAPP || '';
 
 // ─── Admin token validation ─────────────────────────────────
 const ADMIN_TOKEN = process.env.ADMIN_TOKEN || '';
@@ -95,19 +99,12 @@ function cleanPhone(phone) {
 function validateConfig() {
   let hasErrors = false;
 
-  log('info', 'boot', `Starting Cleanly WhatsApp CRM in ${NODE_ENV} mode...`);
+  log('info', 'boot', `Starting WhatsApp CRM (${config.businessName}) in ${NODE_ENV} mode...`);
 
+  // Neon Postgres is optional: without it the app runs with empty, non-persisted
+  // data (demo / fresh-start mode). Never fatal — even in production.
   if (!process.env.SUPABASE_URL || !process.env.SUPABASE_KEY) {
-    log('error', 'boot', '❌ Database Configuration Error: SUPABASE_URL and SUPABASE_KEY must be set');
-    hasErrors = true;
-  }
-  if (!process.env.SPREADSHEET_ID) {
-    log('error', 'boot', '❌ Google Sheets Configuration Error: SPREADSHEET_ID must be set');
-    hasErrors = true;
-  }
-  if (!process.env.GOOGLE_CREDENTIALS && !process.env.GOOGLE_CREDENTIALS_PATH) {
-    log('error', 'boot', '❌ Google Credentials Error: GOOGLE_CREDENTIALS or GOOGLE_CREDENTIALS_PATH must be set');
-    hasErrors = true;
+    log('warn', 'boot', '⚠️  No SUPABASE_URL/KEY — running without a database (empty data, nothing persists).');
   }
 
   if (!META_ACCESS_TOKEN || !META_PHONE_NUMBER_ID || !META_VERIFY_TOKEN) {
@@ -338,8 +335,7 @@ async function watiSendList(phone, body, buttonLabel, sections, opts = {}) {
 }
 
 // Kept the name `watiSend` because it's called from many places (nudge,
-// task loop, takeover, /verify-payment, etc.). Internally now hits the
-// Meta Graph API.
+// task loop, takeover, admin alerts, etc.). Internally hits the Meta Graph API.
 async function watiSend(phone, text, opts = {}) {
   if (!phone || !text) {
     console.error('[meta] ✗ missing phone or text:', { phone: !!phone, textLen: text?.length || 0 });
@@ -573,7 +569,7 @@ ${(originalText || '').slice(0, 100)}
 
 The bot couldn't deliver this reply. Please contact the customer manually.`;
   chatStore.addNotification('⚠️ Message failed — manual follow-up', alert, toPhone, 'send-failure').catch(() => {});
-  _metaSendOnce(OWNER_PHONE, alert).catch(() => {});
+  if (OWNER_PHONE) _metaSendOnce(OWNER_PHONE, alert).catch(() => {});
 }
 
 // ─── New inbound message → admin WhatsApp alert ───────────────
@@ -593,7 +589,7 @@ function notifyNewInboundMessage(phone, name, text, msgType) {
   const preview = (isMedia ? `[${msgType}]${text ? ' ' + text : ''}` : (text || '')).slice(0, 300);
 
   const last = lastInboundAdminAlert.get(phone) || 0;
-  if (Date.now() - last >= INBOUND_ALERT_THROTTLE_MS) {
+  if (OWNER_PHONE && Date.now() - last >= INBOUND_ALERT_THROTTLE_MS) {
     lastInboundAdminAlert.set(phone, Date.now());
     if (lastInboundAdminAlert.size > 5000) lastInboundAdminAlert.clear(); // bound memory
     const alert = `💬 *New message*\nFrom: ${who}\nPhone: +${phone}\n\n${preview}`;
@@ -733,7 +729,7 @@ function buildWrappedMsg(phone, text, type, mediaId, senderName, title = '') {
       id: { _serialized: phone },
     }),
     downloadMedia: async () => {
-      // Only used in PAYMENT_RECEIPT state. Meta uses a two-step flow:
+      // Meta uses a two-step media flow:
       //   1) GET /MEDIA_ID  → returns { url: "https://lookaside.fbsbx.com/..." }
       //   2) GET <url>      → returns the actual bytes (Bearer auth required)
       // Returns null on failure so the flow can react gracefully.
@@ -890,30 +886,25 @@ async function handleMetaMessage(m, senderName) {
   // Alert the CRM + admin about the new incoming message.
   notifyNewInboundMessage(phone, senderName, text, msgType);
 
-  // AI layer: fire-and-forget, never blocks message delivery. Full chat
-  // analysis (extraction, suggestions, locality check, etc.) is debounced
-  // per phone. Hindi/Hinglish transcription used to run automatically on
-  // every matching message here — now on-demand only (🌐 button in the
-  // chat, see /api/ai/translate/:messageId) to cut unbounded AI call volume.
-  if (msgType === 'text' && text) {
-    aiAssistant.scheduleAnalysis(phone, { localityNames: PUNE_LOCALITY_NAMES });
+  // Sales-flow automation (fire-and-forget, never blocks delivery):
+  // a customer reply STOPS automatic messages, and matching keywords
+  // START keyword sequences (Thinking / Price Objection / …).
+  wfEngine.handleInboundReply(phone).catch(() => {});
+  if (text) {
+    wfEngine.handleInboundText(phone, senderName, text).catch(() => {});
   }
 
+  // AI layer: fire-and-forget, never blocks message delivery. Full chat
+  // analysis (extraction, suggestions, etc.) is debounced per phone.
+  if (msgType === 'text' && text) {
+    aiAssistant.scheduleAnalysis(phone);
+  }
+
+  // An agent has taken over this chat — the bot stays silent until released
+  // via the inbox toggle or POST /api/chat/pause.
   if (paused) {
-    if (flow.restartIntent(text) || flow.isAdMessage(text)) {
-      console.log(`[pause] ${phone} → keyword/ad triggered, unpausing automatically`);
-      await resumeUser(phone);
-    } else {
-      const entry = pausedUsers.get(phone);
-      console.log(`[pause] ${phone} → skipping bot reply (agent takeover)`);
-      if (entry && !entry.notified) {
-        entry.notified = true;
-        // The user specifically requested this automated message be disabled.
-        // watiSend(phone, "👤 An agent from our team will reply to you shortly. Thanks for your patience!")
-        //  .catch(() => {});
-      }
-      return;
-    }
+    console.log(`[pause] ${phone} → skipping bot reply (agent takeover)`);
+    return;
   }
 
   console.log('[meta] from:', phone, 'type:', msgType, 'body:', JSON.stringify(String(text)).slice(0, 30));
@@ -1045,6 +1036,11 @@ setInterval(() => {
 }, 15 * 60 * 1000);
 
 app.post('/api/login', async (req, res) => {
+  if (DEMO_MODE) {
+    const token = 'demo-' + crypto.randomBytes(16).toString('hex');
+    authTokens.set(token, { username: 'Demo', role: 'admin', createdAt: Date.now() });
+    return res.json({ ok: true, success: true, token, role: 'admin', username: 'Demo' });
+  }
   const { username, password } = req.body;
   if (!username || !password) return res.status(400).json({ ok: false, error: 'Missing credentials' });
 
@@ -1058,6 +1054,10 @@ app.post('/api/login', async (req, res) => {
 });
 
 const authMiddleware = (req, res, next) => {
+  if (DEMO_MODE) {
+    req.user = { username: 'Demo', role: 'admin', demo: true };
+    return next();
+  }
   const token = req.headers['auth-token'];
   const entry = authTokens.get(token);
   if (!entry) return res.status(401).json({ ok: false, error: 'Unauthorized' });
@@ -1201,9 +1201,8 @@ app.get('/api/chat/messages/:phone', authMiddleware, async (req, res) => {
   res.json({ ok: true, success: true, messages, isBotPaused });
 });
 
-// Quick lead summary — shown in the profile panel when a chat is opened.
-// Looks the phone up across flat_customers/customers/maids (matched by the
-// last 10 digits) and returns whichever records exist, fields-only-if-filled.
+// Quick contact summary — shown in the profile panel when a chat is opened.
+// Returns the CRM contact row plus recent conversation stats.
 app.get('/api/lead-summary/:phone', authMiddleware, async (req, res) => {
   const { phone } = req.params;
   if (!isValidPhone(phone)) return res.status(400).json({ ok: false, error: 'Invalid phone number format' });
@@ -1222,17 +1221,14 @@ app.get('/api/ai/insights/:phone', authMiddleware, async (req, res) => {
   const { phone } = req.params;
   if (!isValidPhone(phone)) return res.status(400).json({ ok: false, error: 'Invalid phone number format' });
   try {
-    const [contactRes, suggestions] = await Promise.all([
-      wfStore.supabase.from('contacts')
-        .select('ai_extracted, lead_category, locality_verification, ai_last_analyzed_at, last_message_at')
-        .eq('phone', phone).limit(1),
+    const [contact, suggestions] = await Promise.all([
+      chatStore.getContactByPhone(phone),
       chatStore.getAiSuggestions(phone),
     ]);
-    const contact = (contactRes.data && contactRes.data[0]) || null;
     const hasNewActivity = contact && contact.last_message_at &&
       (!contact.ai_last_analyzed_at || new Date(contact.last_message_at) > new Date(contact.ai_last_analyzed_at));
     if (hasNewActivity) {
-      aiAssistant.scheduleAnalysis(phone, { localityNames: PUNE_LOCALITY_NAMES });
+      aiAssistant.scheduleAnalysis(phone);
     }
     res.json({
       ok: true,
@@ -1269,7 +1265,7 @@ app.post('/api/ai/insights/:phone/refresh', authMiddleware, async (req, res) => 
   const { phone } = req.params;
   if (!isValidPhone(phone)) return res.status(400).json({ ok: false, error: 'Invalid phone number format' });
   try {
-    await aiAssistant.analyzeChat(phone, { localityNames: PUNE_LOCALITY_NAMES });
+    await aiAssistant.analyzeChat(phone);
     res.json({ ok: true });
   } catch (err) {
     res.status(500).json({ ok: false, error: err.message });
@@ -1575,7 +1571,7 @@ app.get('/admin', (req, res) => {
   if (!token || token !== process.env.ADMIN_TOKEN) return res.status(401).send('Unauthorized');
   res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, private');
   res.send(`<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Cleanly WhatsApp - Admin Portal</title>
+<title>WhatsApp CRM - Admin Portal</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@600;700&display=swap" rel="stylesheet">
@@ -1704,16 +1700,12 @@ document.getElementById('phone').addEventListener('keydown',e=>{if(e.key==='Ente
 });
 
 app.get('/send', async (req, res) => {
-  const { to, token } = req.query;
+  const { to, token, text } = req.query;
   if (!token || token !== process.env.ADMIN_TOKEN) return res.status(401).send('Unauthorized');
   if (!to) return res.status(400).send('Missing ?to=');
   const phone = String(to).replace(/[^0-9]/g, '');
   try {
-    await addInvite(phone);
-    const r = await watiSendButtons(phone, config.adminIntroMessage, [
-      { id: 'getcode', title: 'Get Code' },
-      { id: 'connect_team', title: 'Connect with Team' }
-    ]);
+    const r = await watiSend(phone, String(text || config.welcomeMessage || 'Hello!'));
     if (!r.ok) return res.status(500).send(`Send failed: ${r.body}`);
     res.send(`✅ Sent to ${phone}`);
   } catch (e) { res.status(500).send(e.message); }
@@ -1765,21 +1757,10 @@ app.get('/paused', (req, res) => {
   res.json({ ok: true, paused: list, count: list.length });
 });
 
-app.post('/verify-payment', async (req, res) => {
-  const { token, phone, bookingId, name, lang } = req.body;
-  if (!token || token !== process.env.ADMIN_TOKEN) return res.status(403).json({ error: 'Unauthorized' });
-  if (!phone || !bookingId) return res.status(400).json({ error: 'Missing fields' });
-  try {
-    const msg = config.paymentVerifiedMessage(name || 'there', bookingId, lang || 'en');
-    const r = await watiSend(String(phone).replace(/[^0-9]/g, ''), msg);
-    if (!r.ok) return res.status(500).send(`Send failed: ${r.body}`);
-    if (String(bookingId).startsWith('CB')) {
-      await sheets.markCleaningPaymentVerified(bookingId);
-    } else {
-      await sheets.markPaymentVerified(bookingId);
-    }
-    res.send(`✅ Sent to ${phone}`);
-  } catch (e) { res.status(500).json({ error: e.message }); }
+// ─── Public branding (white-label landing + dashboard) ──────
+app.get('/api/branding', (_req, res) => {
+  const { hasDb } = require('./db');
+  res.json({ ok: true, branding: { ...config.getBranding(), demo: DEMO_MODE, db: hasDb } });
 });
 
 // ─── Broadcast Admin Dashboard & API ───────────────────────
@@ -1861,22 +1842,15 @@ app.post('/api/broadcast', authMiddleware, (req, res) => {
       }
 
       // Stamp the recipient's stored name onto the contact so the chat list
-      // shows the DB name (e.g. the maid's real name) instead of their
-      // WhatsApp profile name when they reply. ensureContact only sets the
-      // name if the contact doesn't already have one, so this never clobbers.
+      // shows a real name instead of the WhatsApp profile name when they
+      // reply. ensureContact only sets the name if the contact doesn't
+      // already have one, so this never clobbers.
       if (displayName && displayName !== 'Customer') {
         try {
           await chatStore.ensureContact(cleanPhone, displayName, null);
         } catch (err) {
           console.error('[broadcast] failed to set contact name for', cleanPhone, err.message);
         }
-      }
-
-      // Add invite to invite-store so their incoming replies work immediately
-      try {
-        await addInvite(cleanPhone);
-      } catch (err) {
-        console.error('[broadcast] failed to add invite for', cleanPhone, err.message);
       }
 
       // 200ms sleep delay to comply with standard Meta rate limits
@@ -1985,7 +1959,6 @@ app.post('/api/broadcast/campaign/:campaignName/retry-failed', authMiddleware, a
         if (displayName && displayName !== 'Customer') {
           try { await chatStore.ensureContact(cleanPhone, displayName, null); } catch(_){}
         }
-        try { await addInvite(cleanPhone); } catch(_){}
         await new Promise(rr=> setTimeout(rr, 200));
       }
       activeCampaign.running = false;
@@ -2041,260 +2014,18 @@ setInterval(async () => {
   }
 }, 60000); // Check every minute
 
-// ─── WhatsApp Follow-up Drip (Interested maid customers) ─────
-// Sends follow-up templates to leads in the `customers` table whose
-// status = 'Interested'. Manual trigger only — an admin presses
-// "Run Follow-Ups" in the CRM (POST /api/run-followups) or hits
-// GET /run-followups?token=ADMIN_TOKEN. Progress is tracked per-customer
-// via the wa_followup_stage column so a repeat press never re-sends a stage.
-//
-// Cadence (see FOLLOWUP_CADENCE below):
-//   'single' — one follow-up per customer (day3 template), then done.
-//   'staged' — Day 3 → 7 → 15 progression, one stage advanced per run.
-// Change the constant to switch; no other code changes needed.
-const FOLLOWUP_CADENCE = 'single';
-
-// Approved templates (media header, static body — no {{1}} variables).
-const DRIP_TEMPLATES = {
-  3:  { name: 'day3_follow_up',  header: 'https://ikwyrrzipzfbyzmkrfmu.supabase.co/storage/v1/object/public/media/Untitled%20design%20(1).mp4' },
-  7:  { name: 'day7_follow_up',  header: 'https://ikwyrrzipzfbyzmkrfmu.supabase.co/storage/v1/object/public/media/WhatsApp%20Video%202026-06-10%20at%204.08.29%20PM.mp4' },
-  15: { name: 'day15_follow_up', header: 'https://ikwyrrzipzfbyzmkrfmu.supabase.co/storage/v1/object/public/media/WhatsApp%20Image%202026-06-10%20at%205.13.53%20PM.jpeg' },
-};
-
-// customers.phone is stored as 10 local digits (e.g. 9545533100). Meta needs
-// a full number with country code. Returns null for unusable numbers.
+// ─── Generic helpers ──────────────────────────────────────
+// toMetaPhone: normalize a stored number to a full Meta-routable number.
+// A bare 10-digit number is assumed to be Indian (91 prefix); a leading 0
+// is stripped. Returns null for unusable numbers.
 function toMetaPhone(raw) {
   const d = String(raw || '').replace(/\D/g, '');
   if (d.length === 10) return '91' + d;
+  if (d.length === 11 && d.startsWith('0')) return '91' + d.slice(1);
   if (d.length === 12 && d.startsWith('91')) return d;
+  if (d.length >= 10 && d.length <= 15) return d;
   return null;
 }
-
-// Which drip day (if any) is next for a given stage under the active cadence.
-function nextDripDay(stage) {
-  if (stage >= 15) return null;
-  if (FOLLOWUP_CADENCE === 'single') return 3;   // one send, then marked done
-  for (const d of [3, 7, 15]) if (stage < d) return d;
-  return null;
-}
-
-// Process a single customer. Returns { action: 'sent'|'skipped'|'error', ... }.
-async function processOneCustomerForFollowup(c) {
-  const phone = toMetaPhone(c.phone);
-  if (!phone) return { action: 'skipped', reason: 'invalid phone' };
-
-  const stage = c.wa_followup_stage || 0;
-  const dripDay = nextDripDay(stage);
-  if (!dripDay) return { action: 'skipped', reason: 'all follow-ups already sent' };
-
-  const tpl = DRIP_TEMPLATES[dripDay];
-  const result = await watiSendTemplate(phone, tpl.name, 'en', [], tpl.header);
-
-  // Advance stage whether or not the send succeeded — each stage is a
-  // best-effort one-shot, so a rejected send is not retried every run.
-  // In 'single' mode we jump straight to 15 (done); in 'staged' we step.
-  const newStage = FOLLOWUP_CADENCE === 'single' ? 15 : dripDay;
-  await chatStore.advanceCustomerFollowupStage(c.id, newStage);
-
-  if (result.ok) return { action: 'sent', template: tpl.name, stage: dripDay };
-  const reason = result.error?.message || JSON.stringify(result.error || {});
-  return { action: 'error', template: tpl.name, reason };
-}
-
-// ─── Maid-revival campaign (dead / closed customers) ─────────
-// Customers marked "Not Interested" or "Didn't Convert" get the photos of
-// the TOP 3 maids nearest to them (one template message per maid) once every
-// 7 days, up to 4 rounds (~1 month), then stop. Paced by the revive_stage /
-// revive_last_sent_at columns so it's safe to press daily.
-//
-// REVIVE_TEMPLATE_NAME must be an approved template with an IMAGE header
-// (the maid photo is passed as the header) and a static caption body — no
-// body variables. Set this to your approved template's exact name.
-const REVIVE_TEMPLATE_NAME = 'maid_nearby_profile';
-const REVIVE_INTERVAL_DAYS = 7;
-const REVIVE_MAX_SENDS      = 4;   // 7 + 14 + 21 + 28 days ≈ one month
-
-async function processOneCustomerForRevive(c, now) {
-  const phone = toMetaPhone(c.phone);
-  if (!phone) return { action: 'skipped', reason: 'invalid phone' };
-
-  const stage = c.revive_stage || 0;
-  if (stage >= REVIVE_MAX_SENDS) return { action: 'skipped', reason: 'revive complete (1 month)' };
-
-  // 7-day gate — don't message again until a week has passed.
-  if (c.revive_last_sent_at) {
-    const daysSince = (now - new Date(c.revive_last_sent_at)) / (1000 * 60 * 60 * 24);
-    if (daysSince < REVIVE_INTERVAL_DAYS) {
-      return { action: 'skipped', reason: `next revive in ${(REVIVE_INTERVAL_DAYS - daysSince).toFixed(1)}d` };
-    }
-  }
-
-  if (!c.latitude || !c.longitude) return { action: 'skipped', reason: 'no location' };
-
-  let maids;
-  try {
-    maids = await matching.getTopMaids(c.latitude, c.longitude);
-  } catch (err) {
-    return { action: 'error', reason: 'maid match failed: ' + err.message };
-  }
-  // Send the top 3 nearby maids — one template (photo header) per maid.
-  // getTopMaids already returns at most 3, sorted P1→P4 zone then distance.
-  const withPhoto = (maids || []).filter(m => m.photo_url).slice(0, 3);
-  if (withPhoto.length === 0) return { action: 'skipped', reason: 'no nearby maid with a photo' };
-
-  const sentMaids = [];
-  const failures  = [];
-  for (const maid of withPhoto) {
-    const result = await watiSendTemplate(phone, REVIVE_TEMPLATE_NAME, 'en', [], maid.photo_url);
-    if (result.ok) sentMaids.push(maid.name);
-    else failures.push(`${maid.name}: ${result.error?.message || 'send failed'}`);
-  }
-
-  // Advance whether or not the sends succeeded — best-effort weekly one-shot.
-  await chatStore.advanceReviveStage(c.id, stage + 1, new Date(now).toISOString());
-
-  if (sentMaids.length > 0) {
-    return { action: 'sent', template: REVIVE_TEMPLATE_NAME, maids: sentMaids, sentCount: sentMaids.length, revive: stage + 1 };
-  }
-  return { action: 'error', template: REVIVE_TEMPLATE_NAME, reason: failures.join(' | ').slice(0, 200) };
-}
-
-// One full pass: the Interested drip, then the dead/closed maid-revival.
-async function runFollowupsBatch() {
-  const summary = { totalLeadsChecked: 0, followUpsSent: 0, followUpsSkipped: 0, errors: 0 };
-  const details = [];
-  const tally = (res) => {
-    if (res.action === 'sent') summary.followUpsSent++;
-    else if (res.action === 'skipped') summary.followUpsSkipped++;
-    else if (res.action === 'error') summary.errors++;
-  };
-  const now = Date.now();
-
-  // 1) Interested customers → Day 3/7/15 (or single) drip.
-  const interested = await chatStore.getInterestedFollowupCustomers();
-  for (const c of interested) {
-    const res = await processOneCustomerForFollowup(c);
-    tally(res);
-    details.push({ campaign: 'interested', phone: c.phone, name: c.name || null, ...res });
-  }
-
-  // 2) Dead / closed customers → weekly nearby-maid photo for one month.
-  const revive = await chatStore.getReviveCustomers();
-  for (const c of revive) {
-    const res = await processOneCustomerForRevive(c, now);
-    tally(res);
-    details.push({ campaign: 'revive', phone: c.phone, name: c.name || null, ...res });
-  }
-
-  summary.totalLeadsChecked = interested.length + revive.length;
-  return { summary, details };
-}
-
-// Manual trigger via the CRM "Run Follow-Ups" button (session auth, admin-only).
-app.post('/api/run-followups', authMiddleware, async (req, res) => {
-  if (req.user.role !== 'admin') return res.status(403).json({ ok: false, error: 'Admin only' });
-  const t0 = Date.now();
-  try {
-    const { summary, details } = await runFollowupsBatch();
-    summary.durationMs = Date.now() - t0;
-    log('info', 'drip', `manual run (CRM) by ${req.user.username}: ${JSON.stringify(summary)}`);
-    res.json({ ok: true, summary, details });
-  } catch (err) {
-    log('error', 'drip', 'manual run (CRM) failed:', err.message);
-    res.status(500).json({ ok: false, error: err.message });
-  }
-});
-
-// Same trigger via ADMIN_TOKEN query param (for curl / external schedulers).
-app.get('/run-followups', async (req, res) => {
-  if (!req.query.token || req.query.token !== ADMIN_TOKEN) {
-    return res.status(401).json({ ok: false, error: 'Unauthorized' });
-  }
-  const t0 = Date.now();
-  try {
-    const { summary, details } = await runFollowupsBatch();
-    summary.durationMs = Date.now() - t0;
-    log('info', 'drip', `manual run (token): ${JSON.stringify(summary)}`);
-    res.json({ ok: true, summary, details });
-  } catch (err) {
-    res.status(500).json({ ok: false, error: err.message });
-  }
-});
-
-// ─── Maid (worker) follow-ups ────────────────────────────────
-// No bulk campaign: maids are messaged one-by-one from the Maids directory
-// view, where the agent picks the template and video/image per send
-// (POST /api/people/message below).
-
-// ─── Proximity matching (CRM chat interface) ─────────────────
-// Read-only. Uses the GPS coordinates already stored on the records —
-// no geocoding or external location API. See match.js for the rules.
-//
-//   GET /api/match/maid/:maidId?exactMatch=true|false  → nearest customers
-//   GET /api/match/:customerId?exactMatch=true|false   → nearest maids
-//
-// The maid route is registered first so "maid" is never read as a customer id.
-app.get('/api/match/maid/:maidId', authMiddleware, async (req, res) => {
-  const exactMatch = req.query.exactMatch === 'true';
-  try {
-    const result = await match.matchCustomersForMaid(req.params.maidId, { exactMatch, role: req.user.role });
-    if (result.error) return res.status(result.status || 400).json({ error: result.error });
-    res.json(result); // 200 even when matches_found is 0 — that's a valid result
-  } catch (err) {
-    log('error', 'match', `maid ${req.params.maidId} failed:`, err.message);
-    res.status(500).json({ error: err.message });
-  }
-});
-
-app.get('/api/match/:customerId', authMiddleware, async (req, res) => {
-  const exactMatch = req.query.exactMatch === 'true';
-  try {
-    const result = await match.matchMaidsForCustomer(req.params.customerId, { exactMatch, role: req.user.role });
-    if (result.error) return res.status(result.status || 400).json({ error: result.error });
-    res.json(result); // 200 even when matches_found is 0 — that's a valid result
-  } catch (err) {
-    log('error', 'match', `customer ${req.params.customerId} failed:`, err.message);
-    res.status(500).json({ error: err.message });
-  }
-});
-
-// ─── People directory (flat_customers / customers / maids) ───
-// Browse the three lead tables and message an individual via template.
-app.get('/api/people', authMiddleware, async (req, res) => {
-  const group = req.query.group;
-  if (!chatStore.isPeopleGroup(group)) {
-    return res.status(400).json({ ok: false, error: 'Unknown group' });
-  }
-  try {
-    const people = await chatStore.getPeople(group);
-    res.json({ ok: true, group, people });
-  } catch (err) {
-    log('error', 'people', `fetch ${group} failed:`, err.message);
-    res.status(500).json({ ok: false, error: err.message });
-  }
-});
-
-// Start (or reopen) a normal chat with a person from a directory view.
-// Creates the contact under the Meta-normalized phone (so their replies map
-// to the same thread) tagged with the group's service category.
-const PEOPLE_SERVICE_CATEGORY = {
-  flat_customers: 'cleaning',
-  customers:      'maid',
-  maids:          'worker',
-};
-app.post('/api/people/start-chat', authMiddleware, async (req, res) => {
-  const { group, phone, name } = req.body || {};
-  const to = toMetaPhone(phone);
-  if (!to) return res.status(400).json({ ok: false, error: 'Invalid phone number' });
-  if (!PEOPLE_SERVICE_CATEGORY[group]) return res.status(400).json({ ok: false, error: 'Unknown group' });
-  try {
-    const contact = await chatStore.ensureContact(to, (name || '').trim() || null, PEOPLE_SERVICE_CATEGORY[group]);
-    if (!contact) return res.status(500).json({ ok: false, error: 'Could not create contact' });
-    res.json({ ok: true, contact });
-  } catch (err) {
-    res.status(500).json({ ok: false, error: err.message });
-  }
-});
 
 // ─── Notifications: due follow-up reminders for the CRM tab ──
 // Same data the owner-alert cron uses (contacts with lead_status =
@@ -2334,108 +2065,24 @@ app.post('/api/notifications/followup-seen', authMiddleware, async (req, res) =>
   res.json({ ok: true });
 });
 
-// ─── Insights dashboard: missed opportunities, locality heatmap, tasks ──
-// Pune/PCMC localities matched against the free-text area/location fields.
-// Each entry is { name, aliases }: `name` is the canonical label shown in the
-// heatmap; `aliases` are alternate spellings/typos seen in real data that
-// should count toward the SAME bar rather than fragmenting it (e.g.
-// "hadpsar" and "Hadapsar" both roll up to "Hadapsar"). Built from an audit
-// of the actual unmatched location/area values in the database.
-const PUNE_LOCALITIES = [
-  { name: 'Kharadi' }, { name: 'Wagholi' },
-  { name: 'Viman Nagar', aliases: ['viaman nagar'] },
-  { name: 'Kalyani Nagar' }, { name: 'Koregaon Park' },
-  { name: 'Mundhwa', aliases: ['mundwa', 'mundhawa'] },
-  { name: 'Manjari' },
-  { name: 'Hadapsar', aliases: ['hadpsar'] },
-  { name: 'Handewadi' },
-  { name: 'Magarpatta' }, { name: 'Amanora' },
-  { name: 'Baner' }, { name: 'Balewadi' }, { name: 'Aundh' }, { name: 'Pashan' }, { name: 'Sus' }, { name: 'Bavdhan' },
-  { name: 'Wakad' }, { name: 'Hinjewadi' },
-  { name: 'Pimple Saudagar', aliases: ['pimpale saudagar', 'pimpale soudagar', 'pimple soudagar'] },
-  { name: 'Pimple Nilakh', aliases: ['pimple nilkh'] },
-  { name: 'Pimple Gurav', aliases: ['pimple gurva'] },
-  { name: 'Pimpri' }, { name: 'Chinchwad' },
-  { name: 'Nigdi', aliases: ['nigadi'] },
-  { name: 'Pradhikaran' },
-  { name: 'Akurdi' }, { name: 'Ravet' },
-  { name: 'Punawale', aliases: ['punwale', 'punavale'] },
-  { name: 'Tathawade' }, { name: 'Moshi' }, { name: 'Bhosari' },
-  { name: 'Chikhali', aliases: ['chikali'] },
-  { name: 'Dehu Road' }, { name: 'Talegaon' },
-  { name: 'Thergaon', aliases: ['tergaon'] },
-  { name: 'Wakdewadi' }, { name: 'Dapodi' },
-  { name: 'Bopodi', aliases: ['bopudi'] },
-  { name: 'Khadki' },
-  { name: 'Kiwale', aliases: ['kivale'] },
-  { name: 'Chakan' },
-  { name: 'Kothrud' },
-  { name: 'Karve Nagar', aliases: ['karvenagar'] },
-  { name: 'Warje', aliases: ['warje malwadi'] },
-  { name: 'Dhayari', aliases: ['dhyri', 'dhyari'] },
-  { name: 'Sinhagad Road', aliases: ['sinhgad road', 'singhgad road', 'sihgad road'] },
-  { name: 'Vadgaon' },
-  { name: 'Kondhwa', aliases: ['kondwa', 'kondhawa'] },
-  { name: 'NIBM' }, { name: 'Undri' },
-  { name: 'Katraj', aliases: ['kataraj'] },
-  { name: 'Bibwewadi', aliases: ['bibvewadi'] },
-  { name: 'Salisbury Park' },
-  { name: 'Erandwane', aliases: ['erandvana', 'enrandane'] },
-  { name: 'Narhe', aliases: ['nahre'] },
-  { name: 'Dhankawadi', aliases: ['dhankavadi', 'dhankwadi', 'dhankavdi'] },
-  { name: 'Swargate' }, { name: 'Shivajinagar' }, { name: 'Deccan' }, { name: 'Camp' },
-  { name: 'Yerwada', aliases: ['yarwada', 'yerewada', 'yrawada'] },
-  { name: 'Vishrantwadi', aliases: ['vishrantwad'] },
-  { name: 'Dhanori' },
-  { name: 'Lohegaon', aliases: ['lohgaon', 'lohgon', 'lohagaon'] },
-  { name: 'Kalas' },
-  { name: 'Wadgaon Sheri', aliases: ['wadgonsheri', 'wadgaosheri', 'wadgaonsheri'] },
-  { name: 'Tingre Nagar', aliases: ['tingare nagar'] },
-  { name: 'Keshav Nagar' },
-  { name: 'Wanowrie', aliases: ['wanowari', 'wanowarie'] },
-  { name: 'Market Yard' },
-  { name: 'Gultekadi' },
-  { name: 'Sangvi', aliases: ['sangavi'] },
-  { name: 'Nanded' },
-  { name: 'Fursungi', aliases: ['phursungi'] },
-  { name: 'Loni' }, { name: 'Wanwadi' }, { name: 'Ghorpadi' },
-  { name: 'Alandi', aliases: ['aalandi'] },
-  { name: 'Shikrapur' }, { name: 'Kalewadi' }, { name: 'Uruli Kanchan' },
-  { name: 'Rasta Peth' }, { name: 'Nana Peth' }, { name: 'Narayan Peth' },
-  { name: 'Shukrawar Peth' }, { name: 'Sadashiv Peth' },
-  { name: 'Raviwar Peth', aliases: ['ravivar peth'] },
-  { name: 'Bhawani Peth', aliases: ['bhwani peth', 'bhavani peth'] },
-];
-const LOCALITY_LC = PUNE_LOCALITIES.map(l => ({
-  name: l.name,
-  terms: [l.name.toLowerCase(), ...(l.aliases || [])],
-}));
-// Flattened name list handed to the AI assistant as grounding context for
-// locality verification (see ai-assistant.js analyzeChat()).
-const PUNE_LOCALITY_NAMES = PUNE_LOCALITIES.map(l => l.name);
-function matchLocality(text) {
-  const t = String(text || '').toLowerCase();
-  if (!t) return null;
-  for (const l of LOCALITY_LC) {
-    if (l.terms.some(term => t.includes(term))) return l.name;
-  }
-  return null;
-}
-
+// ─── Insights dashboard: missed opportunities + today's tasks ──
+// Generic across businesses. (An older build had a city-specific locality
+// heatmap here; the endpoint now returns an empty heatmap shape so older
+// dashboard code keeps working.)
 // Any follow-up date (single field or array) still in the future?
 function hasFutureFollowup(c, now) {
   const times = Array.isArray(c.follow_up_times) ? c.follow_up_times : [];
   const all = [...times, c.follow_up_time].filter(Boolean);
   return all.some(t => new Date(t).getTime() > now);
 }
-const OPEN_STATUSES = new Set(['New Lead', 'Contacted', 'Interested', 'Interview Scheduled', 'Maid Sent', 'Selected', 'Payment Pending', 'Quote Sent', 'Follow-up Required', '']);
+const OPEN_STATUSES = new Set(['New Lead', 'Contacted', 'Interested', 'Follow-up Required', 'Quote Sent', 'Payment Pending', 'Booked', '']);
 
 app.get('/api/insights', authMiddleware, async (req, res) => {
   const now = Date.now();
   const isAdmin = req.user.role === 'admin';
   try {
     // ── Contacts → missed opportunities + today's tasks ──
-    const { data: contactsAll } = await wfStore.supabase.from('contacts').select('*');
+    const contactsAll = await chatStore.getContacts('admin').catch(() => []);
     const mine = c => isAdmin || !c.assigned_agent || c.assigned_agent === 'Unassigned' || c.assigned_agent === req.user.username;
     const contacts = (contactsAll || []).filter(mine);
 
@@ -2453,7 +2100,7 @@ app.get('/api/insights', authMiddleware, async (req, res) => {
       if (isFinite(ageMin) && ageMin > 1440 && OPEN_STATUSES.has(status) && !hasFutureFollowup(c, now))
         reasons.push({ type: 'cold', text: `No contact in ${Math.floor(ageMin / 1440)}d, no follow-up set` });
       if (status === 'Payment Pending') reasons.push({ type: 'payment', text: 'Payment pending' });
-      if (status === 'Interview Scheduled') reasons.push({ type: 'interview', text: 'Interview pending — follow through' });
+      if (status === 'Booked') reasons.push({ type: 'interview', text: 'Booked — follow through' });
       if (reasons.length) missed.push({ phone: c.phone, name: c.name || c.phone, assigned_agent: c.assigned_agent || 'Unassigned', status, reasons });
 
       // Today's tasks (a contact can land in several buckets)
@@ -2461,38 +2108,13 @@ app.get('/api/insights', authMiddleware, async (req, res) => {
       const fu = [...(Array.isArray(c.follow_up_times) ? c.follow_up_times : []), c.follow_up_time].filter(Boolean);
       if (fu.some(t => new Date(t).getTime() <= endOfToday.getTime())) tasks.callFollowup.push({ phone: c.phone, name: c.name || c.phone });
       if (status === 'Payment Pending') tasks.payments.push({ phone: c.phone, name: c.name || c.phone });
-      if (status === 'Interested') tasks.interviews.push({ phone: c.phone, name: c.name || c.phone });
+      if (status === 'Interested' || status === 'Hot Lead') tasks.interviews.push({ phone: c.phone, name: c.name || c.phone });
     }
     // Most-severe reason first for display
     const sev = { waiting: 4, payment: 3, interview: 2, cold: 1 };
     missed.sort((a, b) => Math.max(...b.reasons.map(r => sev[r.type])) - Math.max(...a.reasons.map(r => sev[r.type])));
 
-    // ── Locality heatmap — segregated by lead type (for ad targeting) ──
-    function buildHeatmap(values) {
-      const heat = {};
-      let matched = 0, unmatched = 0;
-      for (const r of values) {
-        const loc = matchLocality(r);
-        if (loc) { heat[loc] = (heat[loc] || 0) + 1; matched++; } else if (String(r || '').trim()) unmatched++;
-      }
-      const top = Object.entries(heat).map(([area, count]) => ({ area, count })).sort((a, b) => b.count - a.count).slice(0, 15);
-      return { heatmap: top, matched, unmatched };
-    }
-
-    const [{ data: custs }, { data: flats }, { data: maidRows }] = await Promise.all([
-      wfStore.supabase.from('customers').select('location'),
-      wfStore.supabase.from('flat_customers').select('area'),
-      wfStore.supabase.from('maids').select('areas_served'),
-    ]);
-    const custHeat = buildHeatmap((custs || []).map(x => x.location));
-    const flatHeat = buildHeatmap((flats || []).map(x => x.area));
-    const maidHeat = buildHeatmap((maidRows || []).map(x => x.areas_served));
-    const allHeat = buildHeatmap([
-      ...(custs || []).map(x => x.location),
-      ...(flats || []).map(x => x.area),
-      ...(maidRows || []).map(x => x.areas_served),
-    ]);
-
+    const emptyHeat = { heatmap: [], matched: 0, unmatched: 0, total: 0 };
     res.json({
       ok: true, role: req.user.role,
       missed,
@@ -2501,15 +2123,9 @@ app.get('/api/insights', authMiddleware, async (req, res) => {
         payments: tasks.payments.length, interviews: tasks.interviews.length,
         lists: tasks,
       },
-      // Segregated by lead type, plus a combined "all" view.
-      heatmaps: {
-        all:      { heatmap: allHeat.heatmap,  matched: allHeat.matched,  unmatched: allHeat.unmatched,  total: (custs||[]).length + (flats||[]).length + (maidRows||[]).length },
-        customer: { heatmap: custHeat.heatmap, matched: custHeat.matched, unmatched: custHeat.unmatched, total: (custs||[]).length },
-        flat:     { heatmap: flatHeat.heatmap, matched: flatHeat.matched, unmatched: flatHeat.unmatched, total: (flats||[]).length },
-        maid:     { heatmap: maidHeat.heatmap, matched: maidHeat.matched, unmatched: maidHeat.unmatched, total: (maidRows||[]).length },
-      },
-      // Legacy top-level fields kept for backward compatibility (== "all").
-      heatmap: allHeat.heatmap, heatmapMatched: allHeat.matched, heatmapUnmatched: allHeat.unmatched,
+      // Kept for backward compatibility with the dashboard; no geo breakdown.
+      heatmaps: { all: emptyHeat },
+      heatmap: [], heatmapMatched: 0, heatmapUnmatched: 0,
     });
   } catch (err) {
     log('error', 'insights', err.message);
@@ -2517,10 +2133,10 @@ app.get('/api/insights', authMiddleware, async (req, res) => {
   }
 });
 
-// Send one approved template to a single person from a directory view.
+// Send one approved template to a single contact.
 // bodyParams maps to the template's {{1}}, {{2}}… body variables; headerUrl is
 // the media header. Both must match the approved template exactly (Meta #132000).
-app.post('/api/people/message', authMiddleware, async (req, res) => {
+app.post('/api/contacts/message', authMiddleware, async (req, res) => {
   const { phone, templateName, languageCode, headerUrl, bodyParams } = req.body || {};
   const to = toMetaPhone(phone);
   if (!to) return res.status(400).json({ ok: false, error: 'Invalid phone number' });
@@ -2557,23 +2173,13 @@ const audit = (wfId, user, action, msg = '') =>
   wfStore.addLog(wfId, null, null, 'audit', user, action, msg).catch(() => {});
 
 // Curated filterable fields per audience source (real columns only).
+// Single generic audience: WhatsApp contacts. Businesses segment by the
+// CRM fields agents set in the inbox (status, agent, labels, campaigns).
 const WORKFLOW_META = {
   sources: {
-    customers: {
-      label: 'Maid Customers',
-      fields: ['status', 'service_needed', 'location', 'priority', 'gender', 'budget', 'availability', 'assigned_to', 'stage', 'campaign_name', 'source', 'pincode', 'created_at', 'last_called_date', 'next_follow_up'],
-    },
-    flat_customers: {
-      label: 'Flat Customers',
-      fields: ['status', 'home_type', 'area', 'requirement', 'assigned_to', 'priority', 'availability', 'stage', 'source', 'pincode', 'created_at', 'last_called_date', 'follow_up'],
-    },
-    maids: {
-      label: 'Maids (Workers)',
-      fields: ['status', 'service_type', 'areas_served', 'job_preference', 'gender', 'experience', 'salary_expectation', 'availability', 'stage', 'pincode', 'created_at', 'last_called_date', 'worker'],
-    },
     contacts: {
       label: 'WhatsApp Contacts',
-      fields: ['lead_status', 'service_category', 'assigned_agent', 'lead_temperature', 'label', 'attribution_campaign', 'last_message_at', 'follow_up_time'],
+      fields: ['lead_status', 'assigned_agent', 'lead_temperature', 'lead_category', 'label', 'attribution_campaign', 'campaign_replied', 'service_category', 'last_message_at', 'follow_up_time', 'created_at'],
     },
   },
   operators: [
@@ -2586,63 +2192,90 @@ const WORKFLOW_META = {
     { id: 'before', label: 'date before' }, { id: 'after', label: 'date after' },
     { id: 'gt', label: 'greater than' }, { id: 'lt', label: 'less than' },
   ],
-  knownTemplates: ['day3_follow_up', 'day7_follow_up', 'day15_follow_up', 'cleanly_deep_cleaning_offer'],
+  // Live template names come from GET /api/templates (Meta). This is only
+  // a seed list shown in the builder dropdown before the first fetch.
+  knownTemplates: [],
 };
 
 // Ready-to-use workflow templates (loadable into the editor, then customized).
+// Sales follow-up pack — implements the lead rules:
+//   new lead → New Lead Sequence · reply → auto-stops (stopOnReply)
+//   Connected → stops New Lead · Proposal Sent → Proposal Follow-up
+//   "I'll think" → Thinking · "price high" → Price Objection
+//   Payment Received → stops ALL sales → Website Onboarding
+//   manual pause (inbox ⚡ Auto button) → stops everything for the contact
+//
+// NOTE: the templateName values below are placeholders — create matching
+// Meta-approved templates (or edit the nodes to use yours) before publishing.
 const WORKFLOW_TEMPLATES = [
   {
-    key: 'new_customer_followup', name: 'New Customer Follow-up',
-    description: 'When a new maid-customer is created, wait 1 day, then send a welcome/follow-up template.',
-    definition: { settings: { preventDuplicates: true, timezone: 'Asia/Kolkata' }, nodes: [
-      { id: 't', type: 'trigger_customer_created', x: 60, y: 140, config: { source: 'customers' } },
-      { id: 'd', type: 'logic_delay', x: 330, y: 140, config: { n: 1, unit: 'days' } },
-      { id: 's', type: 'action_send_template', x: 600, y: 140, config: { templateName: 'day3_follow_up', lang: 'en', personalizeName: false } },
-      { id: 'e', type: 'end', x: 870, y: 140, config: {} },
-    ], connections: [ { from: 't', port: 'out', to: 'd' }, { from: 'd', port: 'out', to: 's' }, { from: 's', port: 'out', to: 'e' } ] },
+    key: 'new_lead_sequence', name: 'New Lead Sequence',
+    description: 'IF new lead → start. 3 touches over ~3 days. STOPS automatically when the customer replies, is marked Connected, or automation is paused.',
+    definition: { settings: { preventDuplicates: true, timezone: 'Asia/Kolkata', group: 'new-lead', stopOnReply: true }, nodes: [
+      { id: 't', type: 'trigger_customer_created', x: 60, y: 160, config: { source: 'contacts' } },
+      { id: 'd1', type: 'logic_delay', x: 330, y: 160, config: { n: 2, unit: 'hours' } },
+      { id: 's1', type: 'action_send_template', x: 600, y: 160, config: { templateName: 'new_lead_touch_1', lang: 'en', personalizeName: true } },
+      { id: 'd2', type: 'logic_delay', x: 870, y: 160, config: { n: 1, unit: 'days' } },
+      { id: 's2', type: 'action_send_template', x: 1140, y: 160, config: { templateName: 'new_lead_touch_2', lang: 'en', personalizeName: true } },
+      { id: 'd3', type: 'logic_delay', x: 1410, y: 160, config: { n: 2, unit: 'days' } },
+      { id: 's3', type: 'action_send_template', x: 1680, y: 160, config: { templateName: 'new_lead_touch_3', lang: 'en', personalizeName: true } },
+      { id: 'e', type: 'end', x: 1950, y: 160, config: {} },
+    ], connections: [ { from: 't', port: 'out', to: 'd1' }, { from: 'd1', port: 'out', to: 's1' }, { from: 's1', port: 'out', to: 'd2' }, { from: 'd2', port: 'out', to: 's2' }, { from: 's2', port: 'out', to: 'd3' }, { from: 'd3', port: 'out', to: 's3' }, { from: 's3', port: 'out', to: 'e' } ] },
   },
   {
-    key: 'weekly_followup_4', name: 'Weekly Follow-up (4 weeks)',
-    description: 'Every week for 4 weeks, message Interested maid-customers — stops early if their status changes.',
-    definition: { settings: { preventDuplicates: false, timezone: 'Asia/Kolkata' }, nodes: [
-      { id: 't', type: 'trigger_manual', x: 60, y: 160, config: {} },
-      { id: 'a', type: 'audience', x: 300, y: 160, config: { source: 'customers', groups: [ { conditions: [ { field: 'status', op: 'eq', value: 'Interested' } ] } ] } },
-      { id: 'l', type: 'logic_loop', x: 560, y: 160, config: { intervalN: 1, intervalUnit: 'weeks', maxIterations: 4, stopGroups: [ { conditions: [ { field: 'status', op: 'neq', value: 'Interested' } ] } ] } },
-      { id: 's', type: 'action_send_template', x: 830, y: 90, config: { templateName: 'day7_follow_up', lang: 'en' } },
-      { id: 'e', type: 'end', x: 830, y: 240, config: {} },
-    ], connections: [ { from: 't', port: 'out', to: 'a' }, { from: 'a', port: 'out', to: 'l' }, { from: 'l', port: 'do', to: 's' }, { from: 'l', port: 'exit', to: 'e' } ] },
+    key: 'stop_on_connected', name: 'Stop on Connected',
+    description: 'IF salesperson marks Connected → STOP the New Lead Sequence for that contact. No messages sent.',
+    definition: { settings: { preventDuplicates: false, timezone: 'Asia/Kolkata', group: 'utility', stopOnReply: false }, nodes: [
+      { id: 't', type: 'trigger_status_changed', x: 60, y: 160, config: { value: 'Connected', cancelGroups: ['new-lead'] } },
+      { id: 'e', type: 'end', x: 330, y: 160, config: {} },
+    ], connections: [ { from: 't', port: 'out', to: 'e' } ] },
   },
   {
-    key: 'inactive_reengage', name: 'Inactive Customer Re-engagement',
-    description: 'Monthly: message customers marked Not Interested / not contacted recently.',
-    definition: { settings: { preventDuplicates: false, timezone: 'Asia/Kolkata' }, nodes: [
-      { id: 't', type: 'trigger_schedule', x: 60, y: 160, config: { mode: 'monthly', monthDay: 1, time: '10:00', timezone: 'Asia/Kolkata', neverExpire: true } },
-      { id: 'a', type: 'audience', x: 330, y: 160, config: { source: 'customers', groups: [ { conditions: [ { field: 'status', op: 'eq', value: 'Not Interested' } ] }, { conditions: [ { field: 'status', op: 'eq', value: "Didn't Convert" } ] } ] } },
-      { id: 's', type: 'action_send_template', x: 600, y: 160, config: { templateName: 'day15_follow_up', lang: 'en' } },
-      { id: 'e', type: 'end', x: 870, y: 160, config: {} },
-    ], connections: [ { from: 't', port: 'out', to: 'a' }, { from: 'a', port: 'out', to: 's' }, { from: 's', port: 'out', to: 'e' } ] },
+    key: 'proposal_followup', name: 'Proposal Follow-up Sequence',
+    description: 'IF salesperson marks Proposal Sent → START. Also stops any running New Lead Sequence. 2 touches over 4 days; replies stop it.',
+    definition: { settings: { preventDuplicates: true, timezone: 'Asia/Kolkata', group: 'proposal', stopOnReply: true }, nodes: [
+      { id: 't', type: 'trigger_status_changed', x: 60, y: 160, config: { value: 'Proposal Sent', cancelGroups: ['new-lead'] } },
+      { id: 'd1', type: 'logic_delay', x: 330, y: 160, config: { n: 1, unit: 'days' } },
+      { id: 's1', type: 'action_send_template', x: 600, y: 160, config: { templateName: 'proposal_touch_1', lang: 'en', personalizeName: true } },
+      { id: 'd2', type: 'logic_delay', x: 870, y: 160, config: { n: 3, unit: 'days' } },
+      { id: 's2', type: 'action_send_template', x: 1140, y: 160, config: { templateName: 'proposal_touch_2', lang: 'en', personalizeName: true } },
+      { id: 'e', type: 'end', x: 1410, y: 160, config: {} },
+    ], connections: [ { from: 't', port: 'out', to: 'd1' }, { from: 'd1', port: 'out', to: 's1' }, { from: 's1', port: 'out', to: 'd2' }, { from: 'd2', port: 'out', to: 's2' }, { from: 's2', port: 'out', to: 'e' } ] },
   },
   {
-    key: 'daily_until_response', name: 'Daily Reminder Until Status Changes',
-    description: 'Send a daily reminder (max 7) until the customer is no longer "Not Contacted".',
-    definition: { settings: { preventDuplicates: false, timezone: 'Asia/Kolkata' }, nodes: [
-      { id: 't', type: 'trigger_manual', x: 60, y: 160, config: {} },
-      { id: 'a', type: 'audience', x: 300, y: 160, config: { source: 'customers', groups: [ { conditions: [ { field: 'status', op: 'eq', value: 'Not Contacted' } ] } ] } },
-      { id: 'l', type: 'logic_loop', x: 560, y: 160, config: { intervalN: 1, intervalUnit: 'days', maxIterations: 7, stopGroups: [ { conditions: [ { field: 'status', op: 'neq', value: 'Not Contacted' } ] } ] } },
-      { id: 's', type: 'action_send_template', x: 830, y: 90, config: { templateName: 'day3_follow_up', lang: 'en' } },
-      { id: 'e', type: 'end', x: 830, y: 240, config: {} },
-    ], connections: [ { from: 't', port: 'out', to: 'a' }, { from: 'a', port: 'out', to: 'l' }, { from: 'l', port: 'do', to: 's' }, { from: 'l', port: 'exit', to: 'e' } ] },
+    key: 'thinking_sequence', name: 'Interested / Thinking Sequence',
+    description: 'IF customer says they will think (or similar) → START. 2 touches over 2 days; replies stop it.',
+    definition: { settings: { preventDuplicates: false, timezone: 'Asia/Kolkata', group: 'thinking', stopOnReply: true }, nodes: [
+      { id: 't', type: 'trigger_keyword', x: 60, y: 160, config: { keywords: ["i'll think", 'i will think', 'let me think', 'thinking about', 'need some time', 'will decide', 'will let you know'], matchMode: 'contains' } },
+      { id: 'd1', type: 'logic_delay', x: 330, y: 160, config: { n: 2, unit: 'hours' } },
+      { id: 's1', type: 'action_send_template', x: 600, y: 160, config: { templateName: 'thinking_touch_1', lang: 'en', personalizeName: true } },
+      { id: 'd2', type: 'logic_delay', x: 870, y: 160, config: { n: 2, unit: 'days' } },
+      { id: 's2', type: 'action_send_template', x: 1140, y: 160, config: { templateName: 'thinking_touch_2', lang: 'en', personalizeName: true } },
+      { id: 'e', type: 'end', x: 1410, y: 160, config: {} },
+    ], connections: [ { from: 't', port: 'out', to: 'd1' }, { from: 'd1', port: 'out', to: 's1' }, { from: 's1', port: 'out', to: 'd2' }, { from: 'd2', port: 'out', to: 's2' }, { from: 's2', port: 'out', to: 'e' } ] },
   },
   {
-    key: 'maid_reg_reminder', name: 'Maid Registration Reminder',
-    description: 'Weekly nudge to maids still marked Not Contacted, for 3 weeks.',
-    definition: { settings: { preventDuplicates: false, timezone: 'Asia/Kolkata' }, nodes: [
-      { id: 't', type: 'trigger_manual', x: 60, y: 160, config: {} },
-      { id: 'a', type: 'audience', x: 300, y: 160, config: { source: 'maids', groups: [ { conditions: [ { field: 'status', op: 'eq', value: 'Not Contacted' } ] } ] } },
-      { id: 'l', type: 'logic_loop', x: 560, y: 160, config: { intervalN: 1, intervalUnit: 'weeks', maxIterations: 3, stopGroups: [ { conditions: [ { field: 'status', op: 'neq', value: 'Not Contacted' } ] } ] } },
-      { id: 's', type: 'action_send_template', x: 830, y: 90, config: { templateName: 'day3_follow_up', lang: 'en' } },
-      { id: 'e', type: 'end', x: 830, y: 240, config: {} },
-    ], connections: [ { from: 't', port: 'out', to: 'a' }, { from: 'a', port: 'out', to: 'l' }, { from: 'l', port: 'do', to: 's' }, { from: 'l', port: 'exit', to: 'e' } ] },
+    key: 'price_objection', name: 'Price Objection Sequence',
+    description: 'IF customer says price is high (or similar) → START. 2 touches over 2 days; replies stop it.',
+    definition: { settings: { preventDuplicates: false, timezone: 'Asia/Kolkata', group: 'objection', stopOnReply: true }, nodes: [
+      { id: 't', type: 'trigger_keyword', x: 60, y: 160, config: { keywords: ['price is high', 'too expensive', 'costly', 'cost is high', 'discount', 'price kam', 'rate jyada', 'mehnga', 'mehenga', 'budget issue'], matchMode: 'contains' } },
+      { id: 'd1', type: 'logic_delay', x: 330, y: 160, config: { n: 1, unit: 'hours' } },
+      { id: 's1', type: 'action_send_template', x: 600, y: 160, config: { templateName: 'price_touch_1', lang: 'en', personalizeName: true } },
+      { id: 'd2', type: 'logic_delay', x: 870, y: 160, config: { n: 2, unit: 'days' } },
+      { id: 's2', type: 'action_send_template', x: 1140, y: 160, config: { templateName: 'price_touch_2', lang: 'en', personalizeName: true } },
+      { id: 'e', type: 'end', x: 1410, y: 160, config: {} },
+    ], connections: [ { from: 't', port: 'out', to: 'd1' }, { from: 'd1', port: 'out', to: 's1' }, { from: 's1', port: 'out', to: 'd2' }, { from: 'd2', port: 'out', to: 's2' }, { from: 's2', port: 'out', to: 'e' } ] },
+  },
+  {
+    key: 'website_onboarding', name: 'Website Onboarding Sequence',
+    description: 'IF payment received → STOP ALL sales follow-ups, then START onboarding. Welcome + day-1 step.',
+    definition: { settings: { preventDuplicates: true, timezone: 'Asia/Kolkata', group: 'onboarding', stopOnReply: true }, nodes: [
+      { id: 't', type: 'trigger_status_changed', x: 60, y: 160, config: { value: 'Payment Received', cancelGroups: ['*'] } },
+      { id: 's1', type: 'action_send_template', x: 330, y: 160, config: { templateName: 'onboarding_welcome', lang: 'en', personalizeName: true } },
+      { id: 'd1', type: 'logic_delay', x: 600, y: 160, config: { n: 1, unit: 'days' } },
+      { id: 's2', type: 'action_send_template', x: 870, y: 160, config: { templateName: 'onboarding_step_2', lang: 'en', personalizeName: true } },
+      { id: 'e', type: 'end', x: 1140, y: 160, config: {} },
+    ], connections: [ { from: 't', port: 'out', to: 's1' }, { from: 's1', port: 'out', to: 'd1' }, { from: 'd1', port: 'out', to: 's2' }, { from: 's2', port: 'out', to: 'e' } ] },
   },
   {
     key: 'monthly_checkin', name: 'Monthly Customer Check-in',
@@ -2650,7 +2283,7 @@ const WORKFLOW_TEMPLATES = [
     definition: { settings: { preventDuplicates: false, timezone: 'Asia/Kolkata' }, nodes: [
       { id: 't', type: 'trigger_schedule', x: 60, y: 160, config: { mode: 'monthly', monthDay: 1, time: '11:00', timezone: 'Asia/Kolkata', neverExpire: true } },
       { id: 'a', type: 'audience', x: 320, y: 160, config: { source: 'contacts', groups: [ { conditions: [ { field: 'lead_status', op: 'eq', value: 'Booked' } ] } ] } },
-      { id: 's', type: 'action_send_template', x: 580, y: 160, config: { templateName: 'day7_follow_up', lang: 'en' } },
+      { id: 's', type: 'action_send_template', x: 580, y: 160, config: { templateName: 'check_in_1', lang: 'en' } },
       { id: 'r', type: 'action_create_reminder', x: 840, y: 160, config: { daysFromNow: 2, time: '10:00' } },
       { id: 'e', type: 'end', x: 1080, y: 160, config: {} },
     ], connections: [ { from: 't', port: 'out', to: 'a' }, { from: 'a', port: 'out', to: 's' }, { from: 's', port: 'out', to: 'r' }, { from: 'r', port: 'out', to: 'e' } ] },
@@ -2675,12 +2308,10 @@ app.get('/api/workflows/field-values', authMiddleware, async (req, res) => {
   if (!meta) return res.status(400).json({ ok: false, error: 'Unknown source' });
   if (!meta.fields.includes(field)) return res.status(400).json({ ok: false, error: 'Unknown field' });
   try {
-    const { data, error } = await wfStore.supabase.from(source).select(field).limit(5000);
-    if (error) return res.status(500).json({ ok: false, error: error.message });
+    const vals = await wfStore.columnValues(source, field, 5000);
     const counts = new Map();
     let blank = 0;
-    for (const row of (data || [])) {
-      const v = row[field];
+    for (const v of (vals || [])) {
       if (v === null || v === undefined || String(v).trim() === '') { blank++; continue; }
       const key = String(v).trim();
       counts.set(key, (counts.get(key) || 0) + 1);
@@ -2688,7 +2319,7 @@ app.get('/api/workflows/field-values', authMiddleware, async (req, res) => {
     const values = [...counts.entries()].map(([value, count]) => ({ value, count }))
       .sort((a, b) => b.count - a.count);
     // Dates/free text explode into thousands of uniques — tell the UI to use text input.
-    res.json({ ok: true, values: values.slice(0, 300), blank, total: (data || []).length, tooMany: values.length > 300 });
+    res.json({ ok: true, values: values.slice(0, 300), blank, total: (vals || []).length, tooMany: values.length > 300 });
   } catch (err) { res.status(500).json({ ok: false, error: err.message }); }
 });
 
@@ -2698,13 +2329,63 @@ app.post('/api/workflows/preview-audience', authMiddleware, async (req, res) => 
   if (!node.config || !node.config.source) return res.status(400).json({ ok: false, error: 'Choose a data source first' });
   try {
     const people = await wfEngine.resolveAudience(node);
-    const { count: totalRows } = await wfStore.supabase.from(node.config.source).select('*', { count: 'exact', head: true });
+    const totalRows = await wfStore.countRows(node.config.source);
     res.json({ ok: true, count: people.length, totalRows: totalRows || 0, sample: people.slice(0, 25) });
   } catch (err) { res.status(500).json({ ok: false, error: err.message }); }
 });
 
 app.get('/api/automation/stats', authMiddleware, async (req, res) => {
   res.json({ ok: true, stats: await wfStore.dashboardStats() });
+});
+
+// ─── Per-contact automation state (sales-flow manual pause) ─
+// "Salesperson manually pauses automation → STOP ALL AUTOMATIC MESSAGES."
+// Pausing cancels the contact's in-flight tasks and blocks future triggers
+// until resumed. (Manual Run Now still works — it's a human action.)
+app.get('/api/automation/contact/:phone', authMiddleware, async (req, res) => {
+  const { phone } = req.params;
+  if (!isValidPhone(phone)) return res.status(400).json({ ok: false, error: 'Invalid phone number format' });
+  try {
+    const [paused, tasks] = await Promise.all([
+      wfStore.isAutomationPaused(phone),
+      wfStore.activeTasksForPhone(phone),
+    ]);
+    const names = {};
+    for (const t of tasks) {
+      if (!(t.workflow_id in names)) {
+        const wf = await wfStore.getWorkflow(t.workflow_id).catch(() => null);
+        names[t.workflow_id] = (wf && wf.name) || `#${t.workflow_id}`;
+      }
+    }
+    res.json({
+      ok: true, phone, paused,
+      activeTasks: tasks.map(t => ({
+        workflow_id: t.workflow_id, workflow: names[t.workflow_id],
+        node_id: t.node_id, wake_at: t.wake_at,
+      })),
+    });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+app.post('/api/automation/pause-contact', authMiddleware, async (req, res) => {
+  const { phone, paused } = req.body || {};
+  if (!phone || !isValidPhone(phone)) return res.status(400).json({ ok: false, error: 'Invalid phone' });
+  try {
+    const wantPaused = paused !== false;
+    let cancelled = 0;
+    if (wantPaused) {
+      cancelled = await wfStore.cancelTasksForPhone(phone, { reason: 'manually paused by ' + req.user.username });
+    }
+    await wfStore.setAutomationPaused(phone, wantPaused);
+    await wfStore.addLog(null, null, null, 'audit', req.user.username,
+      wantPaused ? 'automation-paused' : 'automation-resumed',
+      `${phone}${wantPaused ? ` — ${cancelled} task(s) cancelled` : ''}`).catch(() => {});
+    res.json({ ok: true, phone, paused: wantPaused, cancelled });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message });
+  }
 });
 
 app.get('/api/automation/executions', authMiddleware, async (req, res) => {
@@ -2852,7 +2533,7 @@ app.post('/api/workflows/:id/run-now', authMiddleware, async (req, res) => {
   const errors = wfEngine.validate(wf.definition || {});
   if (errors.length) return res.status(400).json({ ok: false, errors });
   if (wf.status !== 'active') return res.status(400).json({ ok: false, error: 'Publish the workflow first (Run Now only executes active workflows).' });
-  const run = await wfEngine.startRun(wf, `manual by ${req.user.username}`);
+  const run = await wfEngine.startRun(wf, `manual by ${req.user.username}`, null, { skipPaused: false });
   audit(wf.id, req.user.username, 'run-now', run ? `run #${run.id} (${run.total} recipients)` : 'failed');
   await wfEngine.tick(); // process immediately instead of waiting for the next tick
   res.json({ ok: true, run });
@@ -2863,8 +2544,21 @@ app.post('/api/workflows/hook/:id', async (req, res) => {
   if (!req.query.token || req.query.token !== ADMIN_TOKEN) return res.status(401).json({ ok: false, error: 'Unauthorized' });
   const wf = await wfStore.getWorkflow(req.params.id);
   if (!wf || wf.status !== 'active') return res.status(404).json({ ok: false, error: 'Active workflow not found' });
-  const run = await wfEngine.startRun(wf, 'webhook');
+  const run = await wfEngine.startRun(wf, 'webhook', null, { skipPaused: false });
   res.json({ ok: true, run });
+});
+
+// ─── Sheet Automations ──────────────────────────────────────
+app.get('/api/sheet-automations/config', authMiddleware, async (req, res) => {
+  if (!requireAdmin(req, res)) return;
+  const cfg = await sheetAutomations.getConfig();
+  res.json({ ok: true, config: cfg });
+});
+
+app.post('/api/sheet-automations/config', authMiddleware, async (req, res) => {
+  if (!requireAdmin(req, res)) return;
+  await sheetAutomations.saveConfig(req.body);
+  res.json({ ok: true });
 });
 
 // ─── Global error handler ───────────────────────────────────
@@ -2885,8 +2579,13 @@ app.use((req, res) => {
 const server = app.listen(PORT, () => {
   log('info', 'server', `Meta Cloud API bot ready on :${PORT}`);
   log('info', 'server', `build: ${process.env.RENDER_GIT_COMMIT?.slice(0,7) || 'local'} | phoneId: ${META_PHONE_NUMBER_ID || 'MISSING'} | verifyToken: ${META_VERIFY_TOKEN ? 'set' : 'MISSING'} | env: ${NODE_ENV}`);
-  // Automation engine — persisted in Supabase, safe across restarts.
+  // Automation engine — persisted in Neon Postgres, safe across restarts.
   wfEngine.init({ sendTemplate: watiSendTemplate, toMetaPhone, log, chatStore });
+  // Sales-flow rule: a salesperson changing a contact's status fires
+  // status workflows (stop groups + start sequences).
+  chatStore.setStatusChangeHook((p, oldS, newS) => wfEngine.handleStatusChange(p, oldS, newS));
+  // Start Sheet Automations polling
+  sheetAutomations.startPolling();
 });
 
 // ─── Graceful shutdown ──────────────────────────────────────

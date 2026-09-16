@@ -1,29 +1,34 @@
 require('dotenv').config();
-const { createClient } = require('@supabase/supabase-js');
 const crypto = require('crypto');
+const { q, one, all, jb, hasDb } = require('./db');
 
-// Initialize Supabase Client
-const supabaseUrl = process.env.SUPABASE_URL;
-const supabaseKey = process.env.SUPABASE_KEY;
-
-if (!supabaseUrl || !supabaseKey) {
-  console.error(`${new Date().toISOString()} [chat-store] ❌ SUPABASE_URL and SUPABASE_KEY are required — the CRM/chat store cannot run without them.`);
+// Boot-time connection test (skipped when running without a database)
+if (hasDb) {
+  q('SELECT COUNT(*)::int AS c FROM contacts').then(
+    (r) => console.log(`${new Date().toISOString()} [chat-store] ✅ Neon connected (contacts: ${r.rows[0].c})`),
+    (err) => console.error(`${new Date().toISOString()} [chat-store] ❌ Neon connection FAILED:`, err.message)
+  );
+} else {
+  console.log(`${new Date().toISOString()} [chat-store] no database — chat store returns empty data.`);
 }
 
-const supabase = createClient(supabaseUrl, supabaseKey);
+// JSON-safe param: stringify objects/arrays (jsonb columns), pass the rest through.
+function sqlVal(v) {
+  return (v !== null && typeof v === 'object') ? JSON.stringify(v) : v;
+}
 
-// Boot-time connection test
-supabase.from('contacts').select('phone', { count: 'exact', head: true }).limit(1)
-  .then(({ error, count }) => {
-    if (error) {
-      console.error(`${new Date().toISOString()} [chat-store] ❌ Supabase connection FAILED:`, error.message);
-    } else {
-      console.log(`${new Date().toISOString()} [chat-store] ✅ Supabase connected (contacts: ${count ?? 'unknown'})`);
-    }
-  })
-  .catch(err => {
-    console.error(`${new Date().toISOString()} [chat-store] ❌ Supabase connection exception:`, err.message);
-  });
+// Partial UPDATE of one contact row. Returns nothing (throws on SQL error).
+async function updateContactFields(phone, obj) {
+  const keys = Object.keys(obj);
+  if (!keys.length) return;
+  const set = keys.map((k, i) => `"${k}"=$${i + 1}`).join(', ');
+  await q(`UPDATE contacts SET ${set} WHERE phone=$${keys.length + 1}`, [...keys.map((k) => sqlVal(obj[k])), phone]);
+}
+
+// LIKE pattern escape for user-influenced prefixes.
+function likePrefix(v) {
+  return String(v).replace(/[\\%_]/g, (ch) => '\\' + ch) + '%';
+}
 
 /**
  * Ensures the contact exists, updates their name and last_message_at.
@@ -35,9 +40,9 @@ async function upsertContact(phone, name, direction) {
       phone: phone,
       last_message_at: new Date().toISOString()
     };
-    // Only set the name when we don't already have one stored. A name we saved
-    // from a source table (maids/customers) or captured on first contact should
-    // win over the WhatsApp profile name on every later message.
+    // Only set the name when we don't already have one stored. A name an
+    // agent saved, or one captured on first contact, should win over the
+    // WhatsApp profile name on every later message.
     if (name && !(existing && existing.name)) payload.name = name;
 
     if (direction === 'inbound') {
@@ -57,11 +62,12 @@ async function upsertContact(phone, name, direction) {
       }
     }
 
-    const { error } = await supabase
-      .from('contacts')
-      .upsert(payload, { onConflict: 'phone' });
-
-    if (error) console.error('[chat-store] error upserting contact:', error);
+    const keys = Object.keys(payload);
+    const sets = keys.filter((k) => k !== 'phone').map((k) => `"${k}"=EXCLUDED."${k}"`).join(', ');
+    await q(
+      `INSERT INTO contacts (${keys.map((k) => `"${k}"`).join(', ')}) VALUES (${keys.map((_, i) => `$${i + 1}`).join(', ')}) ON CONFLICT (phone) DO UPDATE SET ${sets}`,
+      keys.map((k) => sqlVal(payload[k]))
+    );
   } catch (err) {
     console.error('[chat-store] exception in upsertContact:', err.message);
   }
@@ -75,20 +81,11 @@ async function saveMessage(phone, name, direction, content, wamid = null, status
   try {
     await upsertContact(phone, name, direction);
 
-    const { data, error } = await supabase
-      .from('messages')
-      .insert({
-        phone: phone,
-        direction: direction,
-        content: content,
-        wamid: wamid,
-        status: status
-      })
-      .select('id')
-      .single();
-
-    if (error) { console.error('[chat-store] error saving message:', error); return null; }
-    return data || null;
+    const row = await one(
+      'INSERT INTO messages (phone, direction, content, wamid, status) VALUES ($1,$2,$3,$4,$5) RETURNING id',
+      [phone, direction, content, wamid, status]
+    );
+    return row || null;
   } catch (err) {
     console.error('[chat-store] exception in saveMessage:', err.message);
     return null;
@@ -100,12 +97,7 @@ async function saveMessage(phone, name, direction, content, wamid = null, status
  */
 async function updateMessageStatus(wamid, status) {
   try {
-    const { error } = await supabase
-      .from('messages')
-      .update({ status: status })
-      .eq('wamid', wamid);
-
-    if (error) console.error('[chat-store] error updating message status:', error);
+    await q('UPDATE messages SET status=$1 WHERE wamid=$2', [status, wamid]);
   } catch (err) {
     console.error('[chat-store] exception updating message status:', err.message);
   }
@@ -116,13 +108,8 @@ async function updateMessageStatus(wamid, status) {
  */
 async function isBotPaused(phone) {
   try {
-    const { data, error } = await supabase
-      .from('contacts')
-      .select('bot_paused_until')
-      .eq('phone', phone)
-      .single();
-
-    if (error || !data || !data.bot_paused_until) return false;
+    const data = await one('SELECT bot_paused_until FROM contacts WHERE phone=$1', [phone]);
+    if (!data || !data.bot_paused_until) return false;
 
     const pausedUntil = new Date(data.bot_paused_until);
     const now = new Date();
@@ -147,12 +134,7 @@ async function setBotPause(phone, durationHours) {
       pausedUntil = pausedUntil.toISOString();
     }
 
-    const { error } = await supabase
-      .from('contacts')
-      .update({ bot_paused_until: pausedUntil })
-      .eq('phone', phone);
-
-    if (error) console.error('[chat-store] error pausing bot:', error);
+    await q('UPDATE contacts SET bot_paused_until=$1 WHERE phone=$2', [pausedUntil, phone]);
   } catch (err) {
     console.error('[chat-store] exception setting bot pause:', err.message);
   }
@@ -166,12 +148,7 @@ async function updateContactLabel(phone, label) {
     const payload = { label: label };
     if (label === 'read') payload.unread_count = 0;
 
-    const { error } = await supabase
-      .from('contacts')
-      .update(payload)
-      .eq('phone', phone);
-
-    if (error) console.error('[chat-store] error updating label:', error);
+    await updateContactFields(phone, payload);
   } catch (err) {
     console.error('[chat-store] exception updating label:', err.message);
   }
@@ -179,17 +156,43 @@ async function updateContactLabel(phone, label) {
 
 /**
  * Updates CRM fields for a contact (Phase 1).
+ *
+ * Status-change hook: when `lead_status` actually changes, the registered
+ * listener fires (see setStatusChangeHook — index.js wires it to the
+ * automation engine's handleStatusChange). Fire-and-forget: a hook failure
+ * never breaks the CRM write.
  */
-async function updateContactCRM(phone, updates) {
-  try {
-    const { error } = await supabase
-      .from('contacts')
-      .update(updates)
-      .eq('phone', phone);
+let _statusChangeHook = null;
+function setStatusChangeHook(fn) {
+  _statusChangeHook = typeof fn === 'function' ? fn : null;
+}
 
-    if (error) console.error('[chat-store] error updating CRM fields:', error);
+async function updateContactCRM(phone, updates) {
+  let oldStatus = null;
+  const watchesStatus = updates && Object.prototype.hasOwnProperty.call(updates, 'lead_status');
+  if (watchesStatus && _statusChangeHook) {
+    try {
+      const prev = await getContactByPhone(phone);
+      oldStatus = (prev && prev.lead_status) || null;
+    } catch { /* hook is best-effort */ }
+  }
+
+  try {
+    await updateContactFields(phone, updates);
   } catch (err) {
     console.error('[chat-store] exception updating CRM fields:', err.message);
+  }
+
+  if (watchesStatus && _statusChangeHook) {
+    const next = updates.lead_status;
+    if (String(next || '') !== String(oldStatus || '')) {
+      try {
+        const r = _statusChangeHook(phone, oldStatus, next);
+        if (r && typeof r.catch === 'function') r.catch(err => console.error('[chat-store] status hook:', err.message));
+      } catch (err) {
+        console.error('[chat-store] status hook threw:', err.message);
+      }
+    }
   }
 }
 
@@ -198,17 +201,7 @@ async function updateContactCRM(phone, updates) {
  */
 async function getNotes(phone) {
   try {
-    const { data, error } = await supabase
-      .from('notes')
-      .select('*')
-      .eq('phone', phone)
-      .order('created_at', { ascending: false });
-
-    if (error) {
-      console.error('[chat-store] error fetching notes:', error);
-      return [];
-    }
-    return data || [];
+    return await all('SELECT * FROM notes WHERE phone=$1 ORDER BY created_at DESC', [phone]);
   } catch (err) {
     console.error('[chat-store] exception fetching notes:', err.message);
     return [];
@@ -220,21 +213,10 @@ async function getNotes(phone) {
  */
 async function addNote(phone, note, created_by = 'Admin') {
   try {
-    const { data, error } = await supabase
-      .from('notes')
-      .insert({
-        phone: phone,
-        note: note,
-        created_by: created_by
-      })
-      .select()
-      .single();
-
-    if (error) {
-      console.error('[chat-store] error adding note:', error);
-      return null;
-    }
-    return data;
+    return await one(
+      'INSERT INTO notes (phone, note, created_by) VALUES ($1,$2,$3) RETURNING *',
+      [phone, note, created_by]
+    );
   } catch (err) {
     console.error('[chat-store] exception adding note:', err.message);
     return null;
@@ -247,19 +229,13 @@ async function addNote(phone, note, created_by = 'Admin') {
  */
 async function getContacts(role = 'admin', username = '') {
   try {
-    let query = supabase.from('contacts').select('*');
-
     if (role === 'employee') {
-      query = query.or(`assigned_agent.eq.${username},assigned_agent.eq.Unassigned,assigned_agent.is.null`);
+      return await all(
+        "SELECT * FROM contacts WHERE (assigned_agent=$1 OR assigned_agent='Unassigned' OR assigned_agent IS NULL) ORDER BY last_message_at DESC",
+        [username]
+      );
     }
-
-    const { data, error } = await query.order('last_message_at', { ascending: false });
-
-    if (error) {
-      console.error('[chat-store] error fetching contacts:', error);
-      return [];
-    }
-    return data || [];
+    return await all('SELECT * FROM contacts ORDER BY last_message_at DESC');
   } catch (err) {
     console.error('[chat-store] exception fetching contacts:', err.message);
     return [];
@@ -271,13 +247,9 @@ async function getContacts(role = 'admin', username = '') {
  */
 async function getAbandonedLeads() {
   try {
-    const { data, error } = await supabase.from('contacts')
-      .select('*')
-      .or('abandonment_drip_stage.is.null,abandonment_drip_stage.lt.15');
-    if (error) {
-      console.error('[chat-store] error fetching abandoned leads:', error);
-      return [];
-    }
+    const data = await all(
+      'SELECT * FROM contacts WHERE (abandonment_drip_stage IS NULL OR abandonment_drip_stage < 15)'
+    );
 
     const EXCLUDED_STATUSES = new Set([
       'Booked', 'Canceled', 'Not Interested',
@@ -300,12 +272,9 @@ async function getAbandonedLeads() {
  */
 async function getContactByPhone(phone) {
   try {
-    const { data, error } = await supabase.from('contacts').select('*').eq('phone', phone).single();
-    if (error && error.code !== 'PGRST116') {
-       console.error('[chat-store] error fetching contact:', error);
-    }
-    return data;
+    return await one('SELECT * FROM contacts WHERE phone=$1', [phone]);
   } catch (err) {
+    console.error('[chat-store] error fetching contact:', err.message);
     return null;
   }
 }
@@ -326,13 +295,8 @@ function hashPassword(pw) {
  */
 async function loginUser(username, password) {
   try {
-    const { data, error } = await supabase
-      .from('users')
-      .select('id, username, role, password_hash')
-      .eq('username', username)
-      .single();
-
-    if (error || !data) return null;
+    const data = await one('SELECT id, username, role, password_hash FROM users WHERE username=$1', [username]);
+    if (!data) return null;
 
     const hashed = hashPassword(password);
 
@@ -340,14 +304,14 @@ async function loginUser(username, password) {
       // Already using hashed password — good
     } else if (data.password_hash === password) {
       // Legacy plaintext match — auto-upgrade to hash
-      await supabase.from('users').update({ password_hash: hashed }).eq('id', data.id);
+      await q('UPDATE users SET password_hash=$1 WHERE id=$2', [hashed, data.id]);
       console.log(`[chat-store] auto-upgraded password hash for ${username}`);
     } else {
       return null; // neither hash nor plaintext matched
     }
 
     // Update last login
-    await supabase.from('users').update({ last_login_at: new Date().toISOString() }).eq('id', data.id);
+    await q('UPDATE users SET last_login_at=$1 WHERE id=$2', [new Date().toISOString(), data.id]);
 
     return { id: data.id, username: data.username, role: data.role };
   } catch (err) {
@@ -361,16 +325,7 @@ async function loginUser(username, password) {
  */
 async function getUsers() {
   try {
-    const { data, error } = await supabase
-      .from('users')
-      .select('username, role')
-      .order('username', { ascending: true });
-
-    if (error) {
-      console.error('[chat-store] error fetching users:', error);
-      return [];
-    }
-    return data || [];
+    return await all('SELECT username, role FROM users ORDER BY username ASC');
   } catch (err) {
     console.error('[chat-store] exception fetching users:', err.message);
     return [];
@@ -389,39 +344,15 @@ async function updateBroadcastMetric(campaign_name, metric_type) {
   }
   const prev = _metricQueue.get(campaign_name) || Promise.resolve();
   const task = prev.then(async () => {
-    // Use maybeSingle() so "no row" is not an error — avoids noisy 406 logs
-    // If column doesn't exist yet (e.g. 'failed' before ALTER), skip gracefully
-    let selErr, data;
-    try {
-      const res = await supabase.from('broadcast_metrics').select(metric_type).eq('campaign_name', campaign_name).maybeSingle();
-      data = res.data; selErr = res.error;
-    } catch(e) { selErr = e; }
-    if (selErr) {
-      const msg = String(selErr.message||'');
-      const missingFailedCol = metric_type === 'failed' && (selErr.code === '42703' || selErr.code === 'PGRST204' || msg.includes('column "failed" does not exist'));
-      if (missingFailedCol) return; // counted dynamically from messages instead
-      throw selErr;
-    }
-    if (!data) {
-      const insertData = { campaign_name, sent: 0, delivered: 0, read: 0, replied: 0, booked: 0 };
-      insertData[metric_type] = 1;
-      const { error: insErr } = await supabase.from('broadcast_metrics').insert([insertData]);
-      if (insErr) {
-        // Race: another serialized task may have inserted first — fallback to increment
-        if (insErr.code === '23505') {
-          const { data: retryData, error: retryErr } = await supabase
-            .from('broadcast_metrics').select(metric_type).eq('campaign_name', campaign_name).single();
-          if (retryErr) throw retryErr;
-          const cur = (retryData && retryData[metric_type]) || 0;
-          const { error: updErr } = await supabase.from('broadcast_metrics').update({ [metric_type]: cur + 1 }).eq('campaign_name', campaign_name);
-          if (updErr) throw updErr;
-        } else throw insErr;
-      }
-    } else {
-      const cur = data[metric_type] || 0;
-      const { error: updErr } = await supabase.from('broadcast_metrics').update({ [metric_type]: cur + 1 }).eq('campaign_name', campaign_name);
-      if (updErr) throw updErr;
-    }
+    // Atomic in Postgres: single-row upsert + increment, no lost updates,
+    // no race between concurrent webhook deliveries. metric_type is
+    // whitelist-checked above, so interpolating it is safe.
+    await q(
+      `INSERT INTO broadcast_metrics (campaign_name, sent, delivered, read, replied, booked, failed)
+       VALUES ($1,0,0,0,0,0,0) ON CONFLICT (campaign_name) DO NOTHING`,
+      [campaign_name]
+    );
+    await q(`UPDATE broadcast_metrics SET "${metric_type}" = "${metric_type}" + 1 WHERE campaign_name=$1`, [campaign_name]);
   }).catch((err) => {
     console.error('[chat-store] updateBroadcastMetric failed:', campaign_name, metric_type, err.message);
     throw err;
@@ -433,8 +364,7 @@ async function updateBroadcastMetric(campaign_name, metric_type) {
 
 async function getBroadcastMetrics() {
   try {
-    const { data } = await supabase.from('broadcast_metrics').select('*').order('campaign_name', { ascending: false }).limit(1000);
-    return data || [];
+    return await all('SELECT * FROM broadcast_metrics ORDER BY campaign_name DESC LIMIT 1000');
   } catch(err) { return []; }
 }
 
@@ -448,19 +378,14 @@ async function getMessageStatusCounts() {
   const statuses = ['sent', 'delivered', 'read', 'failed'];
   const counts = { sent: 0, delivered: 0, read: 0, failed: 0, total: 0 };
   try {
-    const results = await Promise.all(
-      statuses.map((s) =>
-        supabase.from('messages').select('id', { count: 'exact', head: true })
-          .eq('direction', 'outbound').eq('status', s)
-      )
+    const rows = await all(
+      "SELECT status, COUNT(*)::int AS c FROM messages WHERE direction='outbound' GROUP BY status"
     );
-    statuses.forEach((s, i) => {
-      if (results[i].error) console.error('[chat-store] getMessageStatusCounts', s, 'error:', results[i].error.message);
-      counts[s] = results[i].count || 0;
-    });
-    const { count: total, error: totalErr } = await supabase.from('messages').select('id', { count: 'exact', head: true }).eq('direction', 'outbound');
-    if (totalErr) console.error('[chat-store] getMessageStatusCounts total error:', totalErr.message);
-    else counts.total = total || 0;
+    for (const r of rows) {
+      if (Object.prototype.hasOwnProperty.call(counts, r.status)) counts[r.status] = r.c;
+    }
+    const t = await one("SELECT COUNT(*)::int AS c FROM messages WHERE direction='outbound'");
+    counts.total = (t && t.c) || 0;
   } catch (err) {
     console.error('[chat-store] getMessageStatusCounts error:', err.message);
   }
@@ -476,7 +401,7 @@ async function getBroadcastReadStats() {
   // Also compute failed per campaign from messages (source of truth for failures)
   let failedByCampaign = {};
   try {
-    const { data: msgs } = await supabase.from('messages').select('content,status').eq('direction','outbound').like('content','[Template]%').limit(2000);
+    const msgs = await all("SELECT content, status FROM messages WHERE direction='outbound' AND content LIKE '[Template]%' LIMIT 2000");
     (msgs || []).forEach(r => {
       if (r.status !== 'failed') return;
       const cn = String(r.content || '').replace('[Template]','').trim().split(' ')[0];
@@ -486,9 +411,11 @@ async function getBroadcastReadStats() {
     // Fallback: if 2000 truncated, always count per campaign (otherwise undercounts)
     if ((msgs || []).length === 2000) {
       for (const m of metrics) {
-        const { count } = await supabase.from('messages').select('id', {count:'exact', head:true})
-          .eq('direction','outbound').eq('status','failed').like('content', `[Template] ${m.campaign_name}%`);
-        failedByCampaign[m.campaign_name] = count || 0;
+        const r = await one(
+          "SELECT COUNT(*)::int AS c FROM messages WHERE direction='outbound' AND status='failed' AND content LIKE $1 ESCAPE '\\'",
+          [likePrefix('[Template] ' + m.campaign_name)]
+        );
+        failedByCampaign[m.campaign_name] = (r && r.c) || 0;
       }
     }
   } catch(_) { /* best-effort */ }
@@ -538,38 +465,31 @@ async function getCampaignContacts(campaignName, status) {
   try {
     if (status === 'replied') {
       // contacts who replied within this campaign
-      const { data, error } = await supabase.from('contacts')
-        .select('phone, name, last_message, last_message_time')
-        .eq('attribution_campaign', safeName).eq('campaign_replied', true).limit(500);
-      if (error) { console.error('[chat-store] getCampaignContacts replied err:', error.message); return []; }
-      return (data || []).map(r => ({ phone: r.phone, name: r.name || '', status: 'replied', last_message: r.last_message, last_message_time: r.last_message_time }));
+      const rows = await all(
+        'SELECT phone, name, last_message, last_message_time FROM contacts WHERE attribution_campaign=$1 AND campaign_replied=true LIMIT 500',
+        [safeName]
+      );
+      return (rows || []).map(r => ({ phone: r.phone, name: r.name || '', status: 'replied', last_message: r.last_message, last_message_time: r.last_message_time }));
     }
     if (targetStatuses) {
       // Fetch wamid + phone + status for this template, then enrich with contacts.name
-      let query = supabase.from('messages')
-        .select('phone, status, created_at, wamid')
-        .eq('direction', 'outbound')
-        .like('content', `[Template] ${safeName}%`)
-        .in('status', targetStatuses)
-        .order('created_at', { ascending: false })
-        .limit(500);
-      const { data, error } = await query;
-      if (error) { console.error('[chat-store] getCampaignContacts err:', error.message); return []; }
+      const data = await all(
+        "SELECT phone, status, created_at, wamid FROM messages WHERE direction='outbound' AND content LIKE $1 ESCAPE '\\' AND status = ANY($2) ORDER BY created_at DESC LIMIT 500",
+        [likePrefix('[Template] ' + safeName), targetStatuses]
+      );
       if (!data || data.length === 0) return [];
       const phones = [...new Set(data.map(r => r.phone))];
-      const { data: contacts } = await supabase.from('contacts').select('phone, name').in('phone', phones);
+      const contacts = await all('SELECT phone, name FROM contacts WHERE phone = ANY($1)', [phones]);
       const nameMap = new Map((contacts || []).map(c => [c.phone, c.name]));
       return data.map(r => ({ phone: r.phone, name: nameMap.get(r.phone) || '', status: r.status, created_at: r.created_at, wamid: r.wamid }));
     }
     // fallback: all for campaign
-    const { data, error } = await supabase.from('messages')
-      .select('phone, status, created_at, wamid')
-      .eq('direction', 'outbound')
-      .like('content', `[Template] ${safeName}%`)
-      .order('created_at', { ascending: false }).limit(500);
-    if (error) return [];
+    const data = await all(
+      "SELECT phone, status, created_at, wamid FROM messages WHERE direction='outbound' AND content LIKE $1 ESCAPE '\\' ORDER BY created_at DESC LIMIT 500",
+      [likePrefix('[Template] ' + safeName)]
+    );
     const phones2 = [...new Set((data || []).map(r => r.phone))];
-    const { data: contacts2 } = await supabase.from('contacts').select('phone, name').in('phone', phones2);
+    const contacts2 = await all('SELECT phone, name FROM contacts WHERE phone = ANY($1)', [phones2]);
     const nameMap2 = new Map((contacts2 || []).map(c => [c.phone, c.name]));
     return (data || []).map(r => ({ phone: r.phone, name: nameMap2.get(r.phone) || '', status: r.status, created_at: r.created_at, wamid: r.wamid }));
   } catch (err) {
@@ -579,30 +499,38 @@ async function getCampaignContacts(campaignName, status) {
 }
 
 /**
- * Today's operational counts for the Analytics tab (IST calendar day):
- *   leads     — new customer / flat_customer / maid rows created today
+ * Today's operational counts for the Analytics tab (IST calendar day),
+ * computed from the `contacts` table only:
+ *   leads     — contacts with a message today that never had one before
+ *               (approximated via first inbound message date)
  *   followups — contacts whose follow-up falls today (reuses getScheduledFollowups)
- *   calls     — customer / flat_customer / maid rows called today (last_called_date)
- *   bookings  — customer / flat_customer / maid rows whose status contains "book"
- *               and last changed (last_updated_at) today
+ *   calls     — always 0 in core (no calling module); kept for shape compat
+ *   bookings  — contacts whose status contains "book" with activity today
  */
 async function getTodayStats() {
   const today = istDateStr(Date.now());
   const isToday = (d) => !!d && istDateStr(d) === today;
   const stats = { leads: 0, followups: 0, calls: 0, bookings: 0 };
   try {
-    const [custRes, flatRes, maidRes] = await Promise.all([
-      supabase.from('customers').select('created_at, last_called_date, status, last_updated_at'),
-      supabase.from('flat_customers').select('created_at, last_called_date, status, last_updated_at'),
-      supabase.from('maids').select('created_at, last_called_date, status, last_updated_at'),
+    const [msgs, contacts] = await Promise.all([
+      all("SELECT phone, direction, created_at FROM messages WHERE direction='inbound' AND created_at >= $1 LIMIT 5000", [new Date(Date.now() - 48 * 3600e3).toISOString()]),
+      all('SELECT phone, lead_status, last_message_at FROM contacts'),
     ]);
-    for (const rows of [custRes.data || [], flatRes.data || [], maidRes.data || []]) {
-      for (const r of rows) {
-        if (isToday(r.created_at)) stats.leads++;
-        if (isToday(r.last_called_date)) stats.calls++;
-        if (/book/i.test(String(r.status || '').trim()) && isToday(r.last_updated_at)) stats.bookings++;
-      }
+    const seenBefore = new Set();
+    try {
+      const older = await all("SELECT phone FROM messages WHERE direction='inbound' AND created_at < $1 LIMIT 5000", [new Date(Date.now() - 24 * 3600e3).toISOString()]);
+      (older || []).forEach(r => seenBefore.add(r.phone));
+    } catch { /* best-effort */ }
+    const todayPhones = new Set();
+    for (const m of (msgs || [])) {
+      if (!isToday(m.created_at)) continue;
+      todayPhones.add(m.phone);
+      if (!seenBefore.has(m.phone)) stats.leads++;
     }
+    for (const c of (contacts || [])) {
+      if (/book/i.test(String(c.lead_status || '')) && isToday(c.last_message_at)) stats.bookings++;
+    }
+    void todayPhones;
   } catch (err) { /* leave zeros on failure */ }
 
   try {
@@ -619,18 +547,10 @@ async function getTodayStats() {
 async function getDueFollowups() {
   try {
     // Pull all Follow-up Required contacts and compute "due" in JS, because a
-    // contact can now have up to 5 scheduled dates in follow_up_times (jsonb).
-    let { data, error } = await supabase
-      .from('contacts')
-      .select('phone, name, assigned_agent, follow_up_time, follow_up_times, service_category')
-      .eq('lead_status', 'Follow-up Required');
-    if (error) {
-      // follow_up_times column not added yet — fall back to the single field.
-      ({ data } = await supabase
-        .from('contacts')
-        .select('phone, name, assigned_agent, follow_up_time, service_category')
-        .eq('lead_status', 'Follow-up Required'));
-    }
+    // contact can have up to 5 scheduled dates in follow_up_times (jsonb).
+    const data = await all(
+      "SELECT phone, name, assigned_agent, follow_up_time, follow_up_times, service_category FROM contacts WHERE lead_status='Follow-up Required'"
+    );
     const now = Date.now();
     const due = [];
     for (const c of (data || [])) {
@@ -681,24 +601,13 @@ function followupDayBucket(followUpTime, now) {
  * by IST calendar day), and unseen (never opened since this follow-up time
  * was set — see markFollowupSeen).
  *
- * Requires this column (run once in the Supabase SQL editor):
- *   ALTER TABLE contacts ADD COLUMN IF NOT EXISTS follow_up_seen_at timestamptz;
+ * The follow_up_seen_at column ships in neon-schema.sql.
  */
 async function getScheduledFollowups() {
   try {
-    let { data, error } = await supabase
-      .from('contacts')
-      .select('phone, name, assigned_agent, follow_up_time, follow_up_times, service_category, follow_up_seen_at')
-      .not('follow_up_time', 'is', null)
-      .order('follow_up_time', { ascending: true });
-    if (error) {
-      // follow_up_times / follow_up_seen_at columns not added yet — degrade gracefully.
-      ({ data } = await supabase
-        .from('contacts')
-        .select('phone, name, assigned_agent, follow_up_time, service_category')
-        .not('follow_up_time', 'is', null)
-        .order('follow_up_time', { ascending: true }));
-    }
+    const data = await all(
+      'SELECT phone, name, assigned_agent, follow_up_time, follow_up_times, service_category, follow_up_seen_at FROM contacts WHERE follow_up_time IS NOT NULL ORDER BY follow_up_time ASC'
+    );
     const now = Date.now();
     return (data || []).map(c => {
       const times = Array.isArray(c.follow_up_times) ? c.follow_up_times : [];
@@ -728,7 +637,7 @@ async function getScheduledFollowups() {
  */
 async function markFollowupSeen(phone) {
   try {
-    await supabase.from('contacts').update({ follow_up_seen_at: new Date().toISOString() }).eq('phone', phone);
+    await q('UPDATE contacts SET follow_up_seen_at=$1 WHERE phone=$2', [new Date().toISOString(), phone]);
   } catch (err) {
     console.error('[chat-store] exception marking follow-up seen:', err.message);
   }
@@ -739,22 +648,20 @@ async function markFollowupSeen(phone) {
  */
 async function getQuickReplies() {
   try {
-    const { data } = await supabase.from('quick_replies').select('*').order('shortcut', { ascending: true });
-    return data || [];
+    return await all('SELECT * FROM quick_replies ORDER BY shortcut ASC');
   } catch (err) { return []; }
 }
 
 async function addQuickReply(shortcut, message) {
   try {
-    await supabase.from('quick_replies').delete().eq('shortcut', shortcut);
-    const { data } = await supabase.from('quick_replies').insert([{ shortcut, message }]).select().single();
-    return data;
+    await q('DELETE FROM quick_replies WHERE shortcut=$1', [shortcut]);
+    return await one('INSERT INTO quick_replies (shortcut, message) VALUES ($1,$2) RETURNING *', [shortcut, message]);
   } catch (err) { return null; }
 }
 
 async function deleteQuickReply(shortcut) {
   try {
-    await supabase.from('quick_replies').delete().eq('shortcut', shortcut);
+    await q('DELETE FROM quick_replies WHERE shortcut=$1', [shortcut]);
   } catch (err) {}
 }
 
@@ -763,17 +670,7 @@ async function deleteQuickReply(shortcut) {
  */
 async function getMessages(phone) {
   try {
-    const { data, error } = await supabase
-      .from('messages')
-      .select('*')
-      .eq('phone', phone)
-      .order('created_at', { ascending: true });
-
-    if (error) {
-      console.error('[chat-store] error fetching messages:', error);
-      return [];
-    }
-    return data || [];
+    return await all('SELECT * FROM messages WHERE phone=$1 ORDER BY created_at ASC', [phone]);
   } catch (err) {
     console.error('[chat-store] exception fetching messages:', err.message);
     return [];
@@ -786,9 +683,7 @@ async function getMessages(phone) {
  */
 async function getMessageById(id) {
   try {
-    const { data, error } = await supabase.from('messages').select('*').eq('id', id).single();
-    if (error) return null;
-    return data;
+    return await one('SELECT * FROM messages WHERE id=$1', [id]);
   } catch (err) {
     return null;
   }
@@ -800,159 +695,24 @@ async function getMessageById(id) {
  */
 async function getLastInboundWamid(phone) {
   try {
-    const { data, error } = await supabase
-      .from('messages')
-      .select('wamid')
-      .eq('phone', phone)
-      .eq('direction', 'inbound')
-      .not('wamid', 'is', null)
-      .order('created_at', { ascending: false })
-      .limit(1);
-    if (error || !data || !data.length) return null;
-    return data[0].wamid;
+    const row = await one(
+      "SELECT wamid FROM messages WHERE phone=$1 AND direction='inbound' AND wamid IS NOT NULL ORDER BY created_at DESC LIMIT 1",
+      [phone]
+    );
+    return (row && row.wamid) || null;
   } catch {
     return null;
   }
 }
 
-/**
- * Fetches "Interested" maid-service customers eligible for the WhatsApp
- * follow-up drip. Reads from the `customers` table (the maid-placement lead
- * list) — NOT `contacts`. Qualifies rows where status = 'Interested' and the
- * drip is not yet complete (wa_followup_stage < 15, or unset).
- *
- * Requires this column (run once in the Supabase SQL editor):
- *   ALTER TABLE customers ADD COLUMN IF NOT EXISTS wa_followup_stage smallint DEFAULT 0;
- */
-async function getInterestedFollowupCustomers() {
-  try {
-    const { data, error } = await supabase
-      .from('customers')
-      .select('id, name, phone, status, created_at, wa_followup_stage')
-      .eq('status', 'Interested')
-      .or('wa_followup_stage.is.null,wa_followup_stage.lt.15');
-    if (error) {
-      console.error('[chat-store] error fetching interested customers (is the wa_followup_stage column added?):', error.message);
-      return [];
-    }
-    return data || [];
-  } catch (err) {
-    console.error('[chat-store] exception fetching interested customers:', err.message);
-    return [];
-  }
-}
+// ─── Contact directory ──────────────────────────────────────
+// The inbox + automation audiences run on the `contacts` table only.
+// There are no separate lead tables in the white-label core; statuses,
+// tags and assignment all live on the contact row itself.
 
 /**
- * Advances a customer's WhatsApp follow-up stage. Called after each send so a
- * repeat press of "Run Follow-Ups" never re-sends the same stage.
- */
-async function advanceCustomerFollowupStage(id, stage) {
-  try {
-    const { error } = await supabase
-      .from('customers')
-      .update({ wa_followup_stage: stage })
-      .eq('id', id);
-    if (error) console.error('[chat-store] error advancing followup stage:', error.message);
-  } catch (err) {
-    console.error('[chat-store] exception advancing followup stage:', err.message);
-  }
-}
-
-/**
- * Fetches "dead / closed" customers eligible for the weekly maid-revival
- * campaign: status is Not Interested or Didn't Convert, they still have room
- * in the 1-month window (revive_stage < 4), and they have coordinates to
- * match a nearby maid.
- *
- * Requires these columns (run once in the Supabase SQL editor):
- *   ALTER TABLE customers ADD COLUMN IF NOT EXISTS revive_stage smallint DEFAULT 0;
- *   ALTER TABLE customers ADD COLUMN IF NOT EXISTS revive_last_sent_at timestamptz;
- */
-async function getReviveCustomers() {
-  try {
-    const { data, error } = await supabase
-      .from('customers')
-      .select('id, name, phone, status, latitude, longitude, revive_stage, revive_last_sent_at')
-      .in('status', ['Not Interested', "Didn't Convert"])
-      .or('revive_stage.is.null,revive_stage.lt.4')
-      .not('latitude', 'is', null)
-      .not('longitude', 'is', null);
-    if (error) {
-      console.error('[chat-store] error fetching revive customers (are revive_stage/revive_last_sent_at columns added?):', error.message);
-      return [];
-    }
-    return data || [];
-  } catch (err) {
-    console.error('[chat-store] exception fetching revive customers:', err.message);
-    return [];
-  }
-}
-
-/**
- * Advances a customer's revive campaign progress (stage 0→4) and stamps the
- * send time so the 7-day gate can pace the next one.
- */
-async function advanceReviveStage(id, stage, sentAtISO) {
-  try {
-    const { error } = await supabase
-      .from('customers')
-      .update({ revive_stage: stage, revive_last_sent_at: sentAtISO })
-      .eq('id', id);
-    if (error) console.error('[chat-store] error advancing revive stage:', error.message);
-  } catch (err) {
-    console.error('[chat-store] exception advancing revive stage:', err.message);
-  }
-}
-
-// ─── People directory (the 3 lead systems) ──────────────────
-// Maps each browsable group to its table and the columns that make up a
-// display row. Keeps the front-end generic across the three tables.
-const PEOPLE_SOURCES = {
-  flat_customers: { table: 'flat_customers', name: 'full_name', area: 'area',        tag: 'home_type',      status: 'status' },
-  customers:      { table: 'customers',      name: 'name',      area: 'location',     tag: 'service_needed', status: 'status' },
-  maids:          { table: 'maids',          name: 'name',      area: 'areas_served', tag: 'service_type',   status: 'status' },
-};
-
-function isPeopleGroup(group) {
-  return Object.prototype.hasOwnProperty.call(PEOPLE_SOURCES, group);
-}
-
-/**
- * Fetches a normalized list of people from one of the three lead tables.
- * Returns rows shaped { id, name, phone, area, tag, status }.
- */
-async function getPeople(group) {
-  const src = PEOPLE_SOURCES[group];
-  if (!src) return [];
-  try {
-    const cols = `id, ${src.name}, phone, ${src.area}, ${src.tag}, ${src.status}`;
-    const { data, error } = await supabase
-      .from(src.table)
-      .select(cols)
-      .order('id', { ascending: false })
-      .limit(2000);
-    if (error) {
-      console.error(`[chat-store] error fetching people (${group}):`, error.message);
-      return [];
-    }
-    return (data || []).map(r => ({
-      id:     r.id,
-      name:   r[src.name] || 'Unknown',
-      phone:  r.phone || '',
-      area:   r[src.area] || '',
-      tag:    r[src.tag] || '',
-      status: r[src.status] || '',
-    }));
-  } catch (err) {
-    console.error(`[chat-store] exception fetching people (${group}):`, err.message);
-    return [];
-  }
-}
-
-/**
- * Ensures a chat contact exists for a person from one of the lead tables so
- * agents can open a normal conversation with them. Sets name and
- * service_category without touching label/drip state on existing contacts.
+ * Ensures a chat contact exists so agents can open a normal conversation.
+ * Sets name without touching label/drip state on existing contacts.
  * Returns the contact row.
  */
 async function ensureContact(phone, name, serviceCategory) {
@@ -963,7 +723,7 @@ async function ensureContact(phone, name, serviceCategory) {
       if (name && !existing.name) updates.name = name;
       if (serviceCategory && !existing.service_category) updates.service_category = serviceCategory;
       if (Object.keys(updates).length) {
-        await supabase.from('contacts').update(updates).eq('phone', phone);
+        await updateContactFields(phone, updates);
         return { ...existing, ...updates };
       }
       return existing;
@@ -976,12 +736,10 @@ async function ensureContact(phone, name, serviceCategory) {
       label: 'read',
       last_message_at: new Date().toISOString(),
     };
-    const { data, error } = await supabase.from('contacts').insert(row).select().single();
-    if (error) {
-      console.error('[chat-store] error creating contact:', error.message);
-      return null;
-    }
-    return data;
+    return await one(
+      'INSERT INTO contacts (phone, name, service_category, lead_status, label, last_message_at) VALUES ($1,$2,$3,$4,$5,$6) RETURNING *',
+      [row.phone, row.name, row.service_category, row.lead_status, row.label, row.last_message_at]
+    );
   } catch (err) {
     console.error('[chat-store] exception in ensureContact:', err.message);
     return null;
@@ -996,15 +754,10 @@ async function ensureContact(phone, name, serviceCategory) {
 // so the other system's notifications and unread state are never touched.
 async function addNotification(title, body, phone = null, type = 'alert') {
   try {
-    const { error } = await supabase.from('notifications').insert({
-      lead_type: 'whatsapp',
-      lead_id:   phone || null,
-      type,
-      title,
-      body,
-      is_read:   false,
-    });
-    if (error) console.error('[chat-store] error adding notification:', error.message);
+    await q(
+      'INSERT INTO notifications (lead_type, lead_id, type, title, body, is_read) VALUES ($1,$2,$3,$4,$5,$6)',
+      ['whatsapp', phone || null, type, title, body, false]
+    );
   } catch (err) {
     console.error('[chat-store] exception adding notification:', err.message);
   }
@@ -1012,16 +765,13 @@ async function addNotification(title, body, phone = null, type = 'alert') {
 
 async function getNotifications(limit = 50, filter = null) {
   try {
-    let q = supabase
-      .from('notifications')
-      .select('*')
-      .eq('lead_type', 'whatsapp');
-    if (filter === 'message') q = q.eq('type', 'message');
-    else if (filter === 'not-message') q = q.neq('type', 'message');
-    const { data, error } = await q
-      .order('created_at', { ascending: false })
-      .limit(limit);
-    if (error) return [];
+    let sql = "SELECT * FROM notifications WHERE lead_type='whatsapp'";
+    const params = [];
+    if (filter === 'message') sql += " AND type='message'";
+    else if (filter === 'not-message') sql += " AND type<>'message'";
+    sql += ' ORDER BY created_at DESC LIMIT $1';
+    params.push(limit);
+    const data = await all(sql, params);
     // Normalize to the shape the CRM UI expects.
     return (data || []).map(n => ({
       id: n.id,
@@ -1037,22 +787,13 @@ async function getNotifications(limit = 50, filter = null) {
 
 async function markNotificationsRead() {
   try {
-    await supabase.from('notifications')
-      .update({ is_read: true })
-      .eq('lead_type', 'whatsapp')
-      .eq('is_read', false);
+    await q("UPDATE notifications SET is_read=true WHERE lead_type='whatsapp' AND is_read=false");
   } catch (err) {
     console.error('[chat-store] exception marking notifications read:', err.message);
   }
 }
 
-// ─── Quick lead summary (shown when a chat is opened) ────────
-// Lead tables store phone as 10 local digits (no country code); WhatsApp
-// contacts store it with the country code. Match on the last 10 digits.
-function last10(phone) {
-  return String(phone || '').replace(/\D/g, '').slice(-10);
-}
-
+// ─── Quick contact summary (shown when a chat is opened) ─────
 // Drops null/empty/"Unknown"-style fields so the summary only shows what's
 // actually filled in ("if available").
 function pickFilled(obj) {
@@ -1065,38 +806,33 @@ function pickFilled(obj) {
 }
 
 /**
- * Looks up a phone across all three lead tables (a person can legitimately
- * appear in more than one — e.g. a maid who also inquired as a customer).
- * Returns only the summary fields relevant to each type, with blanks
- * dropped. Each key is null if no match was found in that table.
+ * Contact summary for the profile panel: the CRM row plus conversation
+ * stats. Only filled-in fields are returned.
  */
 async function getLeadSummary(phone) {
-  const p = last10(phone);
-  if (!p) return { flat: null, customer: null, maid: null };
-
-  const [flatRes, custRes, maidRes] = await Promise.all([
-    supabase.from('flat_customers').select('full_name, area, street_address, home_type, requirement, status').eq('phone', p).limit(1),
-    supabase.from('customers').select('name, location, service_needed, budget, working_hours, status').eq('phone', p).limit(1),
-    supabase.from('maids').select('name, areas_served, service_type, salary_expectation, preferred_time, availability, status').eq('phone', p).limit(1),
-  ]);
-
-  const flat = flatRes.data && flatRes.data[0];
-  const cust = custRes.data && custRes.data[0];
-  const maid = maidRes.data && maidRes.data[0];
-
+  const contact = await getContactByPhone(phone);
+  if (!contact) return null;
+  let totalMessages = 0;
+  let inboundMessages = 0;
+  try {
+    const t = await one('SELECT COUNT(*)::int AS c FROM messages WHERE phone=$1', [phone]);
+    totalMessages = (t && t.c) || 0;
+    const inb = await one("SELECT COUNT(*)::int AS c FROM messages WHERE phone=$1 AND direction='inbound'", [phone]);
+    inboundMessages = (inb && inb.c) || 0;
+  } catch { /* stats are best-effort */ }
   return {
-    flat: flat ? pickFilled({
-      name: flat.full_name, location: flat.area || flat.street_address,
-      service: flat.requirement, flat_type: flat.home_type, status: flat.status,
-    }) : null,
-    customer: cust ? pickFilled({
-      name: cust.name, location: cust.location, service: cust.service_needed,
-      salary: cust.budget, working_hours: cust.working_hours, status: cust.status,
-    }) : null,
-    maid: maid ? pickFilled({
-      name: maid.name, location: maid.areas_served, service: maid.service_type,
-      salary: maid.salary_expectation, working_hours: maid.preferred_time || maid.availability, status: maid.status,
-    }) : null,
+    ...pickFilled({
+      name: contact.name,
+      phone: contact.phone,
+      status: contact.lead_status,
+      agent: contact.assigned_agent,
+      category: contact.lead_category,
+      temperature: contact.lead_temperature,
+      tags: Array.isArray(contact.tags) ? contact.tags.join(', ') : contact.tags,
+    }),
+    totalMessages,
+    inboundMessages,
+    lastMessageAt: contact.last_message_at || null,
   };
 }
 
@@ -1109,23 +845,20 @@ async function getLeadSummary(phone) {
  * Everything ai-assistant.js needs to analyze ONE chat: the contact row,
  * the full message history for that phone only, that phone's own pending
  * notifications (so the AI can flag stale ones), and any existing match in
- * the lead tables (reused from getLeadSummary — cheaper than asking the AI
- * to guess a lead category when we already know it from a real record).
+ * the contact row (reused from getLeadSummary — cheaper than asking the AI
+ * to guess a lead category when the agent already set one).
  */
 async function getAiContext(phone) {
-  const [contactRes, messages, notifRes, leadMatch] = await Promise.all([
-    supabase.from('contacts').select('*').eq('phone', phone).limit(1),
+  const [contact, messages, pendingNotifications, leadMatch] = await Promise.all([
+    getContactByPhone(phone),
     getMessages(phone),
-    supabase.from('notifications').select('id, type, title, body, created_at')
-      .eq('lead_type', 'whatsapp').eq('lead_id', phone).eq('is_read', false),
+    all(
+      "SELECT id, type, title, body, created_at FROM notifications WHERE lead_type='whatsapp' AND lead_id=$1 AND is_read=false",
+      [phone]
+    ),
     getLeadSummary(phone),
   ]);
-  return {
-    contact: (contactRes.data && contactRes.data[0]) || null,
-    messages,
-    pendingNotifications: notifRes.data || [],
-    leadMatch,
-  };
+  return { contact, messages, pendingNotifications, leadMatch };
 }
 
 /**
@@ -1135,7 +868,7 @@ async function getAiContext(phone) {
  */
 async function saveAiAnalysis(phone, { extracted, leadCategory, localityVerification } = {}) {
   try {
-    const { data: existing } = await supabase.from('contacts').select('ai_extracted').eq('phone', phone).limit(1).single();
+    const existing = await one('SELECT ai_extracted FROM contacts WHERE phone=$1', [phone]);
     const merged = { ...((existing && existing.ai_extracted) || {}) };
     if (extracted && typeof extracted === 'object') {
       for (const [k, v] of Object.entries(extracted)) {
@@ -1146,7 +879,7 @@ async function saveAiAnalysis(phone, { extracted, leadCategory, localityVerifica
     const updates = { ai_extracted: merged, ai_last_analyzed_at: new Date().toISOString() };
     if (leadCategory) updates.lead_category = leadCategory;
     if (localityVerification) updates.locality_verification = localityVerification;
-    await supabase.from('contacts').update(updates).eq('phone', phone);
+    await updateContactFields(phone, updates);
   } catch (err) {
     console.error('[chat-store] exception saving AI analysis:', err.message);
   }
@@ -1154,7 +887,7 @@ async function saveAiAnalysis(phone, { extracted, leadCategory, localityVerifica
 
 async function saveMessageTranslation(messageId, contentEn, language) {
   try {
-    await supabase.from('messages').update({ content_en: contentEn, language }).eq('id', messageId);
+    await q('UPDATE messages SET content_en=$1, language=$2 WHERE id=$3', [contentEn, language, messageId]);
   } catch (err) {
     console.error('[chat-store] exception saving message translation:', err.message);
   }
@@ -1165,8 +898,10 @@ async function saveMessageTranslation(messageId, contentEn, language) {
 async function createAiSuggestions(phone, suggestions) {
   if (!Array.isArray(suggestions) || !suggestions.length) return;
   try {
-    const { data: existing } = await supabase.from('ai_suggestions')
-      .select('type, title').eq('phone', phone).eq('status', 'pending');
+    const existing = await all(
+      "SELECT type, title FROM ai_suggestions WHERE phone=$1 AND status='pending'",
+      [phone]
+    );
     const seen = new Set((existing || []).map(s => s.type + '::' + s.title));
     const rows = suggestions
       .filter(s => s && s.title && !seen.has((s.type || 'suggestion') + '::' + s.title))
@@ -1178,7 +913,12 @@ async function createAiSuggestions(phone, suggestions) {
         payload: s.payload || null,
         status: 'pending',
       }));
-    if (rows.length) await supabase.from('ai_suggestions').insert(rows);
+    if (rows.length) {
+      const cols = '(phone, type, title, body, payload, status)';
+      const ph = rows.map((_, i) => `($${i * 6 + 1}, $${i * 6 + 2}, $${i * 6 + 3}, $${i * 6 + 4}, $${i * 6 + 5}, $${i * 6 + 6})`).join(', ');
+      const params = rows.flatMap((r) => [r.phone, r.type, r.title, r.body, jb(r.payload), r.status]);
+      await q(`INSERT INTO ai_suggestions ${cols} VALUES ${ph}`, params);
+    }
   } catch (err) {
     console.error('[chat-store] exception creating AI suggestions:', err.message);
   }
@@ -1186,10 +926,10 @@ async function createAiSuggestions(phone, suggestions) {
 
 async function getAiSuggestions(phone) {
   try {
-    const { data } = await supabase.from('ai_suggestions')
-      .select('*').eq('phone', phone).eq('status', 'pending')
-      .order('created_at', { ascending: false });
-    return data || [];
+    return await all(
+      "SELECT * FROM ai_suggestions WHERE phone=$1 AND status='pending' ORDER BY created_at DESC",
+      [phone]
+    );
   } catch (err) { return []; }
 }
 
@@ -1197,13 +937,13 @@ async function getAiSuggestions(phone) {
 // another chat's suggestion.
 async function dismissAiSuggestion(id, phone) {
   try {
-    await supabase.from('ai_suggestions').update({ status: 'dismissed' }).eq('id', id).eq('phone', phone);
+    await q("UPDATE ai_suggestions SET status='dismissed' WHERE id=$1 AND phone=$2", [id, phone]);
   } catch (err) { console.error('[chat-store] exception dismissing AI suggestion:', err.message); }
 }
 
 async function applyAiSuggestion(id, phone) {
   try {
-    await supabase.from('ai_suggestions').update({ status: 'applied' }).eq('id', id).eq('phone', phone);
+    await q("UPDATE ai_suggestions SET status='applied' WHERE id=$1 AND phone=$2", [id, phone]);
   } catch (err) { console.error('[chat-store] exception applying AI suggestion:', err.message); }
 }
 
@@ -1213,11 +953,9 @@ async function applyAiSuggestion(id, phone) {
 async function dismissNotificationsByIds(ids, phone) {
   if (!Array.isArray(ids) || !ids.length || !phone) return;
   try {
-    await supabase.from('notifications')
-      .update({ is_read: true })
-      .in('id', ids)
-      .eq('lead_type', 'whatsapp')
-      .eq('lead_id', phone);
+    const clean = ids.map(Number).filter(Number.isFinite);
+    if (!clean.length) return;
+    await q("UPDATE notifications SET is_read=true WHERE id = ANY($1) AND lead_type='whatsapp' AND lead_id=$2", [clean, phone]);
   } catch (err) { console.error('[chat-store] exception dismissing notifications:', err.message); }
 }
 
@@ -1238,12 +976,6 @@ module.exports = {
   addNotification,
   getNotifications,
   markNotificationsRead,
-  getInterestedFollowupCustomers,
-  advanceCustomerFollowupStage,
-  getReviveCustomers,
-  advanceReviveStage,
-  getPeople,
-  isPeopleGroup,
   isBotPaused,
   setBotPause,
   getContacts,
@@ -1252,6 +984,7 @@ module.exports = {
   getMessages,
   updateContactLabel,
   updateContactCRM,
+  setStatusChangeHook,
   getNotes,
   addNote,
   loginUser,

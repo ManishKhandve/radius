@@ -6,7 +6,7 @@
 // analyzeChat() only pulls what chat-store.getAiContext(phone) returns,
 // which is filtered to that phone at the database layer.
 //
-// This module never talks to Supabase directly; all reads/writes go
+// This module never talks to the database directly; all reads/writes go
 // through chat-store.js so DB access stays centralized like the rest of
 // the codebase. Adding a new extraction field or suggestion type later
 // only means touching FIELD_LIST / the prompt / applyAnalysisResult here.
@@ -173,7 +173,7 @@ const HINGLISH_WORDS = [
   'paisa', 'paise', 'rupee', 'rupaye', 'ghar', 'kaam', 'bhai', 'didi', 'theek',
   'thik', 'accha', 'achha', 'kal', 'abhi', 'matlab', 'samajh', 'bata', 'karo',
   'karna', 'hoga', 'milega', 'mujhe', 'aapka', 'kripya', 'dhanyavad', 'shukriya',
-  'haan', 'nahi', 'bolo', 'batao', 'kaam wali', 'maidam',
+  'haan', 'nahi', 'bolo', 'batao',
 ];
 
 function looksHindiOrHinglish(text) {
@@ -223,10 +223,13 @@ async function translateIfNeeded(messageId, text, force = false) {
 }
 
 // ─── Full chat analysis (extraction, suggestions, category, etc.) ────
+const BUSINESS_NAME = process.env.BUSINESS_NAME || 'this business';
+const BUSINESS_TYPE = process.env.BUSINESS_TYPE || 'general business';
+
 const FIELD_LIST = [
-  'customer_name', 'phone_number', 'locality', 'society', 'building',
-  'flat_number', 'requirement', 'maid_type', 'budget', 'preferred_timing',
-  'move_in_date', 'lead_status', 'notes',
+  'customer_name', 'phone_number', 'location', 'requirement',
+  'product_interest', 'budget', 'preferred_timing', 'followup_date',
+  'lead_status', 'notes',
 ];
 
 const SUGGESTION_TYPES = new Set([
@@ -239,11 +242,10 @@ function istNowString() {
 
 function summarizeLeadMatch(leadMatch) {
   if (!leadMatch) return '';
-  const parts = [];
-  if (leadMatch.flat) parts.push(`Matched Flat Customer record: ${JSON.stringify(leadMatch.flat)}`);
-  if (leadMatch.customer) parts.push(`Matched Maid-seeking Customer record: ${JSON.stringify(leadMatch.customer)}`);
-  if (leadMatch.maid) parts.push(`Matched Maid record: ${JSON.stringify(leadMatch.maid)}`);
-  return parts.join('\n');
+  if (typeof leadMatch === 'object') {
+    return `Known contact record: ${JSON.stringify(leadMatch).slice(0, 800)}`;
+  }
+  return '';
 }
 
 // Per-phone debounce so a burst of messages triggers one analysis call,
@@ -286,7 +288,7 @@ async function analyzeChat(phone, { localityNames = [] } = {}) {
 
   const responseShape = {
     extracted_fields: Object.fromEntries(FIELD_LIST.map(f => [f, 'string or null'])),
-    lead_category: 'Maid | Flat | Maid Customer | null',
+    lead_category: 'New | Interested | Follow-up | Booked | Not Interested | null',
     locality_verification: {
       input: 'string or null', city: 'string or null', locality: 'string or null',
       state: 'string or null', confidence: '0.0-1.0 number', flagged: 'boolean', suggestion: 'string or null',
@@ -296,11 +298,11 @@ async function analyzeChat(phone, { localityNames = [] } = {}) {
   };
 
   const systemPrompt = [
-    'You are a CRM assistant analyzing ONE isolated WhatsApp conversation for a maid-placement and home-cleaning business in Pune, India.',
+    `You are a CRM assistant analyzing ONE isolated WhatsApp conversation for ${BUSINESS_NAME} (${BUSINESS_TYPE}).`,
     'Use ONLY the conversation and data given in this message. Never reference or assume anything about any other customer or conversation — you have no memory beyond what is provided here.',
     'Respond ONLY with a single JSON object matching exactly this shape (no prose, no markdown fences):',
     JSON.stringify(responseShape),
-    localityNames.length ? `Known valid localities near Pune, for verifying/correcting the customer's stated locality: ${localityNames.join(', ')}.` : '',
+    localityNames.length ? `Known service areas for verifying/correcting the customer's stated location: ${localityNames.join(', ')}.` : '',
     `Current time (IST): ${istNowString()}`,
   ].filter(Boolean).join('\n');
 
@@ -339,15 +341,14 @@ async function applyAnalysisResult(phone, parsed, ctx) {
     }
   }
 
-  // A real match in the lead tables is a stronger signal than the model's
-  // guess, and it's free (no extra AI call) — prefer it when available.
+  // A category the agent already set on the contact is a stronger signal
+  // than the model's guess, and it's free (no extra AI call).
+  const VALID_CATEGORIES = new Set(['New', 'Interested', 'Follow-up', 'Booked', 'Not Interested']);
   let leadCategory = null;
-  if (ctx.leadMatch) {
-    if (ctx.leadMatch.maid) leadCategory = 'Maid';
-    else if (ctx.leadMatch.flat) leadCategory = 'Flat';
-    else if (ctx.leadMatch.customer) leadCategory = 'Maid Customer';
+  if (ctx.leadMatch && VALID_CATEGORIES.has(ctx.leadMatch.category)) {
+    leadCategory = ctx.leadMatch.category;
   }
-  if (!leadCategory && ['Maid', 'Flat', 'Maid Customer'].includes(parsed.lead_category)) {
+  if (!leadCategory && VALID_CATEGORIES.has(parsed.lead_category)) {
     leadCategory = parsed.lead_category;
   }
 
@@ -408,7 +409,7 @@ async function askQuestion(phone, question) {
   const leadMatchNote = summarizeLeadMatch(ctx.leadMatch);
 
   const systemPrompt = [
-    'You are a CRM assistant answering ONE support agent\'s question about ONE isolated WhatsApp conversation for a maid-placement and home-cleaning business in Pune, India.',
+    `You are a CRM assistant answering ONE support agent's question about ONE isolated WhatsApp conversation for ${BUSINESS_NAME} (${BUSINESS_TYPE}).`,
     'Use ONLY the conversation and data given in this message — never reference or assume anything about any other customer or conversation.',
     'If the answer isn\'t in the given data, say so plainly instead of guessing.',
     'Respond ONLY with JSON: {"answer": "a concise, direct answer in plain text, 2-4 sentences max"}',
@@ -445,7 +446,7 @@ async function polishDraft(text) {
   const raw = await callOpenRouter([
     {
       role: 'system',
-      content: 'Rewrite a single WhatsApp draft reply from a maid-placement/home-cleaning business agent to a customer. If it is in Hindi (Devanagari) or Hinglish, translate it to English. Fix grammar/spelling and make the tone professional, polite, and clear — but keep it natural and reasonably concise; do not make it stiff or robotic, and do not add information or change its meaning. Respond ONLY with JSON: {"text":"..."}',
+      content: 'Rewrite a single WhatsApp draft reply from a business agent to a customer. If it is in Hindi (Devanagari) or Hinglish, translate it to English. Fix grammar/spelling and make the tone professional, polite, and clear — but keep it natural and reasonably concise; do not make it stiff or robotic, and do not add information or change its meaning. Respond ONLY with JSON: {"text":"..."}',
     },
     { role: 'user', content: String(text).trim().slice(0, 1000) },
   ]);
